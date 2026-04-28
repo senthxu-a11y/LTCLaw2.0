@@ -1,0 +1,2705 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LTCLAW 游戏策划工作台 - 交接文档</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+  :root {
+    --primary: #6B7280;
+    --primary-light: #9CA3AF;
+    --primary-dark: #374151;
+    --accent: #3B82F6;
+    --accent-light: #DBEAFE;
+    --success: #10B981;
+    --success-light: #D1FAE5;
+    --warning: #F59E0B;
+    --warning-light: #FEF3C7;
+    --danger: #EF4444;
+    --danger-light: #FEE2E2;
+    --info: #6366F1;
+    --info-light: #E0E7FF;
+    --bg: #F9FAFB;
+    --surface: #FFFFFF;
+    --border: #E5E7EB;
+    --text: #111827;
+    --text-secondary: #6B7280;
+    --text-muted: #9CA3AF;
+    --code-bg: #F3F4F6;
+    --shadow: 0 1px 3px rgba(0,0,0,0.1);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 15px;
+  }
+
+  /* ===== SIDEBAR NAV ===== */
+  .doc-layout {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    width: 280px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    overflow-y: auto;
+    z-index: 100;
+    padding: 20px 0;
+  }
+
+  .sidebar-header {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+
+  .sidebar-header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .sidebar-header .version {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .nav-section {
+    padding: 0 12px;
+    margin-bottom: 8px;
+  }
+
+  .nav-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 8px 4px;
+  }
+
+  .nav-item {
+    display: block;
+    padding: 7px 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+
+  .nav-item:hover, .nav-item.active {
+    background: var(--accent-light);
+    color: var(--accent);
+  }
+
+  .nav-item.active {
+    font-weight: 500;
+  }
+
+  /* ===== MAIN CONTENT ===== */
+  .main {
+    margin-left: 280px;
+    flex: 1;
+    padding: 40px 60px;
+    max-width: 1200px;
+  }
+
+  /* ===== SECTIONS ===== */
+  .doc-section {
+    margin-bottom: 60px;
+    scroll-margin-top: 24px;
+  }
+
+  .section-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-bottom: 12px;
+  }
+
+  .badge-overview { background: var(--info-light); color: var(--info); }
+  .badge-architecture { background: var(--accent-light); color: var(--accent); }
+  .badge-p0 { background: var(--danger-light); color: var(--danger); }
+  .badge-p1 { background: var(--warning-light); color: #D97706; }
+  .badge-p2 { background: var(--success-light); color: #059669; }
+  .badge-p3 { background: #F3F4F6; color: #6B7280; }
+  .badge-ui { background: #FCE7F3; color: #DB2777; }
+  .badge-tech { background: #FEF3C7; color: #B45309; }
+  .badge-decision { background: #ECFDF5; color: #059669; }
+
+  .section-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+    line-height: 1.3;
+  }
+
+  .section-desc {
+    font-size: 15px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    max-width: 700px;
+  }
+
+  /* ===== CARDS ===== */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+
+  .card-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-body { font-size: 14px; color: var(--text-secondary); }
+
+  /* ===== WIREFRAME PANELS ===== */
+  .wireframe {
+    background: #FAFBFC;
+    border: 1.5px solid #D1D5DB;
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin: 16px 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  .wireframe-header {
+    background: #F3F4F6;
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 1px solid #D1D5DB;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .wireframe-header .tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #E5E7EB;
+    color: #6B7280;
+  }
+
+  .wireframe-body {
+    padding: 14px;
+    white-space: pre;
+    overflow-x: auto;
+    color: #374151;
+  }
+
+  /* ===== TABLES ===== */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    margin: 16px 0;
+  }
+
+  .data-table th {
+    background: #F9FAFB;
+    text-align: left;
+    padding: 10px 14px;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .data-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: #F9FAFB; }
+
+  /* ===== PRIORITY BADGES ===== */
+  .priority-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .priority-p0 { background: #FEE2E2; color: #DC2626; }
+  .priority-p1 { background: #FEF3C7; color: #D97706; }
+  .priority-p2 { background: #D1FAE5; color: #059669; }
+  .priority-p3 { background: #F3F4F6; color: #6B7280; }
+
+  /* ===== DIFFICULTY STARS ===== */
+  .stars { color: #F59E0B; font-size: 13px; }
+
+  /* ===== CODE BLOCKS ===== */
+  .code-block {
+    background: #1E293B;
+    color: #E2E8F0;
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+
+  .code-block .comment { color: #64748B; }
+  .code-block .key { color: #7DD3FC; }
+  .code-block .str { color: #86EFAC; }
+  .code-block .num { color: #FCD34D; }
+
+  /* ===== GRID LAYOUTS ===== */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+  /* ===== STAT CARDS ===== */
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* ===== FLOW DIAGRAMS ===== */
+  .flow-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin: 16px 0;
+    overflow-x: auto;
+  }
+
+  .flow-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 8px 0;
+  }
+
+  .flow-box {
+    padding: 10px 18px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+    min-width: 120px;
+  }
+
+  .flow-box.primary { background: var(--accent-light); color: var(--accent); border: 1px solid #93C5FD; }
+  .flow-box.success { background: var(--success-light); color: #059669; border: 1px solid #6EE7B7; }
+  .flow-box.warning { background: var(--warning-light); color: #D97706; border: 1px solid #FCD34D; }
+  .flow-box.danger { background: var(--danger-light); color: #DC2626; border: 1px solid #FCA5A5; }
+  .flow-box.neutral { background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; }
+  .flow-box.info { background: var(--info-light); color: var(--info); border: 1px solid #A5B4FC; }
+
+  .flow-arrow {
+    color: var(--text-muted);
+    font-size: 18px;
+    font-weight: bold;
+  }
+
+  .flow-arrow-down {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 18px;
+    font-weight: bold;
+    margin: 4px 0;
+  }
+
+  /* ===== DECISION CALLOUTS ===== */
+  .decision {
+    border-left: 4px solid var(--success);
+    background: #F0FDF4;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 16px 20px;
+    margin: 16px 0;
+  }
+
+  .decision-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #059669;
+    margin-bottom: 6px;
+    letter-spacing: 0.05em;
+  }
+
+  .decision-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .decision-body { font-size: 13.5px; color: var(--text-secondary); }
+
+  /* ===== JSON DISPLAY ===== */
+  .json-display {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: #334155;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+
+  /* ===== TIMELINE ===== */
+  .timeline {
+    position: relative;
+    padding-left: 28px;
+    margin: 16px 0;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: #D1D5DB;
+  }
+
+  .timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+  }
+
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -24px;
+    top: 6px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid white;
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  .timeline-item.p0::before { background: var(--danger); box-shadow: 0 0 0 2px var(--danger); }
+  .timeline-item.p1::before { background: var(--warning); box-shadow: 0 0 0 2px var(--warning); }
+  .timeline-item.p2::before { background: var(--success); box-shadow: 0 0 0 2px var(--success); }
+  .timeline-item.p3::before { background: #9CA3AF; box-shadow: 0 0 0 2px #9CA3AF; }
+
+  .timeline-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .timeline-desc {
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+
+  /* ===== TABS ===== */
+  .tabs {
+    display: flex;
+    gap: 2px;
+    background: #F3F4F6;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 4px 4px 0;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    margin: 16px 0 0;
+  }
+
+  .tab {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--surface); color: var(--accent); box-shadow: 0 -1px 0 var(--surface); }
+
+  .tab-content {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0 0 var(--radius) var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* ===== CHECKLIST ===== */
+  .checklist {
+    list-style: none;
+    padding: 0;
+  }
+
+  .checklist li {
+    padding: 8px 0;
+    padding-left: 28px;
+    position: relative;
+    font-size: 14px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid #F3F4F6;
+  }
+
+  .checklist li::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 13px;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 2px solid #D1D5DB;
+  }
+
+  /* ===== MISC ===== */
+  .tag {
+    display: inline-flex;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .tag-new { background: #DBEAFE; color: #2563EB; }
+  .tag-reuse { background: #D1FAE5; color: #059669; }
+  .tag-extend { background: #FEF3C7; color: #D97706; }
+
+  .separator {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 32px 0;
+  }
+
+  .note {
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #92400E;
+    margin: 12px 0;
+  }
+
+  .mermaid {
+    display: flex;
+    justify-content: center;
+    margin: 16px 0;
+  }
+
+  @media (max-width: 1024px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; padding: 24px; }
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+
+  /* Print styles */
+  @media print {
+    .sidebar { display: none; }
+    .main { margin-left: 0; padding: 20px; }
+    .card, .wireframe { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div class="doc-layout">
+
+<!-- ===== SIDEBAR ===== -->
+<nav class="sidebar">
+  <div class="sidebar-header">
+    <h1>LTCLAW 策划工作台</h1>
+    <span class="version">交接文档 v1.1</span>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">概览</div>
+    <a class="nav-item active" href="#overview">项目概览</a>
+    <a class="nav-item" href="#decisions">已拍板设计决策</a>
+    <a class="nav-item" href="#architecture">整体架构</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">界面设计</div>
+    <a class="nav-item" href="#nav-structure">导航结构</a>
+    <a class="nav-item" href="#ui-chat">Chat 改造</a>
+    <a class="nav-item" href="#ui-svn">SVN 同步页</a>
+    <a class="nav-item" href="#ui-index">索引地图</a>
+    <a class="nav-item" href="#ui-doclib">文档库</a>
+    <a class="nav-item" href="#ui-kb">知识库</a>
+    <a class="nav-item" href="#ui-config">游戏项目配置</a>
+    <a class="nav-item" href="#ui-workbench">数值工作台</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">开发计划</div>
+    <a class="nav-item" href="#roadmap">开发路线图</a>
+    <a class="nav-item" href="#p0">P0 基础设施</a>
+    <a class="nav-item" href="#p1">P1 核心能力</a>
+    <a class="nav-item" href="#p2">P2 提效工具</a>
+    <a class="nav-item" href="#p3">P3 索引可视化</a>
+    <a class="nav-item" href="#checklist">开工检查清单</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">技术细节</div>
+    <a class="nav-item" href="#tech-index">索引系统</a>
+    <a class="nav-item" href="#tech-query">查询系统</a>
+    <a class="nav-item" href="#tech-files">文件结构</a>
+    <a class="nav-item" href="#tech-config">配置系统</a>
+    <a class="nav-item" href="#tech-safety">安全边界</a>
+    <a class="nav-item" href="#tech-env">环境一致性</a>
+    <a class="nav-item" href="#tech-deps">依赖与技术栈</a>
+  </div>
+</nav>
+
+<!-- ===== MAIN CONTENT ===== -->
+<main class="main">
+
+<!-- ============================================================ -->
+<!-- SECTION: OVERVIEW -->
+<!-- ============================================================ -->
+<section id="overview" class="doc-section">
+  <span class="section-badge badge-overview">Overview</span>
+  <h2 class="section-title">项目概览</h2>
+  <p class="section-desc">
+    基于 LTCLAW-GY.X（个人 AI 智能体工作台）改造为<strong>游戏策划专属工具</strong>。核心目标：让 AI 自动维护项目索引，降低团队协作门槛，实现策划文档标准化产出。
+  </p>
+
+  <div class="grid-4">
+    <div class="stat-card">
+      <div class="stat-value">6</div>
+      <div class="stat-label">新增页面</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">2</div>
+      <div class="stat-label">改造现有页面</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">0</div>
+      <div class="stat-label">破坏性改动</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">4</div>
+      <div class="stat-label">优先级层级</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 20px;">
+    <div class="card-title">核心定位</div>
+    <div class="card-body">
+      <strong>目标用户</strong>：小团队游戏策划（Unity 引擎项目）<br>
+      <strong>数据同步</strong>：SVN<br>
+      <strong>部署方式</strong>：本地部署，数据自主可控<br>
+      <strong>核心需求</strong>：数值辅助 + 文档生成，通用化设计（什么项目都能用）<br>
+      <strong>自动化边界</strong>：索引维护全自动，数值/文档决策由人类把控
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: DECISIONS -->
+<!-- ============================================================ -->
+<section id="decisions" class="doc-section">
+  <span class="section-badge badge-decision">Decisions</span>
+  <h2 class="section-title">已拍板的设计决策</h2>
+  <p class="section-desc">以下决策在讨论中已确认，是后续开发的硬约束。</p>
+
+  <div class="decision">
+    <div class="decision-label">决策 #1</div>
+    <div class="decision-title">自动化边界：索引全自动，其他人工决策</div>
+    <div class="decision-body">
+      <strong>AI 全自动负责：</strong>SVN 变更检测、文件分类过滤、AI 解析生成 JSON 元数据、依赖图维护、registry.json 更新、commit 到 SVN、本地向量库重建、版本聚合报告<br>
+      <strong>人类决策 AI 辅助：</strong>数值怎么调、加什么内容、改什么逻辑、提交数值表<br>
+      <em>索引层出错完全无害，大不了重跑一次</em>
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">决策 #2</div>
+    <div class="decision-title">SVN 索引共享方案：.ltclaw_index/ 提交到 SVN</div>
+    <div class="decision-body">
+      SVN 只存 AI 生成的文本元数据（JSON），不存向量。向量库在本地按需重建，秒级完成。索引结果写入 .ltclaw_index/ 后提交到 SVN，其他团队成员只需正常 svn update 同步。
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">决策 #3</div>
+    <div class="decision-title">SVN 变更感知：维护者本地轮询（非服务器 Hook）</div>
+    <div class="decision-body">
+      无法直接 hook 到 SVN 服务器的 commit 事件。轮询服务运行在维护者本地机器上，定时执行 svn update 检测变更并触发索引重建。其他团队成员只需正常同步。不需要任何 SVN 服务器端配置。
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">决策 #4</div>
+    <div class="decision-title">防冲突策略：SVN 版本号做仲裁 + 随机抖动</div>
+    <div class="decision-body">
+      每次准备提交前先 svn update 检查 last_synced_revision，已有人同步则跳过。commit 冲突则 svn update 拿到别人的结果。加随机抖动延迟减少无效竞争。建议先用"指定主索引机"模式（方案 A），后期按需升级为竞争模式（方案 B）。
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">决策 #5</div>
+    <div class="decision-title">Chat 改造：不新建页面，在现有 Chat 中扩展</div>
+    <div class="decision-body">
+      数值查询结果在 PlanPanel Drawer（右侧抽屉）中展开，不在独立页面。Chat 就是 Chat，用户不会被踢出去。所有信息在 Chat 里原地展开和持久化。
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">决策 #6</div>
+    <div class="decision-title">决策按钮分两类位置：阻塞型在消息流，非阻塞型在 Drawer</div>
+    <div class="decision-body">
+      <strong>阻塞型（消息流中）</strong>：写入操作确认，AI 在等，必须立即响应，复用现有 ApprovalCard<br>
+      <strong>非阻塞型（Drawer 里）</strong>：[存入文档库] [确认调整] [标记有误] [忽略] [归档]，AI 不等，随时操作
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">决策 #7</div>
+    <div class="decision-title">文档模板开放配置，用户自己维护</div>
+    <div class="decision-body">
+      模板不硬编码在系统里，而是用户自己维护（存 SVN Docs/Templates/），系统读取并遵守。界面上改的配置自动写回 project_config.yaml 并提交 SVN，团队所有人实时同步。
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">决策 #8</div>
+    <div class="decision-title">节点图库选择 reactflow，索引可视化分两期</div>
+    <div class="decision-body">
+      几百张表需节点图库。推荐 reactflow（开发速度快，社区文档好）。列表视图先上线（够用），reactflow 节点图作为体验升级在主线稳定后单独排期。
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">决策 #9</div>
+    <div class="decision-title">版本记录分层存储：原始层(SVN) + 摘要层(30天) + 聚合层(周/里程碑)</div>
+    <div class="decision-body">
+      change_history 只存"有意义的变更"（数值变化超过5%、行数变化超过1行、字段增删必须记录）。表级 JSON 保留最近 30 天明细，30 天前归档到 weekly/，weekly 保留最近 6 个月，6 个月前只保留 milestone 聚合。
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">决策 #10</div>
+    <div class="decision-title">不破坏现有功能，所有改动为扩展性质</div>
+    <div class="decision-body">
+      现有页面/组件完全不动的文件约 95%。需改动的仅 4 个文件（constants.ts、Sidebar.tsx、PlanPanel/index.tsx、Chat/index.tsx），均为纯追加或扩展，不修改现有逻辑。
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: ARCHITECTURE -->
+<!-- ============================================================ -->
+<section id="architecture" class="doc-section">
+  <span class="section-badge badge-architecture">Architecture</span>
+  <h2 class="section-title">整体架构</h2>
+  <p class="section-desc">系统采用"两层分离"架构：SVN 存 AI 生成的文本元数据（JSON），本地按需重建向量库。</p>
+
+  <div class="flow-diagram">
+    <div class="mermaid">
+    graph TB
+      subgraph SVN["SVN Repository（团队共享）"]
+        A[项目文件/<br>Data/Tables/*.xlsx<br>Docs/*.md]
+        B[".ltclaw_index/<br>registry.json<br>tables/*.json<br>docs/*.json<br>dependency_graph.json"]
+      end
+      subgraph Local["本地 LTCLAW 实例（每个团队成员）"]
+        C[SVN Watcher<br>轮询变更]
+        D[AI Indexer<br>生成 JSON]
+        E[本地向量库<br>从 JSON 重建]
+        F[查询/分析/生成]
+      end
+      A -->|svn update| C
+      C --> D
+      D --> B
+      D --> E
+      B -->|svn update 同步| E
+      E --> F
+    end
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">查询侧三层架构</div>
+    <div class="card-body">
+      <div class="flow-diagram" style="margin:0;">
+        <div class="flow-row">
+          <div class="flow-box neutral" style="min-width:200px;">用户自然语言问题</div>
+        </div>
+        <div class="flow-arrow-down">|</div>
+        <div class="flow-row">
+          <div class="flow-box primary">Layer 1: 意图识别</div>
+        </div>
+        <div class="flow-arrow-down">|</div>
+        <div class="flow-row">
+          <div class="flow-box info">精确查询<br><small>单表字段</small></div>
+          <div class="flow-box info">关联查询<br><small>跨表联动</small></div>
+          <div class="flow-box info">历史查询<br><small>变更记录</small></div>
+          <div class="flow-box info">影响分析<br><small>依赖图遍历</small></div>
+          <div class="flow-box info">模糊查询<br><small>向量检索</small></div>
+        </div>
+        <div class="flow-arrow-down">|</div>
+        <div class="flow-row">
+          <div class="flow-box success">Layer 3: 结果组装 + 置信度标注</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 16px;">
+    <div class="card-title">自动化分级方案</div>
+    <div class="card-body">
+      <div class="flow-diagram" style="margin:0;">
+        <div class="flow-row">
+          <div class="flow-box success" style="min-width:200px;">Level 1: 查询和建议<br><small>完全自动，零风险</small></div>
+          <div class="flow-box warning" style="min-width:200px;">Level 2: 小批量写入<br><small>≤10行 ≤3字段<br>分支提交+Review</small></div>
+          <div class="flow-box danger" style="min-width:200px;">Level 3: 批量写入<br><small>>10行或跨多表<br>人确认后执行</small></div>
+          <div class="flow-box neutral" style="min-width:200px;">Level 4: 结构变更<br><small>永远不自动执行<br>只生成操作指南</small></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: UI - NAV -->
+<!-- ============================================================ -->
+<section id="nav-structure" class="doc-section">
+  <span class="section-badge badge-ui">UI Design</span>
+  <h2 class="section-title">导航结构规划</h2>
+  <p class="section-desc">改动原则：原有导航不动，新增一个 game-group，Settings 和 Control 里各加一个入口。</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">现有导航（不改动）</div>
+      <div class="card-body">
+        <div style="font-family: monospace; font-size: 13px; line-height: 2;">
+          chat-group<br>
+          &nbsp;&nbsp;chat / channels / sessions<br>
+          <br>
+          agent-group<br>
+          &nbsp;&nbsp;skills / tools / mcp / acp / workspace<br>
+          <br>
+          settings-group<br>
+          &nbsp;&nbsp;agents / models / environments / security / backups
+        </div>
+      </div>
+    </div>
+    <div class="card" style="border-color: #93C5FD;">
+      <div class="card-title">
+        新增/扩展导航
+        <span class="tag tag-new">New</span>
+      </div>
+      <div class="card-body">
+        <div style="font-family: monospace; font-size: 13px; line-height: 2;">
+          control-group<br>
+          &nbsp;&nbsp;<span style="color:#DC2626;">+ svn-sync</span><br>
+          <br>
+          <span style="background:#DBEAFE; padding:2px 6px; border-radius:4px;">game-group</span> <span class="tag tag-new">New</span><br>
+          &nbsp;&nbsp;index-map<br>
+          &nbsp;&nbsp;doc-library<br>
+          &nbsp;&nbsp;knowledge-base<br>
+          <br>
+          settings-group<br>
+          &nbsp;&nbsp;<span style="color:#DC2626;">+ game-project</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>关键约束：</strong>数值工作台不作为独立页面，而是嵌入 Chat 侧边的 PlanPanel Drawer 中扩展。Chat 就是 Chat，用户不应该被踢出去。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: UI - CHAT -->
+<!-- ============================================================ -->
+<section id="ui-chat" class="doc-section">
+  <span class="section-badge badge-ui">UI Design</span>
+  <h2 class="section-title">Chat 页面改造</h2>
+  <p class="section-desc">现有 Chat 是通用对话界面，对策划缺三样东西：不知道能干什么、结果只是文字、信息不持久。改造后在 Chat 中原地解决全部问题。</p>
+
+  <!-- Chat Layout -->
+  <div class="wireframe">
+    <div class="wireframe-header">
+      Chat 三栏布局
+      <span class="tag">扩展自现有 Chat</span>
+    </div>
+    <div class="wireframe-body">+---------------+-------------------------------+------------------+
+|               |                               |                  |
+|  会话列表      |       对话区域                 |  上下文面板      |
+|  （现有不变）   |       （现有，扩展）            |  （PlanPanel     |
+|               |                               |   Drawer 扩展）  |
+|  200px        |        flex:1                 |   300px         |
++---------------+-------------------------------+------------------+</div>
+  </div>
+
+  <!-- Mode Selector -->
+  <h3 style="font-size:18px; font-weight:600; margin: 24px 0 12px;">输入区扩展：模式选择栏</h3>
+  <div class="wireframe">
+    <div class="wireframe-header">
+      Chat 输入框上方
+      <span class="tag tag-new">新增</span>
+    </div>
+    <div class="wireframe-body">+--------------------------------------------------------------------------+
+| [ 自由对话 ] [ 策划案 ] [ 数值查询 ] [ 文档生成 ] [ 知识查询 ]                |
++--------------------------------------------------------------------------+
+|                                                                          |
+|  描述你的需求...                                              [发送]     |
++--------------------------------------------------------------------------+
+
+模式              输入提示文字              AI行为              输出卡片类型
+--------------------------------------------------------------------------------
+自由对话           随便说...                通用回复             纯文字
+策划案            描述你的设计想法...        结构化生成策划案      策划案卡片
+数值查询           查哪个表/字段/技能...      查索引+依赖分析       数值卡片
+文档生成           选择文档类型+描述需求...    套模板生成文档        文档卡片
+知识查询           问任何设计相关的问题...    查知识库回答          知识卡片</div>
+  </div>
+
+  <!-- Document Type Selection -->
+  <h3 style="font-size:18px; font-weight:600; margin: 24px 0 12px;">文档生成模式的专属交互</h3>
+  <div class="wireframe">
+    <div class="wireframe-header">
+      选择 [ 文档生成 ] 后展开
+      <span class="tag tag-new">新增</span>
+    </div>
+    <div class="wireframe-body">+--------------------------------------------------------------------------+
+|  文档类型  [策划案 v]                                                        |
+|  [策划案] [需求文档] [GDD] [平衡报告] [更新日志]                              |
+|                                                                          |
+|  关联系统  [战斗系统 v]  （可选，帮AI缩小查询范围）                             |
++--------------------------------------------------------------------------+
+|  描述这个文档的核心内容...                                        [发送]     |
++--------------------------------------------------------------------------+
+
+选"更新日志"时额外出现：时间范围选择器，自动从 change_history 拉数据</div>
+  </div>
+
+  <!-- PlanPanel Drawer Extension -->
+  <h3 style="font-size:18px; font-weight:600; margin: 24px 0 12px;">PlanPanel Drawer 扩展</h3>
+  <p style="color:var(--text-secondary); font-size:14px; margin-bottom:12px;">
+    扩展现有 PlanPanel 的同一个 Drawer，根据对话内容自动填充策划相关信息。
+    通过 SSE 推送 table_ref（引用表）和 doc_created（生成文档）两个新事件类型。
+  </p>
+  <div class="wireframe">
+    <div class="wireframe-header">
+      右侧 Drawer（380px）
+      <span class="tag tag-extend">扩展自 PlanPanel</span>
+    </div>
+    <div class="wireframe-body">+-------------------------------+
+|  Plan / 上下文        [关闭]  |
+|  ===========================  |
+|                               |
+|  -- 当前计划 --       [现有]  |
+|  进度 2/5  ████░░           |
+|  x 分析相关表                |
+|  ~ 生成策划案草稿             |
+|  o 等待确认                  |
+|                               |
+|  -- 引用的数值表 --   [新增]  |
+|                               |
+|  SkillTable                   |
+|  DamageCoeff  R 0.85  (建议)  |
+|  CD           . 8     (查看)  |
+|  BuffID       B 5001  (外键)  |
+|                               |
+|  HeroTable                    |
+|  ATKGrowth    R 1.2   (建议)  |
+|                               |
+|  -- 产出文档 --       [新增]  |
+|                               |
+|  [文档] 冰封术策划案草稿       |
+|     草稿  刚刚                |
+|     [存入文档库]              |
+|                               |
+|  [文档] 剑士伤害分析          |
+|     草稿  5分钟前             |
+|     [存入文档库]              |
++-------------------------------+
+
+R = 红色(建议调整)  . = 白色(仅引用)  B = 蓝色(外键引用)</div>
+  </div>
+
+  <!-- Card Types -->
+  <h3 style="font-size:18px; font-weight:600; margin: 24px 0 12px;">对话区卡片类型</h3>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab(event, 'card-numeric')">数值查询卡片</button>
+    <button class="tab" onclick="switchTab(event, 'card-design')">策划案卡片</button>
+    <button class="tab" onclick="switchTab(event, 'card-docgen')">文档生成卡片</button>
+    <button class="tab" onclick="switchTab(event, 'card-approval')">写入确认卡片</button>
+  </div>
+  <div class="tab-content">
+    <div id="card-numeric" class="tab-pane active">
+      <div class="wireframe">
+        <div class="wireframe-header">
+          NumericCard <span class="tag tag-new">新组件</span>
+        </div>
+        <div class="wireframe-body">+----------------------------------------------+
+| [数值] 数值查询结果                               |
+| ---------------------------------------------- |
+| SkillTable · 斩击(ID:2001)                       |
+|                                                |
+| DamageCoeff    0.85    建议区间: 0.9~1.3  偏低   |
+| CD             8s      同类平均: 7.2s     正常   |
+| BuffID         5001 -> 流血(BuffTable)            |
+|                                                |
+| 变更历史：                                       |
+| r1756  1.2->0.85  plannerB  调低伤害平衡         |
++----------------------------------------------+</div>
+      </div>
+    </div>
+    <div id="card-design" class="tab-pane">
+      <div class="wireframe">
+        <div class="wireframe-header">
+          DesignDocCard <span class="tag tag-new">新组件</span>
+        </div>
+        <div class="wireframe-body">+----------------------------------------------+
+| [策划案] 策划案草稿              [展开全文]         |
+| ---------------------------------------------- |
+| 新技能：冰封术  SkillID: 2156（自动分配）         |
+| 职业: 法师  类型: 控制/冰系                       |
+|                                                |
+| DamageCoeff  0.6   CD  12s   BuffID  5023        |
+|                                                |
+| 待填写：技能名称 / DamageCoeff最终值确认           |
+|                                                |
+| [存入文档库]    [继续修改]                        |
++----------------------------------------------+</div>
+      </div>
+    </div>
+    <div id="card-docgen" class="tab-pane">
+      <div class="wireframe">
+        <div class="wireframe-header">
+          DocGenCard <span class="tag tag-new">新组件</span>
+        </div>
+        <div class="wireframe-body">+----------------------------------------------+
+| [文档] 更新日志生成完成                           |
+| ---------------------------------------------- |
+| v1.23 数值变更报告  (r1850~r1892)                |
+| 战斗系统 3项 / 装备系统 1项 / 新增内容 2项        |
+|                                                |
+| [预览全文]  [存入文档库]  [导出 .md]             |
++----------------------------------------------+</div>
+      </div>
+    </div>
+    <div id="card-approval" class="tab-pane">
+      <div class="wireframe">
+        <div class="wireframe-header">
+          写入确认卡片 <span class="tag tag-reuse">复用 ApprovalCard</span>
+        </div>
+        <div class="wireframe-body">+----------------------------------------------+
+| [!] 写入操作确认                                  |
+|                                                |
+| 将新增5行到 EquipTable：                         |
+| ID 3001~3005，暗影套装                            |
+|                                                |
+| [取消]  [拒绝]  [确认写入]                        |
++----------------------------------------------+
+位置：消息流中间（阻塞型，AI在等）</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: UI - SVN SYNC -->
+<!-- ============================================================ -->
+<section id="ui-svn" class="doc-section">
+  <span class="section-badge badge-ui">UI Design</span>
+  <h2 class="section-title">SVN 同步状态页</h2>
+  <p class="section-desc">路由 /svn-sync，挂在 Control 分组下。复用 ConsolePollService 的 SSE 实时推送模式。</p>
+
+  <div class="wireframe">
+    <div class="wireframe-header">
+      /svn-sync
+      <span class="tag tag-new">新增页面</span>
+    </div>
+    <div class="wireframe-body">+-------------------------------------------------------+
+|  SVN 同步                           [立即同步]            |
++-------------------------------------------------------+
+|                                                         |
+|  +------------+  +------------+  +------------+         |
+|  | 当前版本    |  | 上次同步    |  | 下次检查    |         |
+|  | r1892      |  | 2分钟前    |  | 3分钟后    |         |
+|  +------------+  +------------+  +------------+         |
+|                                                         |
+|  同步日志                                                |
+|  +--------------------------------------------------+  |
+|  | OK 14:32  检测到变更 r1891->r1892                  |  |
+|  | OK 14:32  变更文件: SkillTable.xlsx               |  |
+|  | OK 14:33  AI解析完成，生成索引                     |  |
+|  | OK 14:33  commit 成功 by plannerA                 |  |
+|  | OK 14:35  本地向量库重建完成                      |  |
+|  +--------------------------------------------------+  |
++-------------------------------------------------------+</div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: UI - INDEX MAP -->
+<!-- ============================================================ -->
+<section id="ui-index" class="doc-section">
+  <span class="section-badge badge-ui">UI Design</span>
+  <h2 class="section-title">索引地图</h2>
+  <p class="section-desc">路由 /index-map，挂在 game-group 下。分两期实现：列表视图先上线，reactflow 节点图作为体验升级。</p>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab(event, 'index-list')">列表视图（先上线）</button>
+    <button class="tab" onclick="switchTab(event, 'index-graph')">节点图视图（升级）</button>
+  </div>
+  <div class="tab-content">
+    <div id="index-list" class="tab-pane active">
+      <div class="wireframe">
+        <div class="wireframe-header">
+          列表视图
+          <span class="tag tag-reuse">复用 Ant Design Table + Tree</span>
+        </div>
+        <div class="wireframe-body">+-------------------------------------------------------+
+|  索引地图   [搜索表/字段]                                  |
++-------------------------------------------------------+
+|  按系统分组：                                            |
+|                                                         |
+|  v 战斗系统 (8张表)                    最后更新: 今天     |
+|    SkillTable      156行  OK  r1892  2h前               |
+|    BuffTable        89行  OK  r1891  3h前               |
+|    DamageTable      45行  ??  r1885  昨天               |
+|    ResistTable      32行  OK  r1880  2天前              |
+|                                                         |
+|  v 装备系统 (5张表)                    最后更新: 昨天     |
+|    EquipTable      203行  OK  r1889  昨天               |
+|    SetBonusTable    28行  OK  r1876  3天前              |
++-------------------------------------------------------+
+|  字段详情（点击表展开）                                   |
+|  SkillTable · 156行 · r1892 · 2小时前                    |
+|  +------------+--------+--------------------+--------+  |
+|  | 字段名       | 类型   | AI描述             | 置信度  |  |
+|  | DamageCoeff | float  | 伤害系数=ATK*系数  | 已确认 |  |
+|  | BuffID      | int    | 关联Buff外键       | 待确认 |  |
+|  +------------+--------+--------------------+--------+  |
++-------------------------------------------------------+</div>
+      </div>
+    </div>
+    <div id="index-graph" class="tab-pane">
+      <div class="wireframe">
+        <div class="wireframe-header">
+          三层节点图视图
+          <span class="tag tag-new">reactflow</span>
+        </div>
+        <div class="wireframe-body">视图层级：
+Level 1：系统全景（默认） -- 节点=系统分组(10~20个)
+Level 2：系统内部（点击系统进入）-- 节点=表(5~15个)
+Level 3：表焦点（点击表进入）-- 中心=选中的表，周围=直接依赖表(5~10个)
+
+任何时候屏幕节点不超过20个，无论总表数多少。
+
+颜色区分：
+  绿色实线 = 已确认依赖
+  黄色虚线 = AI推断高置信
+  红色虚线 = AI推断低置信，建议人工确认
+
+交互：
+  点击节点 --> 展开字段详情面板
+  点击连线 --> 展示具体字段引用关系
+  拖拽/缩放 --> 自由浏览</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: UI - DOC LIBRARY -->
+<!-- ============================================================ -->
+<section id="ui-doclib" class="doc-section">
+  <span class="section-badge badge-ui">UI Design</span>
+  <h2 class="section-title">文档库</h2>
+  <p class="section-desc">路由 /doc-library，Master-Detail 模式。管理类型1（人写的源文档）和类型2（AI 产出文档）。只有"已确认"的文档才进入知识库。</p>
+
+  <div class="wireframe">
+    <div class="wireframe-header">
+      /doc-library
+      <span class="tag tag-new">新增页面</span>
+    </div>
+    <div class="wireframe-body">+-------------------------------+---------------------+
+|  文档库  [搜索] [+ 新建]       |  文档详情                    |
++-------------------------------+---------------------+
+| [全部][设计文档][策划案][需求]   |  剑士伤害调整策划案          |
+| [全部][草稿][待确认][已确认][归档]|                             |
++-------------------------------+  状态：                      |
+|                               |  草稿 -> 待确认 -> [已确认]   |
+|  战斗系统                     |                           |
+|  剑士伤害调整策划案  已确认    |  关联：                      |
+|  新技能:冰封术       待确认    |  SkillTable / HeroTable     |
+|  战斗系统GDD v2.3   已确认    |  关联需求：#2231             |
+|                               |                           |
+|  装备系统                     |  -- (Markdown预览) --        |
+|  暗影套装新增需求     已确认    |  ## 基本信息                 |
+|  装备系统接入文档     已确认    |  - SkillID: 2001            |
+|                               |  - DmgCoeff: 0.85->1.0      |
+|  版本记录                     |  ...                        |
+|  2026-W18 周报      已确认    |                           |
+|                               |  [确认文档] [提交SVN] [归档] |
++-------------------------------+---------------------+</div>
+  </div>
+
+  <div class="card" style="margin-top:12px;">
+    <div class="card-title">文档状态流转</div>
+    <div class="card-body">
+      <div class="flow-diagram" style="margin:0;">
+        <div class="flow-row">
+          <div class="flow-box neutral">AI 生成</div>
+          <div class="flow-arrow">-></div>
+          <div class="flow-box warning">草稿</div>
+          <div class="flow-arrow">-></div>
+          <div class="flow-box info">待确认</div>
+          <div class="flow-arrow">-></div>
+          <div class="flow-box success">已确认</div>
+          <div class="flow-arrow">-></div>
+          <div class="flow-box neutral">已归档</div>
+        </div>
+        <p style="text-align:center; margin-top:12px; font-size:12px; color:var(--text-muted);">
+          "已确认"自动进入知识库 | 草稿不进入知识库 | 归档后仍可查询但不作为活跃参考
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: UI - KNOWLEDGE BASE -->
+<!-- ============================================================ -->
+<section id="ui-kb" class="doc-section">
+  <span class="section-badge badge-ui">UI Design</span>
+  <h2 class="section-title">知识库</h2>
+  <p class="section-desc">路由 /knowledge-base。知识库 = 所有可以帮 AI 做得更准的结构化知识。包含表知识、文档知识、经验知识、项目规范。</p>
+
+  <div class="wireframe">
+    <div class="wireframe-header">
+      /knowledge-base
+      <span class="tag tag-new">新增页面</span>
+    </div>
+    <div class="wireframe-body">+---------------+---------------------------------------------+
+|  知识库        |  健康度看板                                    |
+|  [搜索知识]    |  =========================================  |
++---------------+  整体覆盖率  [████████░░] 78%   312个字段      |
+|               |                                             |
+|  知识分类      |  已确认 142  |  高置信 108  |  低置信 62       |
+|  -----------  |  待处理：62个字段置信度低  [批量确认]           |
+|  表知识        |  =========================================  |
+|    战斗系统    |                                             |
+|    装备系统    |  知识条目                        [按置信度排序]  |
+|    关卡系统    |  ----------------------------------------     |
+|               |  DamageCoeff · SkillTable                    |
+|  文档知识      |  伤害系数，最终伤害=攻击力*系数   [已确认]     |
+|    设计文档    |  ----------------------------------------     |
+|    规范文档    |  BuffID · SkillTable                         |
+|               |  关联Buff外键，引用BuffTable.ID  [待确认]      |
+|  经验知识      |  [确认] [编辑] [标记有误]                     |
+|    数值经验    |  ----------------------------------------     |
+|    体验映射    |  HitStopFrame · SkillTable                   |
+|               |  顿帧时长，影响打击感           [AI推断]       |
+|               |  [确认] [编辑] [标记有误]                     |
+|               |  =========================================  |
+|               |  >> 录入经验知识                               |
+|               |  "打击感轻一般改HitStopFrame，                 |
+|               |   从3调到5效果最明显..."                      |
++---------------+---------------------------------------------+</div>
+  </div>
+
+  <div class="card" style="margin-top:12px;">
+    <div class="card-title">经验知识录入方式：对话式</div>
+    <div class="card-body">
+      策划直接在知识库底部输入框说话，AI 自动识别并结构化存入。不需要填表单。录入后自动生成 JSON：<br>
+      <div class="json-display">{
+  "experience": "打击感提升",
+  "fields": ["SkillTable.HitStopFrame"],
+  "insight": "从3调到5效果最明显",
+  "confirmed_by": "plannerA",
+  "source": "对话录入"
+}</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: UI - CONFIG -->
+<!-- ============================================================ -->
+<section id="ui-config" class="doc-section">
+  <span class="section-badge badge-ui">UI Design</span>
+  <h2 class="section-title">游戏项目配置页</h2>
+  <p class="section-desc">路由 /game-project，挂在 Settings 分组。完全复用现有 Settings 页面模式。</p>
+
+  <div class="wireframe">
+    <div class="wireframe-header">
+      /game-project (Settings)
+      <span class="tag tag-new">新增页面</span>
+    </div>
+    <div class="wireframe-body">+-------------------------------------------------------+
+|  游戏项目配置                                            |
++-------------------------------------------------------+
+|  基础信息                                                |
+|  项目名称  [MyGame          ]  引擎  [Unity v]          |
+|  SVN目录  [./               ]  轮询  [5分钟  v]        |
++-------------------------------------------------------+
+|  目录语义                                                |
+|  +--------------------------+-------------+------+      |
+|  | 路径                      | 类型         | 操作 |      |
+|  | Assets/Data/Tables/       | 数值表    v  |  X   |      |
+|  | Docs/                     | 文档      v  |  X   |      |
+|  | Assets/Scripts/           | 代码      v  |  X   |      |
+|  +--------------------------+-------------+------+      |
+|  [+ 添加目录]                                           |
++-------------------------------------------------------+
+|  ID 段划分                                              |
+|  +--------+--------+--------+------+                     |
+|  | 系统    | 起始ID  | 结束ID  | 操作 |                     |
+|  | hero   | 1000   | 1999   |  X   |                     |
+|  | skill  | 2000   | 2999   |  X   |                     |
+|  | item   | 3000   | 3999   |  X   |                     |
+|  | equip  | 4000   | 4999   |  X   |                     |
+|  | buff   | 5000   | 5999   |  X   |                     |
+|  +--------+--------+--------+------+                     |
+|  [+ 添加]                                               |
++-------------------------------------------------------+
+|  文档模板绑定                                            |
+|  设计文档  [Docs/Templates/GDD模板.md      v]          |
+|  需求文档  [Docs/Templates/需求模板.md     v]          |
+|  更新日志  [Docs/Templates/更新日志模板.md v]          |
+|  小需求    [Docs/Templates/小需求模板.md   v]          |
+|                                                        |
+|                             [取消]  [保存并同步到SVN]    |
++-------------------------------------------------------+</div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: UI - NUMERIC WORKBENCH -->
+<!-- ============================================================ -->
+<section id="ui-workbench" class="doc-section">
+  <span class="section-badge badge-ui">UI Design</span>
+  <h2 class="section-title">数值工作台</h2>
+  <p class="section-desc">数值工作台有两个入口，服务不同场景：Chat 右侧 Drawer 用于实时查看和快速决策，独立页面 /game/workbench 用于深度调整和多表并列。</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">双入口设计</div>
+      <div class="card-body">
+        <table class="data-table" style="margin:0;">
+          <thead><tr><th>入口</th><th>场景</th><th>空间</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Chat 右侧 Drawer</td>
+              <td>对话中实时查看引用字段，快速决策</td>
+              <td>380px 窄栏</td>
+            </tr>
+            <tr>
+              <td>独立页面 /game/workbench</td>
+              <td>专注深度调整，多表并列，全公式预览</td>
+              <td>全宽主内容区</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="border-left:4px solid var(--accent);">
+      <div class="card-title" style="color:var(--accent);">关键设计</div>
+      <div class="card-body">
+        两个入口共享同一份数据，状态可以互相传递。从 Drawer 点击跳转到独立页面时携带上下文，自动滚动到对应列并高亮目标字段。
+      </div>
+    </div>
+  </div>
+
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">整体布局</h3>
+  <div class="wireframe">
+    <div class="wireframe-header">
+      数值工作台 三栏布局
+      <span class="tag tag-new">新增页面</span>
+    </div>
+    <div class="wireframe-body">+------+-----------------------------------------+----------+
+|      |  主内容区                                |          |
+|      |  +-----------------------------------+  |          |
+|      |  | 多表并列视图（上半区）              |  |          |
+|Side  |  | HeroTable SkillTable BuffTable ... |  |          |
+|bar   |  |                                   |  |  右侧    |
+|      |  +------ 可拖动分割线 --------------+  |  Drawer  |
+|      |  | 实时影响预览（下半区）              |  |          |
+|      |  | 改动摘要 + 效果 + 计算链路          |  |（数值工作 |
+|      |  | [生成变更草稿]  [重置]              |  | 台模式下 |
+|      |  +-----------------------------------+  | 显示 AI  |
+|      |                                         | 补全面板）|
++------+-----------------------------------------+----------+
+
+- 上下分割线可拖动，默认比例 6:4，最小高度各 20%
+- 右侧 Drawer 在数值工作台模式下内容切换为 AI 补全面板
+- Drawer 开关状态不变，只换内部渲染组件</div>
+  </div>
+
+  <!-- File List -->
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">涉及文件清单</h3>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">新建文件 <span class="tag tag-new">New</span></div>
+      <div class="card-body">
+        <div class="code-block" style="margin:0;">console/src/pages/Game/
+<span class="key">├──</span> NumericWorkbench.tsx       <span class="comment"># 主页面</span>
+<span class="key">├──</span> NumericWorkbench.module.less <span class="comment"># 样式</span>
+<span class="key">└──</span> components/
+    <span class="key">├──</span> TableColumn.tsx              <span class="comment"># 单表列组件</span>
+    <span class="key">├──</span> TableColumn.module.less
+    <span class="key">├──</span> ImpactPreview.tsx            <span class="comment"># 实时影响预览</span>
+    <span class="key">├──</span> ImpactPreview.module.less
+    <span class="key">├──</span> DamageChain.tsx              <span class="comment"># 伤害计算链路</span>
+    <span class="key">├──</span> DamageChain.module.less
+    <span class="key">├──</span> AISuggestionPanel.tsx        <span class="comment"># AI补全面板</span>
+    <span class="key">└──</span> AISuggestionPanel.module.less</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">改动现有文件 <span class="tag tag-extend">Extend</span></div>
+      <div class="card-body">
+        <table class="data-table" style="margin:0;">
+          <thead><tr><th>文件</th><th>改动</th><th>性质</th></tr></thead>
+          <tbody>
+            <tr><td style="font-family:monospace;font-size:12px;">Game/index.ts</td><td>export NumericWorkbench</td><td><span class="tag tag-new">纯追加</span></td></tr>
+            <tr><td style="font-family:monospace;font-size:12px;">App.tsx（路由）</td><td>加 /game/workbench 路由</td><td><span class="tag tag-new">纯追加</span></td></tr>
+            <tr><td style="font-family:monospace;font-size:12px;">Sidebar.tsx</td><td>game-group 加导航项</td><td><span class="tag tag-new">纯追加</span></td></tr>
+            <tr><td style="font-family:monospace;font-size:12px;">PlanPanel/index.tsx</td><td>Drawer 内容条件渲染</td><td><span class="tag tag-extend">扩展</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Structures -->
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">数据结构定义</h3>
+  <div class="card">
+    <div class="card-title">前端 State 接口</div>
+    <div class="card-body">
+      <div class="code-block" style="margin:0;font-size:12px;">// 当前工作台上下文
+<span class="key">interface</span> WorkbenchContext {
+  title: <span class="key">string</span>                      <span class="comment">// 如"剑士伤害调整"</span>
+  tables: WorkbenchTable[]           <span class="comment">// 并列展示的表列表</span>
+  focusField?: {                     <span class="comment">// 从Chat跳转时携带的焦点字段</span>
+    tableId: <span class="key">string</span>
+    fieldKey: <span class="key">string</span>
+  }
+}
+
+// 单张表
+<span class="key">interface</span> WorkbenchTable {
+  tableId: <span class="key">string</span>                    <span class="comment">// 如"SkillTable"</span>
+  tableName: <span class="key">string</span>
+  records: WorkbenchRecord[]         <span class="comment">// 展示的行，通常1~3行</span>
+}
+
+// 单个字段
+<span class="key">interface</span> WorkbenchField {
+  key: <span class="key">string</span>                        <span class="comment">// 如"DamageCoeff"</span>
+  label: <span class="key">string</span>                      <span class="comment">// 显示名</span>
+  value: <span class="key">number</span> | <span class="key">string</span>
+  editable: <span class="key">boolean</span>
+  pendingValue?: <span class="key">number</span> | <span class="key">string</span>     <span class="comment">// 用户修改中的值，未提交</span>
+  warning?: <span class="key">string</span>                   <span class="comment">// 如"影响3个技能"</span>
+  highlight?: <span class="key">boolean</span>                <span class="comment">// 从Chat跳转时高亮</span>
+}
+
+// 实时影响预览
+<span class="key">interface</span> ImpactPreview {
+  changes: FieldChange[]
+  effects: EffectItem[]
+  damageChain?: DamageChain
+}
+
+// 伤害计算链路
+<span class="key">interface</span> DamageChain {
+  formula: <span class="key">string</span>                    <span class="comment">// 完整公式字符串</span>
+  variables: DamageVariable[]
+  resultBefore: <span class="key">number</span>
+  resultAfter: <span class="key">number</span>
+  deltaPercent: <span class="key">number</span>
+}
+
+// AI补全建议（右侧Drawer）
+<span class="key">interface</span> AISuggestion {
+  availableId?: <span class="key">number</span>
+  referenceValues: RefValue[]        <span class="comment">// 同类参考值列表</span>
+  suggestedRange?: [<span class="key">number</span>, <span class="key">number</span>]  <span class="comment">// 建议系数区间</span>
+  reusableResources: ReusableItem[]  <span class="comment">// 可复用现有资源</span>
+  pendingConfirms: <span class="key">string</span>[]          <span class="comment">// 待策划确认项清单</span>
+}</div>
+    </div>
+  </div>
+
+  <!-- API -->
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">API 接口</h3>
+  <div class="card">
+    <div class="card-title">后端接口草案</div>
+    <div class="card-body">
+      <table class="data-table" style="margin:0;">
+        <thead>
+          <tr><th>Method</th><th>Path</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="priority-tag" style="background:#DBEAFE;color:#2563EB;font-size:11px;">GET</span></td>
+            <td style="font-family:monospace;font-size:12px;">/api/game/workbench/context</td>
+            <td>Query: tableIds[], recordIds[] → WorkbenchContext</td>
+          </tr>
+          <tr>
+            <td><span class="priority-tag" style="background:#D1FAE5;color:#059669;font-size:11px;">POST</span></td>
+            <td style="font-family:monospace;font-size:12px;">/api/game/workbench/preview</td>
+            <td>Body: { changes: FieldChange[] } → ImpactPreview</td>
+          </tr>
+          <tr>
+            <td><span class="priority-tag" style="background:#DBEAFE;color:#2563EB;font-size:11px;">GET</span></td>
+            <td style="font-family:monospace;font-size:12px;">/api/game/workbench/ai-suggest</td>
+            <td>Query: intent, tableId → AISuggestion</td>
+          </tr>
+          <tr>
+            <td><span class="priority-tag" style="background:#D1FAE5;color:#059669;font-size:11px;">POST</span></td>
+            <td style="font-family:monospace;font-size:12px;">/api/game/change/propose</td>
+            <td>Body: { changes, description } → { proposalId } → 进入审批流</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TableColumn -->
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">TableColumn 单表列组件</h3>
+  <div class="wireframe">
+    <div class="wireframe-header">
+      单张表列（固定 240px）
+      <span class="tag">组件设计</span>
+    </div>
+    <div class="wireframe-body">每列固定宽度：240px
+表列超过4张时，外层横向滚动（不压缩列宽）
+
+字段行结构：
+├── 字段名（灰色小字，12px）
+├── 字段值
+│   ├── editable=false：纯文字展示
+│   └── editable=true：点击变成 InputNumber
+│                      blur 后触发 preview（防抖300ms）
+├── pendingValue 存在：旧值 → 新值（橙色标注）
+└── warning 存在：⚠️ 图标 + Tooltip 展示详情</div>
+  </div>
+
+  <!-- ImpactPreview -->
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">ImpactPreview 实时影响预览</h3>
+  <div class="wireframe">
+    <div class="wireframe-header">
+      实时影响预览区（下半区）
+      <span class="tag">组件设计</span>
+    </div>
+    <div class="wireframe-body">触发时机：任意可编辑字段 blur 后，防抖 300ms
+调用 POST /api/game/workbench/preview
+
+空状态：
+  "修改上方字段后，这里会实时显示影响预览"
+
+有数据时展示：
+├── 改动摘要列表（每条一行：表名.字段 旧值→新值）
+├── 预期效果列表
+│   ├── ok（绿色）：在合理区间内
+│   ├── warning（黄色）：偏高/偏低但可接受
+│   └── danger（红色）：超出合理范围
+├── DamageChain 组件（后端返回时才展示）
+└── 操作按钮：[生成变更草稿]（有pendingChanges时亮起）[重置]</div>
+  </div>
+
+  <!-- DamageChain -->
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">DamageChain 伤害计算链路</h3>
+  <div class="wireframe">
+    <div class="wireframe-header">
+      伤害计算链路可视化
+      <span class="tag">组件设计</span>
+    </div>
+    <div class="wireframe-body">布局：
+├── 公式行：每个变量是一个 Tag
+│   ├── 普通变量：灰色背景，标注来源表
+│   └── 被改动的变量：橙色背景高亮
+├── = 结果行
+│   ├── 改动前：xxx
+│   └── 改动后：xxx（红色/绿色，+x.x%）
+└── 示例：
+    ATK(150)  ×  ATKGrowth(1.2)  ×  DamageCoeff(1.0↑)  ×  0.6
+    EquipTable   HeroTable         SkillTable【已改】
+    = 108  （原 91.8，+17.6%）</div>
+  </div>
+
+  <!-- AISuggestionPanel -->
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">AISuggestionPanel AI 补全面板</h3>
+  <div class="wireframe">
+    <div class="wireframe-header">
+      右侧 Drawer 内容（数值工作台模式下）
+      <span class="tag">组件设计</span>
+    </div>
+    <div class="wireframe-body">数值工作台模式下 Drawer 内容切换为此组件：
+
+├── 可用 ID：XXXX
+├── 同类参考值（表格）
+│   ├── 名称 | 系数 | 备注
+│   └── 点击行可直接填入当前编辑字段
+├── 建议区间：[0.5 ~ 0.7]（含推理说明）
+├── 可复用资源（列表）
+│   └── 点击直接填入 ID 字段
+└── 待确认项（Checklist）
+    └── 策划逐项勾选后 [生成变更草稿] 才可点击</div>
+  </div>
+
+  <!-- Drawer Switch Logic -->
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">Drawer 内容切换逻辑</h3>
+  <div class="card">
+    <div class="card-title">PlanPanel 条件渲染</div>
+    <div class="card-body">
+      在 <code style="font-size:12px;background:#F3F4F6;padding:2px 6px;border-radius:4px;">PlanPanel/index.tsx</code> 加条件渲染，<strong>原有逻辑完全不动</strong>：
+      <div class="code-block" style="margin:12px 0;font-size:12.5px;"><span class="comment">// 改动前：</span>
+&lt;PlanPanelContent ... /&gt;
+
+<span class="comment">// 改动后：</span>
+{isWorkbenchMode
+  ? &lt;AISuggestionPanel suggestion={aiSuggestion} /&gt;
+  : &lt;PlanPanelContent ... /&gt;      <span class="comment">// 原有逻辑，一行不改</span>
+  }
+
+<span class="comment">// isWorkbenchMode 通过路由判断：</span>
+<span class="comment">// location.pathname.startsWith('/game/workbench')</span>
+<span class="comment">// 不引入额外全局状态</span></div>
+    </div>
+  </div>
+
+  <!-- Chat to Workbench Jump -->
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">从 Chat 跳转到数值工作台</h3>
+  <div class="flow-diagram">
+    <div class="flow-row">
+      <div class="flow-box neutral">Chat Drawer 引用字段旁</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box info">"在数值工作台中打开 ↗"</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box primary">/game/workbench?tableId=X&amp;fieldKey=Y</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box success">自动滚动到对应列</div>
+      <div class="flow-box success">字段 highlight=true</div>
+      <div class="flow-box success">300ms 后取消高亮</div>
+    </div>
+  </div>
+
+  <div class="code-block" style="font-size:12.5px;"><span class="comment">// Chat Drawer 跳转入口</span>
+&lt;span
+  className={styles.openInWorkbench}
+  onClick={() =&gt;
+    navigate(<span class="str">`/game/workbench?tableId=${tableId}&amp;fieldKey=${fieldKey}`</span>)
+  }
+&gt;
+  在数值工作台中打开 ↗
+&lt;/span&gt;
+
+<span class="comment">// 数值工作台初始化时读取 URL query params</span>
+<span class="key">const</span> { tableId, fieldKey } = useSearchParams()
+<span class="comment">// → 自动滚动到对应列 → highlight=true → 300ms后取消</span></div>
+
+  <!-- Proposal Flow -->
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">生成变更草稿流程</h3>
+  <div class="flow-diagram">
+    <div class="flow-row">
+      <div class="flow-box neutral">[生成变更草稿] 点击</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box primary">POST /api/game/change/propose</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box info">返回 proposalId</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box info" style="min-width:200px;">复用现有 ApprovalCard 机制<br>阻塞型确认卡片出现在 Chat 消息流里</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box success">策划批准 → 执行写回<br><small>(现有 change_applier.py)</small></div>
+      <div class="flow-box danger">策划拒绝 → pendingChanges 保留<br><small>可继续修改</small></div>
+    </div>
+  </div>
+
+  <!-- Acceptance Criteria -->
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">验收标准</h3>
+  <div class="card">
+    <div class="card-title">功能验收清单</div>
+    <div class="card-body">
+      <ul class="checklist">
+        <li>打开 /game/workbench，多表并列正常展示</li>
+        <li>修改字段值 → 300ms 后下方预览自动更新</li>
+        <li>伤害计算链路中被改动的变量橙色高亮</li>
+        <li>上下分割线可拖动，最小高度限制（20%）生效</li>
+        <li>[重置] 清空所有 pendingValue，预览区恢复空状态</li>
+        <li>[生成变更草稿] 在 pendingChanges 为空时置灰</li>
+        <li>[生成变更草稿] 点击 → ApprovalCard 出现在 Chat 消息流</li>
+        <li>从 Chat Drawer [在数值工作台中打开] → 跳转并高亮目标字段</li>
+        <li>右侧 Drawer 在数值工作台路由下显示 AI 补全面板</li>
+        <li>离开 /game/workbench 路由 → Drawer 恢复原有内容</li>
+        <li>回归：Chat 对话 / Agent / Approvals 功能正常</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Dev Notes -->
+  <h3 style="font-size:18px; font-weight:600; margin: 28px 0 12px;">开发注意事项</h3>
+  <div class="card">
+    <div class="card-title">7 条关键约束</div>
+    <div class="card-body" style="font-size:13.5px;">
+      <table class="data-table" style="margin:0;">
+        <thead><tr><th style="width:40px;">#</th><th>要点</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><strong>ResizablePanels 优先复用项目现有实现</strong>，不引入新依赖。若无，使用 useRef + mousemove 最小实现</td></tr>
+          <tr><td>2</td><td><strong>预览接口防抖 300ms</strong>，避免输入过程中频繁请求</td></tr>
+          <tr><td>3</td><td><strong>pendingChanges 存在组件本地 state 里</strong>。用户没点 [生成变更草稿] 前全部是本地状态，不请求写入</td></tr>
+          <tr><td>4</td><td><strong>多表并列超过4张时外层横向滚动</strong>，每列保持 240px 固定宽，不压缩</td></tr>
+          <tr><td>5</td><td><strong>Drawer 切换内容时只换内部渲染的组件</strong>，不重置 Drawer 的开关状态，不影响 Drawer 动画</td></tr>
+          <tr><td>6</td><td><strong>数值工作台是全新页面，不改动任何现有 Chat 逻辑</strong>。PlanPanel 里只加一个条件渲染，原分支完全不动</td></tr>
+          <tr><td>7</td><td><strong>AI 补全面板的"同类参考值"点击填入</strong>，只填入当前正在编辑（focus）的字段，无 focus 时 Toast 提示先选中字段</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: ROADMAP -->
+<!-- ============================================================ -->
+<section id="roadmap" class="doc-section">
+  <span class="section-badge badge-overview">Roadmap</span>
+  <h2 class="section-title">开发路线图</h2>
+  <p class="section-desc">优先级原则：能不能跑起来来排，不是按功能完整度排。没有索引，查询就是空谈；没有查询，文档生成就没有上下文。每一层都是下一层的地基。</p>
+
+  <div class="grid-4" style="margin-bottom: 24px;">
+    <div class="stat-card" style="border-top: 3px solid #DC2626;">
+      <div class="stat-value" style="color:#DC2626;">P0</div>
+      <div class="stat-label">基础设施<br>没有它其他都跑不起来</div>
+    </div>
+    <div class="stat-card" style="border-top: 3px solid #D97706;">
+      <div class="stat-value" style="color:#D97706;">P1</div>
+      <div class="stat-label">核心价值<br>直接解决最高频痛点</div>
+    </div>
+    <div class="stat-card" style="border-top: 3px solid #059669;">
+      <div class="stat-value" style="color:#059669;">P2</div>
+      <div class="stat-label">提效工具<br>让体验更完整</div>
+    </div>
+    <div class="stat-card" style="border-top: 3px solid #6B7280;">
+      <div class="stat-value" style="color:#6B7280;">P3</div>
+      <div class="stat-label">锦上添花<br>有了更好没有也能用</div>
+    </div>
+  </div>
+
+  <div class="flow-diagram">
+    <div class="mermaid">
+    graph LR
+      P0["P0 基础设施<br>环境+索引"] --> P1A["P1 查询能力<br>Chat+Drawer"]
+      P0 --> P1B["P1 知识库<br>可视化+录入"]
+      P1A --> P2A["P2 文档生成<br>Skill+卡片"]
+      P1B --> P2A
+      P2A --> P2B["P2 文档库<br>管理+状态"]
+      P2B --> P3["P3 索引可视化<br>列表+节点图<br>(可延后)"]
+    end
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>每层完成后的回归确认：</strong>
+    Chat 对话正常 | Agent 配置正常 | Models 配置正常 | Backups 正常 | Approvals 正常
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: P0 -->
+<!-- ============================================================ -->
+<section id="p0" class="doc-section">
+  <span class="section-badge badge-p0">P0</span>
+  <h2 class="section-title">P0 基础设施</h2>
+  <p class="section-desc">目标：让索引稳定跑起来，全员同步。P0 不稳就不要往下走。</p>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>任务</th>
+        <th>内容</th>
+        <th>难度</th>
+        <th>依赖</th>
+        <th>标签</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>环境初始化脚本</strong></td>
+        <td>setup.sh / setup.bat，一键跑通本地环境（检查 Python 版本、创建 venv、pip install、svn update、初始化 .ltclaw_index/、复制 .env.example）</td>
+        <td><span class="stars">★★</span></td>
+        <td>无</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>游戏项目配置页</strong></td>
+        <td>/game-project，SVN 路径/目录语义/ID段/模板绑定/轮询间隔配置。读写 project_config.yaml</td>
+        <td><span class="stars">★★</span></td>
+        <td>无</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>SVN 本地轮询服务</strong></td>
+        <td>运行在维护者本地，定时 svn update + 检测变更，触发索引重建。防冲突（版本号仲裁 + 随机抖动）。轮询间隔可在配置页调整</td>
+        <td><span class="stars">★★★</span></td>
+        <td>项目配置</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>AI 表索引器</strong></td>
+        <td>Excel 解析（openpyxl）+ AI 生成字段描述（调现有 LLM provider），输出 JSON。解析表头 + 采样前 20 行 + 读旧版 JSON + AI Prompt 生成</td>
+        <td><span class="stars">★★★</span></td>
+        <td>轮询服务</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>AI 文档索引器</strong></td>
+        <td>Markdown/Docx 分块，AI 生成摘要，输出 JSON</td>
+        <td><span class="stars">★★</span></td>
+        <td>轮询服务</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>依赖图维护</strong></td>
+        <td>AI 推断 + 规则校验，增量更新 dependency_graph.json。confidence 区分 confirmed / ai_inferred</td>
+        <td><span class="stars">★★★</span></td>
+        <td>表索引器</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>SVN 同步状态页</strong></td>
+        <td>/svn-sync，实时日志（SSE 推送）+ 状态卡片 + 手动触发按钮</td>
+        <td><span class="stars">★★</span></td>
+        <td>轮询服务</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: P1 -->
+<!-- ============================================================ -->
+<section id="p1" class="doc-section">
+  <span class="section-badge badge-p1">P1</span>
+  <h2 class="section-title">P1 核心能力</h2>
+  <p class="section-desc">索引有了之后，让策划能在 Chat 里问任何问题，得到有依据的结构化回答。查询能力和知识库可并行推进。</p>
+
+  <h3 style="font-size:18px; font-weight:600; margin-bottom:12px;">P1 核心查询能力</h3>
+  <table class="data-table">
+    <thead>
+      <tr><th>任务</th><th>内容</th><th>难度</th><th>依赖</th><th>标签</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>三层查询路由</strong></td>
+        <td>精确查询(直接查JSON)/关联查询(依赖图)/语义查询(向量库)，后端 Skill</td>
+        <td><span class="stars">★★★</span></td>
+        <td>索引器</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>game_query Skill</strong></td>
+        <td>接收自然语言，查索引，返回结构化结果</td>
+        <td><span class="stars">★★★</span></td>
+        <td>查询路由</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>Chat 模式选择栏</strong></td>
+        <td>输入框上方加模式标签（自由/策划案/数值/文档/知识）</td>
+        <td><span class="stars">★★</span></td>
+        <td>无</td>
+        <td><span class="tag tag-extend">扩展 Chat</span></td>
+      </tr>
+      <tr>
+        <td><strong>数值查询卡片</strong></td>
+        <td>NumericCard，表名+字段+高亮+历史</td>
+        <td><span class="stars">★★★</span></td>
+        <td>game_query</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>PlanPanel Drawer 扩展</strong></td>
+        <td>加"引用的数值表"+"产出文档"两个 Section。SSE 推送 table_ref + doc_created 事件</td>
+        <td><span class="stars">★★★</span></td>
+        <td>数值查询卡片</td>
+        <td><span class="tag tag-extend">扩展 PlanPanel</span></td>
+      </tr>
+      <tr>
+        <td><strong>非阻塞决策按钮</strong></td>
+        <td>Drawer 里的 [存入文档库] / [确认调整] / [标记有误]</td>
+        <td><span class="stars">★★</span></td>
+        <td>Drawer 扩展</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:18px; font-weight:600; margin: 24px 0 12px;">P1 知识库</h3>
+  <p style="color:var(--text-secondary); font-size:14px; margin-bottom:12px;">
+    知识库和查询能力互相依赖——查询质量取决于知识库丰富程度，知识库内容主要来自查询过程中的沉淀。
+  </p>
+  <table class="data-table">
+    <thead>
+      <tr><th>任务</th><th>内容</th><th>难度</th><th>依赖</th><th>标签</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>知识库后端</strong></td>
+        <td>向量库读写（Chroma/FAISS），经验知识结构化提取</td>
+        <td><span class="stars">★★★</span></td>
+        <td>索引器</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>知识库页面</strong></td>
+        <td>/knowledge-base，分类树+条目列表+健康度看板</td>
+        <td><span class="stars">★★★</span></td>
+        <td>知识库后端</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>对话式经验录入</strong></td>
+        <td>Chat 输入框复用，录入自动结构化</td>
+        <td><span class="stars">★★</span></td>
+        <td>知识库页面</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: P2 -->
+<!-- ============================================================ -->
+<section id="p2" class="doc-section">
+  <span class="section-badge badge-p2">P2</span>
+  <h2 class="section-title">P2 提效工具</h2>
+  <p class="section-desc">有了索引和知识库作为上下文，文档生成才能产出真正可用的内容。</p>
+
+  <h3 style="font-size:18px; font-weight:600; margin-bottom:12px;">P2 文档生成</h3>
+  <table class="data-table">
+    <thead>
+      <tr><th>任务</th><th>内容</th><th>难度</th><th>依赖</th><th>标签</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>文档生成 Skill</strong></td>
+        <td>套模板生成文档，结构化输出</td>
+        <td><span class="stars">★★★</span></td>
+        <td>知识库+索引</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>策划案卡片</strong></td>
+        <td>DesignDocCard，数值配置+待确认项+操作按钮</td>
+        <td><span class="stars">★★★</span></td>
+        <td>文档生成 Skill</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>文档生成卡片</strong></td>
+        <td>DocGenCard，文档类型+时间范围+预览</td>
+        <td><span class="stars">★★★</span></td>
+        <td>文档生成 Skill</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>Chat 文档类型选择</strong></td>
+        <td>选文档生成模式后出现类型选择+关联系统选项</td>
+        <td><span class="stars">★★</span></td>
+        <td>卡片组件</td>
+        <td><span class="tag tag-extend">扩展 Chat</span></td>
+      </tr>
+      <tr>
+        <td><strong>阻塞型写入确认</strong></td>
+        <td>复用 ApprovalCard，写入表前要求策划确认</td>
+        <td><span class="stars">★★</span></td>
+        <td>无</td>
+        <td><span class="tag tag-reuse">复用</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:18px; font-weight:600; margin: 24px 0 12px;">P2 文档库</h3>
+  <table class="data-table">
+    <thead>
+      <tr><th>任务</th><th>内容</th><th>难度</th><th>依赖</th><th>标签</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>文档库后端</strong></td>
+        <td>读 SVN 文档目录+状态管理+搜索</td>
+        <td><span class="stars">★★</span></td>
+        <td>索引器</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>文档库页面</strong></td>
+        <td>/doc-library，分组列表+状态流转+Markdown 预览</td>
+        <td><span class="stars">★★★</span></td>
+        <td>文档库后端</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>文档状态流转</strong></td>
+        <td>草稿->待确认->已确认->归档，已确认自动入知识库</td>
+        <td><span class="stars">★★</span></td>
+        <td>文档库页面</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: P3 -->
+<!-- ============================================================ -->
+<section id="p3" class="doc-section">
+  <span class="section-badge badge-p3">P3</span>
+  <h2 class="section-title">P3 索引可视化</h2>
+  <p class="section-desc">对新人理解项目结构价值大，但对日常工作流影响有限。列表视图先上线，reactflow 节点图在主线稳定后单独排期。</p>
+
+  <table class="data-table">
+    <thead>
+      <tr><th>任务</th><th>内容</th><th>难度</th><th>依赖</th><th>标签</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>索引地图后端</strong></td>
+        <td>分组信息+依赖图 JSON 输出</td>
+        <td><span class="stars">★★</span></td>
+        <td>索引器</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>列表视图</strong></td>
+        <td>表分组列表+字段详情，先上线可用</td>
+        <td><span class="stars">★★</span></td>
+        <td>后端</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>reactflow 节点图</strong></td>
+        <td>三层视图（系统全景/系统内/表焦点），可拖拽缩放</td>
+        <td><span class="stars">★★★★</span></td>
+        <td>列表视图</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+      <tr>
+        <td><strong>系统分组配置</strong></td>
+        <td>AI 自动推断+人工确认分组</td>
+        <td><span class="stars">★★★</span></td>
+        <td>节点图</td>
+        <td><span class="tag tag-new">新增</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: CHECKLIST -->
+<!-- ============================================================ -->
+<section id="checklist" class="doc-section">
+  <span class="section-badge badge-overview">Checklist</span>
+  <h2 class="section-title">开工检查清单</h2>
+  <p class="section-desc">在写第一行代码之前，这些准备工作要先做好。</p>
+
+  <div class="card">
+    <div class="card-body">
+      <ul class="checklist">
+        <li>现有项目本地跑通（ltclaw-gy-x app 能启动）</li>
+        <li>.python-version 和 pyproject.toml 版本号确认</li>
+        <li>找 2~3 份现有文档样本放进 Docs/Templates/</li>
+        <li>整理一份 ID 段划分表（hero:1000~1999 这类）</li>
+        <li>确认维护者本地 SVN 工作目录路径</li>
+        <li>确认轮询间隔预期（建议默认 5 分钟）</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:16px;">
+    <strong>推荐开发节奏：</strong>不要一次把所有模块都拆完，做一个模块前拆一个模块。后面模块的细节往往取决于前面模块做出来的结果。提前拆是浪费，反而造成文档和代码不一致。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: TECH - INDEX SYSTEM -->
+<!-- ============================================================ -->
+<section id="tech-index" class="doc-section">
+  <span class="section-badge badge-tech">Technical</span>
+  <h2 class="section-title">索引系统设计</h2>
+  <p class="section-desc">索引是整个系统的基础。索引里不存表的每一行数据，只存表的"元数据"：字段定义 + 摘要 + 变更历史 + 依赖关系。</p>
+
+  <h3 style="font-size:18px; font-weight:600; margin-bottom:12px;">.ltclaw_index/ 文件结构</h3>
+  <div class="code-block"><span class="comment">.ltclaw_index/</span>
+<span class="key">├──</span> registry.json          <span class="comment"># 中枢记录：版本号、文件清单、校验和</span>
+<span class="key">├──</span> project_config.yaml     <span class="comment"># 项目配置（团队共享）</span>
+<span class="key">├──</span> dependency_graph.json   <span class="comment"># 全局依赖图（节点+边+置信度）</span>
+<span class="key">├──</span> tables/                  <span class="comment"># AI 生成的表元数据</span>
+<span class="key">│   ├──</span> SkillTable.json
+<span class="key">│   └──</span> ItemTable.json
+<span class="key">├──</span> docs/                    <span class="comment"># AI 生成的文档索引</span>
+<span class="key">│   └──</span> GDD.json
+<span class="key">├──</span> code/                    <span class="comment"># C# 轻量解析结果</span>
+<span class="key">└──</span> history/                 <span class="comment"># 版本聚合</span>
+    <span class="key">├──</span> weekly/              <span class="comment"># 周聚合</span>
+    <span class="key">└──</span> milestone/           <span class="comment"># 里程碑聚合</span></div>
+
+  <h3 style="font-size:18px; font-weight:600; margin: 20px 0 12px;">registry.json 结构</h3>
+  <div class="json-display">{
+  "project": "MyGame",
+  "last_synced_revision": 1892,
+  "last_synced_at": "2026-04-27T14:30:00",
+  "files": {
+    "Data/Tables/SkillTable.xlsx": {
+      "type": "table",
+      "index_file": "tables/SkillTable.json",
+      "svn_revision": 1891,
+      "checksum": "a3f9..."
+    }
+  }
+}</div>
+
+  <h3 style="font-size:18px; font-weight:600; margin: 20px 0 12px;">表索引 JSON 结构</h3>
+  <div class="json-display">{
+  "file": "Data/Tables/SkillTable.xlsx",
+  "svn_revision": 1891,
+  "ai_summary": "技能配置表，定义所有主动/被动技能属性...",
+  "row_count": 156,
+  "fields": [
+    {
+      "name": "SkillID",
+      "type": "int",
+      "description": "技能唯一标识，被 BuffTable.TriggerSkillID 引用",
+      "confidence": "confirmed"
+    },
+    {
+      "name": "DamageCoeff",
+      "type": "float",
+      "description": "伤害系数，最终伤害=攻击力*DamageCoeff*等级加成",
+      "confidence": "ai_inferred"
+    }
+  ],
+  "dependencies": {
+    "outgoing": ["BuffTable", "EffectTable"],
+    "incoming": ["HeroTable", "QuestTable"]
+  },
+  "change_history": [
+    {
+      "revision": 1891,
+      "summary": "新增3个技能(ID:2001-2003)，修改ID:1005 DamageCoeff 1.5->1.8",
+      "changed_by": "plannerA",
+      "at": "2026-04-27T10:15:00"
+    }
+  ]
+}</div>
+
+  <h3 style="font-size:18px; font-weight:600; margin: 20px 0 12px;">AI 自动维护完整流程</h3>
+  <div class="flow-diagram">
+    <div class="flow-row">
+      <div class="flow-box neutral">1. svn log 获取变更文件列表</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box neutral">2. 过滤文件（xlsx/csv/json/md/docx 通过，meta/png/fbx 忽略）</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box neutral">3. svn update 拉取最新内容</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box primary">4. AI Indexer 按类型分发处理</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box info">数值表：解析表头+采样 → AI Prompt → JSON</div>
+      <div class="flow-box info">文档：提取文本分块 → AI 生成摘要 → JSON</div>
+      <div class="flow-box info">代码：提取类名/方法签名 → 轻量 JSON</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box neutral">5. 更新 dependency_graph.json（增量合并）</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box neutral">6. 更新 registry.json</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box success">7. svn commit .ltclaw_index/（防冲突机制）</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box success">8. 重建本地向量库（增量，只更新变化的文件）</div>
+    </div>
+  </div>
+
+  <h3 style="font-size:18px; font-weight:600; margin: 20px 0 12px;">防冲突流程</h3>
+  <div class="flow-diagram">
+    <div class="flow-row">
+      <div class="flow-box neutral">Step 1: svn update registry.json<br>读取 last_synced_revision = R_done</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box neutral">Step 2: svn info → HEAD = R_head</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box success">R_done >= R_head → 已有人同步，跳过</div>
+      <div class="flow-arrow">vs</div>
+      <div class="flow-box primary">R_done &lt; R_head → 需要同步</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box neutral">Step 4-5: svn update + AI 处理 + 生成 JSON</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box success">commit 成功 → 完成</div>
+      <div class="flow-arrow">vs</div>
+      <div class="flow-box danger">commit 失败(conflict) → svn update 拿别人结果 → 跳过</div>
+    </div>
+  </div>
+
+  <h3 style="font-size:18px; font-weight:600; margin: 20px 0 12px;">文件类型分层处理策略</h3>
+  <table class="data-table">
+    <thead>
+      <tr><th>类型</th><th>文件</th><th>处理方式</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>数值类（高频）</td>
+        <td>.xlsx / .csv / .json</td>
+        <td>解析表头+内容，存结构化缓存</td>
+      </tr>
+      <tr>
+        <td>文档类（低频）</td>
+        <td>.md / .txt / .docx</td>
+        <td>分块 embedding，向量索引</td>
+      </tr>
+      <tr>
+        <td>代码类（可选）</td>
+        <td>.cs（Unity 脚本）</td>
+        <td>提取类名/函数签名，不做全文索引</td>
+      </tr>
+      <tr>
+        <td>忽略类</td>
+        <td>.meta / .png / .fbx / .wav / Library/ / Temp/</td>
+        <td>不处理</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:18px; font-weight:600; margin: 20px 0 12px;">有意义的变更过滤规则</h3>
+  <div class="code-block"><span class="key">MEANINGFUL_CHANGE_THRESHOLD</span> = {
+    <span class="str">"numeric_delta"</span>: <span class="num">0.05</span>,       <span class="comment"># 数值变化超过5%才记录</span>
+    <span class="str">"row_count_delta"</span>: <span class="num">1</span>,        <span class="comment"># 行数变化超过1行才记录</span>
+    <span class="str">"field_change"</span>: <span class="num">True</span>,        <span class="comment"># 字段增删必须记录</span>
+}
+
+<span class="comment"># 过滤示例：</span>
+<span class="comment"># 格式调整、空格变化 → 过滤</span>
+<span class="comment"># DamageCoeff 1.0→1.01 → 过滤（变化太小）</span>
+<span class="comment"># DamageCoeff 1.0→1.5  → 记录</span>
+<span class="comment"># 新增一行数据 → 记录</span></div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: TECH - QUERY SYSTEM -->
+<!-- ============================================================ -->
+<section id="tech-query" class="doc-section">
+  <span class="section-badge badge-tech">Technical</span>
+  <h2 class="section-title">查询系统设计</h2>
+
+  <h3 style="font-size:18px; font-weight:600; margin-bottom:12px;">查询示例</h3>
+  <div class="card">
+    <div class="card-title">精确查询</div>
+    <div class="card-body" style="font-family:monospace; font-size:13px;">
+问："SkillID=1005 的伤害系数"<br>
+→ 直接读 tables/SkillTable.json，找 DamageCoeff 字段<br>
+→ 速度快，结果准，0 幻觉
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">跨表关联查询</div>
+    <div class="card-body" style="font-family:monospace; font-size:13px;">
+问："亚瑟大招触发哪些Buff"<br>
+→ HeroTable 找亚瑟，拿到 SkillID<br>
+→ 查依赖图：SkillTable → BuffTable（已知边）<br>
+→ 顺着边查 BuffTable<br>
+→ 每一步都有据可查
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">查询结果置信度标注</div>
+    <div class="card-body" style="font-family:monospace; font-size:13px;">
+问："哪些表引用了ItemTable？"<br><br>
+[确认] EquipTable.BaseItemID （来自字段描述）<br>
+[确认] ShopTable.SellItemID （来自字段描述）<br><br>
+[AI推断高置信] QuestTable.RewardItem （字段名高度匹配）<br><br>
+[AI推断低置信，建议人工确认] DropTable.ItemRef （仅凭字段名推断）
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: TECH - FILE STRUCTURE -->
+<!-- ============================================================ -->
+<section id="tech-files" class="doc-section">
+  <span class="section-badge badge-tech">Technical</span>
+  <h2 class="section-title">新增文件结构</h2>
+  <p class="section-desc">完全不动的文件约 95%。新增文件不影响任何现有代码。</p>
+
+  <h3 style="font-size:18px; font-weight:600; margin-bottom:12px;">前端新增文件</h3>
+  <div class="code-block"><span class="comment">// 新增页面</span>
+console/src/pages/
+<span class="key">├──</span> SVNSync/               <span class="comment">// /svn-sync</span>
+<span class="key">├──</span> GameProject/           <span class="comment">// /game-project (Settings)</span>
+<span class="key">├──</span> IndexMap/              <span class="comment">// /index-map</span>
+<span class="key">├──</span> DocLibrary/            <span class="comment">// /doc-library</span>
+<span class="key">└──</span> KnowledgeBase/         <span class="comment">// /knowledge-base</span>
+
+<span class="comment">// Chat 扩展组件</span>
+console/src/pages/Chat/
+<span class="key">├──</span> ModeSelector/          <span class="comment">// 模式选择标签栏</span>
+<span class="key">└──</span> cards/
+    <span class="key">├──</span> NumericCard.tsx       <span class="comment">// 数值查询卡片</span>
+    <span class="key">├──</span> DesignDocCard.tsx     <span class="comment">// 策划案卡片</span>
+    <span class="key">└──</span> DocGenCard.tsx        <span class="comment">// 文档生成卡片</span></div>
+
+  <h3 style="font-size:18px; font-weight:600; margin: 20px 0 12px;">后端新增文件</h3>
+  <div class="code-block"><span class="comment">// 新增路由</span>
+src/ltclaw_gy_x/app/routers/
+<span class="key">├──</span> game_project.py
+<span class="key">├──</span> svn_sync.py
+<span class="key">├──</span> index_map.py
+<span class="key">├──</span> doc_library.py
+<span class="key">└──</span> knowledge_base.py
+
+<span class="comment">// 新增核心模块</span>
+src/ltclaw_gy_x/
+<span class="key">├──</span> svn_watcher/              <span class="comment">// SVN 轮询服务</span>
+<span class="key">│   ├──</span> watcher.py
+<span class="key">│   ├──</span> file_classifier.py
+<span class="key">│   └──</span> svn_client.py
+<span class="key">├──</span> indexer/                  <span class="comment">// AI 索引器</span>
+<span class="key">│   ├──</span> ai_indexer.py
+<span class="key">│   ├──</span> table_indexer.py
+<span class="key">│   ├──</span> document_indexer.py
+<span class="key">│   ├──</span> code_indexer.py
+<span class="key">│   ├──</span> dependency_resolver.py
+<span class="key">│   └──</span> index_committer.py
+<span class="key">└──</span> knowledge_base/           <span class="comment">// 知识库</span>
+    <span class="key">├──</span> vector_store.py
+    <span class="key">├──</span> index_loader.py
+    <span class="key">└──</span> query_engine.py
+
+<span class="comment">// 新增 Skills</span>
+agents/skills/
+<span class="key">├──</span> game_query-zh/
+<span class="key">├──</span> numeric_assist-zh/
+<span class="key">└──</span> doc_gen-zh/</div>
+
+  <h3 style="font-size:18px; font-weight:600; margin: 20px 0 12px;">需改动的现有文件（仅 4 个）</h3>
+  <table class="data-table">
+    <thead>
+      <tr><th>文件</th><th>改动内容</th><th>性质</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>constants.ts</code></td>
+        <td>加新的 key/path（svn-sync, index-map 等）</td>
+        <td><span class="tag tag-extend">纯追加</span></td>
+      </tr>
+      <tr>
+        <td><code>layouts/Sidebar.tsx</code></td>
+        <td>加 game-group 导航组</td>
+        <td><span class="tag tag-extend">纯追加</span></td>
+      </tr>
+      <tr>
+        <td><code>PlanPanel/index.tsx</code></td>
+        <td>加两个新 Section（引用数值表 + 产出文档）</td>
+        <td><span class="tag tag-extend">扩展</span></td>
+      </tr>
+      <tr>
+        <td><code>Chat/index.tsx</code></td>
+        <td>加模式选择栏 + 卡片类型判断渲染</td>
+        <td><span class="tag tag-extend">扩展</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:18px; font-weight:600; margin: 20px 0 12px;">可直接复用的现有代码</h3>
+  <table class="data-table">
+    <thead>
+      <tr><th>现有代码</th><th>复用到哪里</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>ApprovalCard 组件</td><td>策划案卡片（改造复用）/ 写入确认卡片</td></tr>
+      <tr><td>PlanPanel 组件</td><td>右侧 Drawer 扩展</td></tr>
+      <tr><td>MarkdownCopy 组件</td><td>文档库预览</td></tr>
+      <tr><td>ConsolePollService</td><td>SVN 同步日志实时推送</td></tr>
+      <tr><td>app/approvals/ 审批流</td><td>策划案确认流程</td></tr>
+      <tr><td>app/crons/ 定时任务</td><td>SVN 轮询调度</td></tr>
+      <tr><td>BackupTable 组件模式</td><td>文档库列表</td></tr>
+      <tr><td>RestoreAgentTable 搜索模式</td><td>知识库条目列表</td></tr>
+      <tr><td>Chat 输入框组件</td><td>知识库经验录入</td></tr>
+      <tr><td>现有 LLM providers</td><td>AI 索引器调用</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: TECH - CONFIG -->
+<!-- ============================================================ -->
+<section id="tech-config" class="doc-section">
+  <span class="section-badge badge-tech">Technical</span>
+  <h2 class="section-title">配置系统</h2>
+  <p class="section-desc">两级配置：系统级（用户偏好，跨项目）+ 项目级（提交 SVN，团队共享）。项目级覆盖系统级。</p>
+
+  <h3 style="font-size:18px; font-weight:600; margin-bottom:12px;">project_config.yaml 完整结构</h3>
+  <div class="code-block"><span class="key">project</span>:
+  <span class="key">name</span>: <span class="str">"MyGame"</span>
+  <span class="key">engine</span>: <span class="str">"unity"</span>           <span class="comment"># unity / ue / custom</span>
+  <span class="key">language</span>: <span class="str">"zh"</span>
+
+<span class="key">svn</span>:
+  <span class="key">working_copy</span>: <span class="str">"."</span>
+  <span class="key">poll_interval</span>: <span class="num">300</span>           <span class="comment"># 5分钟</span>
+  <span class="key">index_dir</span>: <span class="str">".ltclaw_index"</span>
+  <span class="key">include</span>: [<span class="str">"*.xlsx"</span>, <span class="str">"*.csv"</span>, <span class="str">"*.json"</span>, <span class="str">"*.md"</span>, <span class="str">"*.docx"</span>, <span class="str">"*.cs"</span>]
+  <span class="key">exclude</span>: [<span class="str">"*.meta"</span>, <span class="str">"*.png"</span>, <span class="str">"*.fbx"</span>, <span class="str">"Library/*"</span>, <span class="str">"Temp/*"</span>]
+
+<span class="key">directories</span>:
+  <span class="key">tables</span>: [<span class="str">"Assets/Data/Tables/"</span>, <span class="str">"Assets/Config/"</span>]
+  <span class="key">documents</span>: [<span class="str">"Docs/"</span>, <span class="str">"Design/"</span>]
+  <span class="key">templates</span>: [<span class="str">"Docs/Templates/"</span>]
+  <span class="key">standards</span>: [<span class="str">"Docs/Standards/"</span>]
+  <span class="key">code</span>: [<span class="str">"Assets/Scripts/"</span>]
+
+<span class="key">table_convention</span>:
+  <span class="key">header_row</span>: <span class="num">1</span>
+  <span class="key">id_field</span>: <span class="str">"ID"</span>
+  <span class="key">id_ranges</span>:
+    <span class="key">hero</span>: [<span class="num">1000</span>, <span class="num">1999</span>]
+    <span class="key">skill</span>: [<span class="num">2000</span>, <span class="num">2999</span>]
+    <span class="key">item</span>: [<span class="num">3000</span>, <span class="num">3999</span>]
+    <span class="key">equip</span>: [<span class="num">4000</span>, <span class="num">4999</span>]
+    <span class="key">buff</span>: [<span class="num">5000</span>, <span class="num">5999</span>]
+  <span class="key">ignore_sheets</span>: [<span class="str">"说明"</span>, <span class="str">"Sheet1"</span>, <span class="str">"ignore"</span>]
+
+<span class="key">document_templates</span>:
+  <span class="key">gdd</span>: <span class="str">"Docs/Templates/GDD模板.md"</span>
+  <span class="key">requirement</span>: <span class="str">"Docs/Templates/需求文档模板.md"</span>
+  <span class="key">balance</span>: <span class="str">"Docs/Templates/平衡性报告模板.md"</span>
+  <span class="key">changelog</span>: <span class="str">"Docs/Templates/更新日志模板.md"</span>
+  <span class="key">minor_change</span>: <span class="str">"Docs/Templates/小需求模板.md"</span>
+
+<span class="key">versioning</span>:
+  <span class="key">history_docs</span>: [<span class="str">"Docs/History/"</span>, <span class="str">"Docs/VersionNotes/"</span>]
+
+<span class="key">known_dependencies</span>:
+  - <span class="key">from</span>: <span class="str">"SkillTable.BuffID"</span>
+    <span class="key">to</span>: <span class="str">"BuffTable.ID"</span>
+    <span class="key">confirmed</span>: <span class="num">true</span>
+  - <span class="key">from</span>: <span class="str">"HeroTable.SkillList"</span>
+    <span class="key">to</span>: <span class="str">"SkillTable.ID"</span>
+    <span class="key">confirmed</span>: <span class="num">true</span>
+
+<span class="key">indexer</span>:
+  <span class="key">mode</span>: <span class="str">"auto"</span>                <span class="comment"># auto=竞争 / primary=主机模式</span>
+  <span class="key">primary_machine</span>: <span class="str">""</span>
+
+<span class="key">llm</span>:
+  <span class="key">indexer_model</span>: <span class="str">"qwen-turbo"</span>   <span class="comment"># 索引用便宜快速的模型</span>
+  <span class="key">query_model</span>: <span class="str">"qwen-plus"</span>      <span class="comment"># 查询用更强的模型</span></div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: TECH - SAFETY -->
+<!-- ============================================================ -->
+<section id="tech-safety" class="doc-section">
+  <span class="section-badge badge-tech">Technical</span>
+  <h2 class="section-title">安全边界</h2>
+
+  <div class="grid-2">
+    <div class="card" style="border-left:4px solid var(--success);">
+      <div class="card-title" style="color:#059669;">AI 可以做</div>
+      <div class="card-body">
+        起草数据、分配 ID（按 ID 段规划）、校验格式、生成 commit message<br><br>
+        索引文件的 svn commit（出错无害，重跑就好）
+      </div>
+    </div>
+    <div class="card" style="border-left:4px solid var(--danger);">
+      <div class="card-title" style="color:#DC2626;">AI 不应该做</div>
+      <div class="card-body">
+        直接 svn commit 数值表（索引文件可以，数值表不行）<br><br>
+        原因：索引错了最多查询不准，数值表错了可能导致游戏崩溃或数值失衡
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="card-title">降低出错代价的工程手段</div>
+    <div class="card-body">
+      <table class="data-table" style="margin:0;">
+        <thead><tr><th>手段</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>写入前多重校验</td><td>独立规则校验层（纯代码）：ID 区间、必填字段、外键引用、数值范围、字段类型</td></tr>
+          <tr><td>沙箱提交 + 自动回滚</td><td>写影子副本，Unity 读影子副本跑校验，通过才覆盖正式副本</td></tr>
+          <tr><td>提交到专用分支</td><td>AI 提交到 ltclaw-autowrite/ 分支，人工 review 后合并主干</td></tr>
+          <tr><td>变更规模限制</td><td>单次 ≤10行、≤3字段、≤1张表，超过必须人工确认</td></tr>
+          <tr><td>不确定性暴露</td><td>AI 遇到不确定的信息，标注出来让人填，不自己猜</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: TECH - ENV -->
+<!-- ============================================================ -->
+<section id="tech-env" class="doc-section">
+  <span class="section-badge badge-tech">Technical</span>
+  <h2 class="section-title">环境一致性方案</h2>
+  <p class="section-desc">新成员加入只需要一条命令就能达到和团队完全一致的起点。</p>
+
+  <div class="flow-diagram">
+    <div class="flow-row">
+      <div class="flow-box neutral">svn checkout 项目</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box primary">bash tools/setup.sh</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box info">Python 版本校验</div>
+      <div class="flow-box info">创建 venv</div>
+      <div class="flow-box info">pip install</div>
+      <div class="flow-box info">svn update</div>
+      <div class="flow-box info">拉取 .ltclaw_index/</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box warning">填写 .env（个人密钥，唯一人工操作）</div>
+    </div>
+    <div class="flow-arrow-down">|</div>
+    <div class="flow-row">
+      <div class="flow-box success">ltclaw-gy-x app → 完全一致的起点</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="card-title">配置模板文件（提交 SVN）</div>
+    <div class="card-body">
+      <div class="code-block" style="margin:0;">tools/
+<span class="key">└──</span> ltclaw_config_template/
+    <span class="key">├──</span> project_config.yaml      <span class="comment"># 项目配置（直接可用）</span>
+    <span class="key">├──</span> .env.example             <span class="comment"># 密钥模板（需填写）</span>
+    <span class="key">└──</span> agent_config.yaml        <span class="comment"># 推荐 Agent 初始配置</span>
+
+<span class="comment"># .env.example（所有人可见）</span>
+<span class="comment"># DASHSCOPE_API_KEY=  (从管理员处获取)</span>
+<span class="comment"># TAVILY_API_KEY=     (可选，网页搜索)</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION: TECH - DEPS -->
+<!-- ============================================================ -->
+<section id="tech-deps" class="doc-section">
+  <span class="section-badge badge-tech">Technical</span>
+  <h2 class="section-title">依赖与技术栈</h2>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">现有技术栈（不改动）</div>
+      <div class="card-body" style="font-size:13px;">
+        <strong>前端：</strong>React + TypeScript + Ant Design (bailianTheme) + Less<br>
+        <strong>路由：</strong>React Router v6<br>
+        <strong>状态：</strong>Context + Stores (Zustand/自定义)<br>
+        <strong>后端：</strong>FastAPI + Python<br>
+        <strong>主题：</strong>主色 #6B7280，已有 ThemeToggle（深色/浅色）<br>
+        <strong>样式：</strong>全部继承 Ant Design，不引入新设计语言
+      </div>
+    </div>
+    <div class="card" style="border-color:#93C5FD;">
+      <div class="card-title">唯一新增依赖</div>
+      <div class="card-body" style="font-size:13px;">
+        <strong>前端：</strong>reactflow（索引地图节点图）<br>
+        <strong>后端：</strong>chromadb 或 faiss-cpu（本地向量库）<br>
+        <strong>后端：</strong>openpyxl（Excel 解析，已在 full 依赖里）<br>
+        <strong>系统：</strong>svn 命令行工具（subprocess 调用）<br>
+        <br>
+        除节点图库外，没有任何重型新依赖，整体技术风险很低。
+      </div>
+    </div>
+  </div>
+
+  <div class="note" style="margin-top:16px;">
+    <strong>通用性边界：</strong>SVN 监听机制、AI 解析、自然语言查询、文档生成框架是通用的。每个项目需要一次性投入的是：project_config.yaml 初始配置、文档模板整理、已知依赖关系声明、ID 段划分声明。项目专属的设计原则和团队工作流永远需要人来定义和维护。
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- FOOTER -->
+<!-- ============================================================ -->
+<hr class="separator">
+<div style="text-align:center; padding: 20px 0; color: var(--text-muted); font-size: 13px;">
+  LTCLAW 游戏策划工作台 交接文档<br>
+  基于项目讨论记录整理 | 保留全部已确认设计决策和技术细节<br>
+  文档生成时间：2026-04-28
+</div>
+
+</main>
+</div>
+
+<script>
+  // Initialize mermaid
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#DBEAFE',
+      primaryTextColor: '#1E40AF',
+      primaryBorderColor: '#93C5FD',
+      lineColor: '#6B7280',
+      secondaryColor: '#F3F4F6',
+      tertiaryColor: '#FEF3C7',
+      fontSize: '13px'
+    }
+  });
+
+  // Tab switching
+  function switchTab(event, tabId) {
+    const parent = event.target.closest('.tabs');
+    const content = parent.nextElementSibling;
+    parent.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+    content.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+  }
+
+  // Sidebar navigation active state
+  const navItems = document.querySelectorAll('.nav-item');
+  const sections = document.querySelectorAll('.doc-section');
+
+  function updateActiveNav() {
+    let current = '';
+    sections.forEach(section => {
+      const rect = section.getBoundingClientRect();
+      if (rect.top <= 100) current = section.id;
+    });
+    navItems.forEach(item => {
+      item.classList.remove('active');
+      if (item.getAttribute('href') === '#' + current) {
+        item.classList.add('active');
+      }
+    });
+  }
+
+  window.addEventListener('scroll', updateActiveNav);
+
+  // Smooth scroll for nav
+  navItems.forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      const target = document.querySelector(item.getAttribute('href'));
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  });
+</script>
+
+</body>
+</html>
