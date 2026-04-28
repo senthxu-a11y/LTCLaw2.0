@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <rect width="1024" height="1024" rx="190" fill="url(#bg)"/>
+  <path d="M308 292C363 245 405 214 461 173C501 144 560 164 578 212C610 301 650 353 710 385C806 410 876 500 878 601C879 664 866 718 838 766C819 798 784 808 753 792C722 777 704 746 707 708C714 624 674 564 612 543C584 593 541 621 491 630C476 691 505 758 592 816C620 835 626 869 609 895C588 928 548 937 506 921C388 876 309 785 305 692C302 637 315 589 343 548C350 495 346 452 326 412C312 384 273 355 257 329C240 301 265 280 308 292Z" fill="#F7F6F2"/>
+  <defs>
+    <linearGradient id="bg" x1="512" y1="0" x2="512" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6671FF"/>
+      <stop offset="1" stop-color="#4F5BE8"/>
+    </linearGradient>
+  </defs>
+</svg>

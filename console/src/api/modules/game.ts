@@ -1,0 +1,129 @@
+﻿import { request } from '../request';
+import type { 
+  ProjectConfig, 
+  UserGameConfig, 
+  ValidationIssue,
+  CommitResult,
+  TableIndex,
+  FieldPatch,
+  SystemGroup,
+  ChangeSet
+} from '../types/game';
+
+export const gameApi = {
+  // Project configuration
+  async getProjectConfig(agentId: string): Promise<ProjectConfig | null> {
+    return request<ProjectConfig | null>(`/agents/${agentId}/game/project/config`);
+  },
+  
+  async saveProjectConfig(agentId: string, config: ProjectConfig): Promise<{ message: string }> {
+    return request<{ message: string }>(`/agents/${agentId}/game/project/config`, {
+      method: "PUT",
+      body: JSON.stringify(config),
+    });
+  },
+  
+  async deleteProjectConfig(agentId: string): Promise<{ message: string }> {
+    return request<{ message: string }>(`/agents/${agentId}/game/project/config`, {
+      method: "DELETE",
+    });
+  },
+  
+  async commitProjectConfig(agentId: string, message?: string): Promise<CommitResult> {
+    return request<CommitResult>(`/agents/${agentId}/game/project/config/commit`, {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    });
+  },
+  
+  async validateProjectConfig(agentId: string): Promise<ValidationIssue[]> {
+    return request<ValidationIssue[]>(`/agents/${agentId}/game/project/validate`);
+  },
+  
+  async getUserConfig(agentId: string): Promise<UserGameConfig> {
+    return request<UserGameConfig>(`/agents/${agentId}/game/project/user_config`);
+  },
+  
+  async saveUserConfig(agentId: string, config: UserGameConfig): Promise<{ message: string }> {
+    return request<{ message: string }>(`/agents/${agentId}/game/project/user_config`, {
+      method: "PUT",
+      body: JSON.stringify(config),
+    });
+  },
+
+  // SVN operations
+  async getSvnStatus(agentId: string) {
+    return request(`/agents/${agentId}/game/svn/status`);
+  },
+  
+  async triggerSync(agentId: string): Promise<ChangeSet> {
+    return request<ChangeSet>(`/agents/${agentId}/game/svn/sync`, {
+      method: "POST",
+    });
+  },
+  
+  async getSvnLogRecent(agentId: string, limit: number = 200) {
+    return request(`/agents/${agentId}/game/svn/log/recent?limit=${limit}`);
+  },
+  
+  subscribeSvnLog(agentId: string, onMessage: (data: any) => void): EventSource {
+    const eventSource = new EventSource(`/api/agents/${agentId}/game/svn/log/stream`);
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessage(data);
+      } catch (e) {
+        console.warn('Failed to parse SSE data:', event.data);
+      }
+    };
+    return eventSource;
+  },
+
+  // Index operations
+  async listSystems(agentId: string): Promise<SystemGroup[]> {
+    return request<SystemGroup[]>(`/agents/${agentId}/game/index/systems`);
+  },
+  
+  async listTables(agentId: string, params?: {
+    system?: string;
+    query?: string;
+    page?: number;
+    size?: number;
+  }) {
+    const searchParams = new URLSearchParams();
+    if (params?.system) searchParams.append('system', params.system);
+    if (params?.query) searchParams.append('query', params.query);
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.size) searchParams.append('size', params.size.toString());
+    
+    const queryStr = searchParams.toString();
+    const url = `/agents/${agentId}/game/index/tables${queryStr ? '?' + queryStr : ''}`;
+    return request(url);
+  },
+  
+  async getTable(agentId: string, name: string): Promise<TableIndex> {
+    return request<TableIndex>(`/agents/${agentId}/game/index/tables/${name}`);
+  },
+  
+  async patchField(agentId: string, table: string, field: string, patch: FieldPatch) {
+    return request(`/agents/${agentId}/game/index/tables/${table}/fields/${field}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  },
+  
+  async getDependencies(agentId: string, table: string) {
+    return request(`/agents/${agentId}/game/index/dependencies/${table}`);
+  },
+  
+  async findField(agentId: string, name: string) {
+    return request(`/agents/${agentId}/game/index/find_field?name=${encodeURIComponent(name)}`);
+  },
+  
+  async query(agentId: string, q: string, mode: string = "auto") {
+    return request(`/agents/${agentId}/game/index/query`, {
+      method: "POST",
+      body: JSON.stringify({ q, mode }),
+    });
+  },
+};

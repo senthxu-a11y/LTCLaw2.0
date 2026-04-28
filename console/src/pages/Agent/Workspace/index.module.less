@@ -1,0 +1,702 @@
+.workspacePage {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  :global {
+    .qwenpaw-card {
+      border-radius: 0px;
+    }
+  }
+}
+
+.pageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  padding: 20px;
+  border-bottom: 1px solid #eae9e7;
+  flex-shrink: 0;
+}
+
+.breadcrumbHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  flex: 1;
+}
+
+.workspaceInfo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.breadcrumbParent {
+  color: #999;
+  font-weight: 400;
+}
+
+.breadcrumbSeparator {
+  color: #ccc;
+  margin: 0 4px;
+}
+
+.breadcrumbCurrent {
+  color: #333;
+  font-weight: 600;
+  font-size: 20px;
+}
+
+.workspacePath {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(20, 20, 19, 0.92);
+  font-family: monospace;
+  margin-left: 12px;
+  border-radius: 6px;
+  background: rgba(236, 238, 241, 0.96);
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  padding: 3px 8px;
+}
+
+.actionButtons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.fileListPanel {
+  width: 400px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cardBody {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+}
+
+.cardContainer {
+  flex: 1;
+  min-height: 0;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.infoText {
+  margin: 0;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #aeb4bf;
+  flex-shrink: 0;
+}
+
+.divider {
+  height: 1px;
+  background-color: #e8e8e8;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.scrollContainer {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.fileEditor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  width: 50%;
+}
+
+.editorCard {
+  height: 100% !important;
+
+  :global {
+    .qwenpaw-card-body {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+
+      .qwenpaw-spark-card-wrapper {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .qwenpaw-spark-content {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .agentscope-runtime-webui-spark-card-wrapper {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+
+        .agentscope-runtime-webui-spark-content {
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+        }
+      }
+
+      .spark-card-wrapper {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+
+        .spark-content {
+          height: 100%;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+      }
+    }
+  }
+}
+
+.editorHeader {
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.fileName {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.filePath {
+  font-size: 12px;
+  color: #999;
+  font-family: monospace;
+}
+
+.buttonGroup {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.editorContent {
+  padding: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.contentLabel {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 20px;
+}
+
+.markdownViewer {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #e8e8e8;
+  padding: 12px 14px;
+  border-radius: 8px;
+  max-width: 100%;
+
+  :global(.x-markdown) {
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  :global {
+    pre {
+      background: #f6f8fa;
+      border-radius: 6px;
+      padding: 12px 16px;
+      overflow-x: auto;
+      height: auto;
+
+      code {
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+          monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    }
+
+    table {
+      border-collapse: collapse;
+      width: auto;
+      margin: 1em 0;
+      display: table !important;
+      max-width: 100%;
+      overflow-x: auto;
+
+      thead,
+      tbody,
+      tfoot {
+        display: table-header-group;
+      }
+
+      tbody {
+        display: table-row-group;
+      }
+
+      tr {
+        display: table-row;
+      }
+
+      th,
+      td {
+        display: table-cell;
+        border: 1px solid #d0d7de;
+        padding: 8px 12px;
+        text-align: left;
+      }
+
+      th {
+        background: #f6f8fa;
+        font-weight: 600;
+      }
+
+      tr:nth-child(2n) {
+        background: #f6f8fa;
+      }
+    }
+  }
+}
+
+.textarea {
+  font-family: monospace;
+  font-size: 13px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+
+  :global {
+    .qwenpaw-input-textarea,
+    .ant-input-textarea {
+      height: 100%;
+      display: block;
+    }
+
+    textarea {
+      height: 100% !important;
+      min-height: 100% !important;
+      max-height: none !important;
+      resize: none;
+      line-height: 1.6;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 13px;
+    }
+  }
+}
+
+.markdownToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toggleLabel {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.emptyState {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  height: calc(100% - 20px);
+}
+
+.buttonGroup {
+  display: flex;
+  align-items: center;
+}
+
+.copyButton {
+  border-radius: 4px;
+}
+
+.fileItem {
+  padding: 12px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  background-color: #fff;
+  transition: all 0.2s;
+
+  &:hover:not(.selected) {
+    border-color: #d9d9d9;
+    background-color: #fafafa;
+  }
+
+  &.selected {
+    border: 1px solid #9ca3af;
+    background: linear-gradient(180deg, #f5f5f4 0%, #eceff1 100%);
+    box-shadow: 0 8px 18px rgba(148, 163, 184, 0.18);
+  }
+}
+
+.fileItemHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fileInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.fileItemActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.dragHandle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  flex-shrink: 0;
+  margin-right: 8px;
+  color: #bbb;
+  cursor: grab;
+  font-size: 14px;
+  transition: color 0.2s;
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  &:hover {
+    color: #6b7280;
+  }
+}
+
+.dragging {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  border-color: #9ca3af !important;
+}
+
+.enabledBadge {
+  color: #52c41a;
+  font-size: 8px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.fileActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fileItemName {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.fileItemMeta {
+  font-size: 12px;
+  color: #999;
+}
+
+.expandIcon {
+  font-size: 12px;
+  color: #999;
+  margin-left: 8px;
+}
+
+.dailyMemoryList {
+  margin-left: 16px;
+  margin-top: -4px;
+  margin-bottom: 8px;
+}
+
+.dailyMemoryItem {
+  padding: 10px;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  background-color: #fff;
+  transition: all 0.2s;
+
+  &:hover:not(.selected) {
+    border-color: #d9d9d9;
+    background-color: #fafafa;
+  }
+
+  &.selected {
+    border: 1px solid #9ca3af;
+    background: linear-gradient(180deg, #f5f5f4 0%, #eceff1 100%);
+  }
+}
+
+.dailyMemoryName {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.dailyMemoryMeta {
+  font-size: 11px;
+  color: #999;
+}
+
+.attribution {
+  margin: 0;
+  padding: 0 16px 12px;
+  min-height: 20px;
+  font-size: 11px;
+  color: #bbb;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ─── Dark mode ─────────────────────────────────────────────────────────────── */
+:global(.dark-mode) {
+  .pageHeader {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .breadcrumbParent {
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  .breadcrumbSeparator {
+    color: rgba(255, 255, 255, 0.2);
+  }
+
+  .breadcrumbCurrent {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .infoText {
+    color: rgba(255, 255, 255, 0.58);
+  }
+
+  .workspacePath {
+    color: rgba(255, 255, 255, 0.88);
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .divider {
+    background-color: rgba(255, 255, 255, 0.08);
+  }
+
+  /* File list items */
+  .fileItem {
+    background: linear-gradient(180deg, #313131 0%, #2b2b2b 100%);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.03),
+      0 2px 10px rgba(0, 0, 0, 0.18);
+
+    &:hover:not(.selected) {
+      border-color: rgba(255, 255, 255, 0.18);
+      background: linear-gradient(180deg, #383838 0%, #313131 100%);
+    }
+
+    &.selected {
+      border-color: #8f98a8;
+      background: linear-gradient(180deg, #3a3d45 0%, #31353d 100%);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 0 0 1px rgba(143, 152, 168, 0.18);
+    }
+  }
+
+  .fileItemName {
+    color: rgba(255, 255, 255, 0.97);
+  }
+
+  .fileItemMeta {
+    color: rgba(255, 255, 255, 0.62);
+  }
+
+  .expandIcon {
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  .dragHandle {
+    color: rgba(255, 255, 255, 0.28);
+
+    &:hover {
+      color: #cbd5e1;
+    }
+  }
+
+  .dragging {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    border-color: #8f98a8 !important;
+    background: linear-gradient(180deg, #3a3d45 0%, #31353d 100%) !important;
+  }
+
+  /* Daily memory items */
+  .dailyMemoryItem {
+    background: linear-gradient(180deg, #2f2f2f 0%, #292929 100%);
+    border-color: rgba(255, 255, 255, 0.1);
+
+    &:hover:not(.selected) {
+      border-color: rgba(255, 255, 255, 0.16);
+      background: linear-gradient(180deg, #353535 0%, #2e2e2e 100%);
+    }
+
+    &.selected {
+      border-color: #8f98a8;
+      background: linear-gradient(180deg, #3a3d45 0%, #31353d 100%);
+    }
+  }
+
+  .dailyMemoryName {
+    color: rgba(255, 255, 255, 0.94);
+  }
+
+  .dailyMemoryMeta {
+    color: rgba(255, 255, 255, 0.58);
+  }
+
+  /* Editor area */
+  .editorHeader {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .fileName {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .filePath {
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  .markdownViewer {
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.85);
+    background: #1f1f1f;
+
+    :global {
+      pre {
+        background: #2a2a2a;
+        border-color: rgba(255, 255, 255, 0.1);
+
+        code {
+          color: rgba(255, 255, 255, 0.85);
+        }
+      }
+
+      table {
+        th,
+        td {
+          border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        th {
+          background: #2a2a2a;
+          color: rgba(255, 255, 255, 0.85);
+        }
+
+        tr:nth-child(2n) {
+          background: rgba(255, 255, 255, 0.04);
+        }
+      }
+    }
+  }
+
+  .toggleLabel {
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .emptyState {
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  .sectionTitle {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .attribution {
+    color: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Textarea inside editor */
+  .textarea,
+  .editorContent textarea {
+    background: #2a2a2a !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+  }
+}

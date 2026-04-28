@@ -1,0 +1,303 @@
+.indexMapPage {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+
+  .content {
+    flex: 1;
+    padding: 16px 0;
+    overflow-y: auto;
+
+    .statsRow {
+      margin-bottom: 16px;
+
+      .statCard {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 0;
+
+        .statIcon {
+          font-size: 24px;
+          width: 40px;
+          height: 40px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--ant-color-fill-tertiary);
+          border-radius: 8px;
+        }
+
+        .statContent {
+          flex: 1;
+
+          .statValue {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--ant-color-text);
+            line-height: 1.2;
+          }
+
+          .statLabel {
+            font-size: 12px;
+            color: var(--ant-color-text-secondary);
+            margin-top: 2px;
+          }
+        }
+      }
+    }
+
+    .filtersCard {
+      margin-bottom: 16px;
+      border-radius: 8px;
+
+      :global(.ant-card-body) {
+        padding: 16px;
+      }
+    }
+
+    .tableCard {
+      border-radius: 8px;
+
+      :global(.ant-table) {
+        .ant-table-thead {
+          > tr > th {
+            background: var(--ant-color-fill-quaternary);
+            border-bottom: 1px solid var(--ant-color-border);
+            font-weight: 500;
+          }
+        }
+
+        .ant-table-tbody {
+          > tr {
+            &:hover > td {
+              background: var(--ant-color-fill-tertiary);
+            }
+
+            > td {
+              border-bottom: 1px solid var(--ant-color-border-secondary);
+            }
+          }
+        }
+      }
+
+      :global(.ant-pagination) {
+        margin-top: 16px;
+        margin-bottom: 0;
+      }
+    }
+  }
+
+  .drawerContent {
+    .detailSection {
+      margin-bottom: 16px;
+      border-radius: 6px;
+
+      :global(.ant-card-head) {
+        background: var(--ant-color-fill-quaternary);
+        border-bottom: 1px solid var(--ant-color-border);
+        border-radius: 6px 6px 0 0;
+        min-height: 40px;
+        padding: 0 12px;
+
+        .ant-card-head-title {
+          font-size: 14px;
+          font-weight: 500;
+          line-height: 40px;
+        }
+      }
+
+      :global(.ant-card-body) {
+        padding: 12px;
+      }
+
+      :global(.ant-descriptions) {
+        .ant-descriptions-item {
+          padding-bottom: 8px;
+        }
+
+        .ant-descriptions-item-label {
+          font-weight: 500;
+          width: 100px;
+        }
+      }
+
+      :global(.ant-list) {
+        .ant-list-item {
+          padding: 8px 0;
+          border-bottom: 1px solid var(--ant-color-border-secondary);
+
+          &:last-child {
+            border-bottom: none;
+          }
+        }
+      }
+    }
+
+    .sampleData {
+      max-height: 300px;
+      overflow: auto;
+
+      .jsonPreview {
+        background: var(--ant-color-fill-quaternary);
+        border: 1px solid var(--ant-color-border);
+        border-radius: 4px;
+        padding: 12px;
+        font-size: 12px;
+        margin: 0;
+        line-height: 1.4;
+        color: var(--ant-color-text);
+      }
+    }
+  }
+
+  :global(.ant-tag) {
+    border-radius: 4px;
+    font-size: 12px;
+    
+    &.ant-tag-green {
+      background: #f6ffed;
+      border-color: #b7eb8f;
+      color: #52c41a;
+    }
+    
+    &.ant-tag-blue {
+      background: #f0f5ff;
+      border-color: #adc6ff;
+      color: #1677ff;
+    }
+    
+    &.ant-tag-gold {
+      background: #fffbe6;
+      border-color: #ffe58f;
+      color: #faad14;
+    }
+    
+    &.ant-tag-purple {
+      background: #f9f0ff;
+      border-color: #d3adf7;
+      color: #722ed1;
+    }
+    
+    &.ant-tag-processing {
+      background: #e6f7ff;
+      border-color: #91d5ff;
+      color: #1677ff;
+    }
+    
+    &.ant-tag-success {
+      background: #f6ffed;
+      border-color: #b7eb8f;
+      color: #52c41a;
+    }
+    
+    &.ant-tag-error {
+      background: #fff2f0;
+      border-color: #ffccc7;
+      color: #ff4d4f;
+    }
+  }
+
+  :global(.ant-badge) {
+    .ant-badge-count {
+      font-size: 12px;
+      min-width: 20px;
+      height: 20px;
+      line-height: 20px;
+    }
+  }
+
+  :global(.ant-input-affix-wrapper) {
+    border-radius: 6px;
+  }
+
+  :global(.ant-select) {
+    .ant-select-selector {
+      border-radius: 6px;
+    }
+  }
+
+  :global(.ant-btn) {
+    border-radius: 6px;
+  }
+
+  :global(.ant-drawer) {
+    .ant-drawer-header {
+      background: var(--ant-color-fill-quaternary);
+      border-bottom: 1px solid var(--ant-color-border);
+    }
+
+    .ant-drawer-body {
+      padding: 16px;
+    }
+  }
+}
+
+@media (max-width: 1200px) {
+  .indexMapPage .content {
+    padding: 0 16px;
+
+    .statsRow {
+      .statCard {
+        .statIcon {
+          width: 32px;
+          height: 32px;
+          font-size: 20px;
+        }
+
+        .statContent {
+          .statValue {
+            font-size: 16px;
+          }
+        }
+      }
+    }
+
+    .tableCard {
+      :global(.ant-table-wrapper) {
+        .ant-table {
+          font-size: 12px;
+        }
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .indexMapPage .content {
+    .statsRow {
+      > :global(.ant-col) {
+        margin-bottom: 8px;
+      }
+    }
+
+    .filtersCard {
+      :global(.ant-card-body) {
+        padding: 12px;
+      }
+    }
+
+    .tableCard {
+      :global(.ant-card-body) {
+        padding: 8px;
+      }
+    }
+  }
+
+  .indexMapPage .drawerContent {
+    .detailSection {
+      margin-bottom: 12px;
+
+      :global(.ant-card-body) {
+        padding: 8px;
+      }
+
+      :global(.ant-descriptions) {
+        .ant-descriptions-item-label {
+          width: 80px;
+        }
+      }
+    }
+  }
+}

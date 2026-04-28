@@ -1,0 +1,6 @@
+refactor: rename qwenpaw package to ltclaw_gy_x
+
+- Rename src/qwenpaw/ to src/ltclaw_gy_x/
+- Update pyproject.toml: package name, version attr, scripts, package-data
+- Update all internal imports to use ltclaw_gy_x
+- CLI entry points: qwenpaw/copaw -> ltclaw/ltclaw_gy_x
