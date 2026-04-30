@@ -58,6 +58,12 @@
     "tools": "ツール",
     "voiceTranscription": "音声文字起こし",
     "agents": "エージェント管理",
+    "game": "Game Development",
+    "gameProject": "Project Config",
+    "svnSync": "Sync Status",
+    "indexMap": "Index Map",
+    "docLibrary": "Doc Library",
+    "knowledgeBase": "Knowledge Base",
     "debug": "デバッグ",
     "plugins": "プラグイン",
     "acp": "ACP",
@@ -157,6 +163,34 @@
     "selectNone": "クリア",
     "noPoolSkills": "プールに利用可能なスキルがありません",
     "addSkillsToAgent": "スキルを追加"
+  },
+  "docLibrary": {
+    "title": "Doc Library",
+    "description": "Browse placeholder planning docs, spreadsheets, and collaboration files until real indexing is wired in.",
+    "categoryTitle": "Categories",
+    "categoryHint": "Filter mock documents by the current category tree.",
+    "listTitle": "Document List",
+    "searchPlaceholder": "Search title, author, or tag",
+    "empty": "No documents match the current filters",
+    "mockFallback": "The Doc Library API returned no data yet, showing mock content instead.",
+    "columns": {
+      "title": "Title",
+      "type": "Type",
+      "status": "Status",
+      "author": "Author",
+      "updatedAt": "Updated At"
+    }
+  },
+  "knowledgeBase": {
+    "title": "Knowledge Base",
+    "description": "Review placeholder entries for mechanics, numeric patterns, and past decisions until the real KB pipeline lands.",
+    "categoryTitle": "Categories",
+    "categoryHint": "Filter mock entries by the current category tree.",
+    "listTitle": "Knowledge Entries",
+    "searchPlaceholder": "Search title, summary, or tag",
+    "empty": "No knowledge entries match the current filters",
+    "mockFallback": "The Knowledge Base API returned no data yet, showing mock content instead.",
+    "createdAt": "Created At"
   },
   "workspace": {
     "title": "ファイル",

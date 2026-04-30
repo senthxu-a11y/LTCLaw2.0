@@ -229,6 +229,18 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
       label: t("nav.indexMap"),
     },
     {
+      key: "doc-library",
+      icon: <SparkLocalFileLine size={18} />,
+      path: "/doc-library",
+      label: t("nav.docLibrary"),
+    },
+    {
+      key: "knowledge-base",
+      icon: <SparkSearchUserLine size={18} />,
+      path: "/knowledge-base",
+      label: t("nav.knowledgeBase"),
+    },
+    {
       key: "agents",
       icon: <SparkAgentLine size={18} />,
       path: "/agents",
@@ -375,6 +387,16 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
           key: "index-map",
           label: collapsed ? null : t("nav.indexMap"),
           icon: <SparkModePlazaLine size={16} />,
+        },
+        {
+          key: "doc-library",
+          label: collapsed ? null : t("nav.docLibrary"),
+          icon: <SparkLocalFileLine size={16} />,
+        },
+        {
+          key: "knowledge-base",
+          label: collapsed ? null : t("nav.knowledgeBase"),
+          icon: <SparkSearchUserLine size={16} />,
         },
       ],
     },

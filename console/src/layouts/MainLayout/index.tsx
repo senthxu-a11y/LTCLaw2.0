@@ -21,6 +21,8 @@ const AgentConfigPage = lazyImportWithRetry("../../pages/Agent/Config");
 const GameProjectPage = lazyImportWithRetry("../../pages/Game/GameProject");
 const SvnSyncPage = lazyImportWithRetry("../../pages/Game/SvnSync");
 const IndexMapPage = lazyImportWithRetry("../../pages/Game/IndexMap");
+const DocLibraryPage = lazyImportWithRetry("../../pages/Game/DocLibrary");
+const KnowledgeBasePage = lazyImportWithRetry("../../pages/Game/KnowledgeBase");
 const SkillsPage = lazyImportWithRetry("../../pages/Agent/Skills");
 const SkillPoolPage = lazyImportWithRetry("../../pages/Settings/SkillPool");
 const ToolsPage = lazyImportWithRetry("../../pages/Agent/Tools");
@@ -68,6 +70,8 @@ const pathToKey: Record<string, string> = {
   "/game-project": "game-project",
   "/svn-sync": "svn-sync",
   "/index-map": "index-map",
+  "/doc-library": "doc-library",
+  "/knowledge-base": "knowledge-base",
 };
 
 export default function MainLayout() {
@@ -138,6 +142,8 @@ export default function MainLayout() {
                   <Route path="/game-project" element={<GameProjectPage />} />
                   <Route path="/svn-sync" element={<SvnSyncPage />} />
                   <Route path="/index-map" element={<IndexMapPage />} />
+                  <Route path="/doc-library" element={<DocLibraryPage />} />
+                  <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
 
                   {/* Plugin routes — dynamically injected at runtime */}
                   {pluginRoutes.map((route) => (

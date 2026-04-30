@@ -1,0 +1,90 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+  flex: 1;
+  padding: 16px 0;
+}
+
+.sidebarCard,
+.contentCard {
+  border-radius: 8px;
+
+  :global(.ant-card-body) {
+    padding: 20px;
+  }
+}
+
+.contentCard {
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.helperText {
+  margin: 4px 0 0;
+}
+
+.searchInput {
+  width: 280px;
+}
+
+.refreshTag {
+  cursor: pointer;
+  user-select: none;
+}
+
+.entryCard {
+  width: 100%;
+  padding: 4px 0;
+}
+
+.entryHeader,
+.entryMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.summary {
+  margin: 12px 0;
+}
+
+.tagRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.emptyWrap,
+.fullWidth {
+  width: 100%;
+}
+
+@media (max-width: 960px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar,
+  .entryHeader,
+  .entryMeta {
+    flex-direction: column;
+  }
+
+  .searchInput {
+    width: 100%;
+  }
+}

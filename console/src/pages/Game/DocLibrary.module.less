@@ -1,0 +1,72 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+  flex: 1;
+  padding: 16px 0;
+}
+
+.sidebarCard,
+.contentCard {
+  border-radius: 8px;
+
+  :global(.ant-card-body) {
+    padding: 20px;
+  }
+}
+
+.contentCard {
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.helperText {
+  margin: 4px 0 0;
+}
+
+.searchInput {
+  width: 280px;
+}
+
+.tagRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.refreshTag {
+  cursor: pointer;
+  user-select: none;
+}
+
+.emptyWrap,
+.fullWidth {
+  width: 100%;
+}
+
+@media (max-width: 960px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar {
+    flex-direction: column;
+  }
+
+  .searchInput {
+    width: 100%;
+  }
+}
