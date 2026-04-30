@@ -1,7 +1,7 @@
 """单元测试: GameService 启停与未配置态。"""
-import os
+from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -13,7 +13,8 @@ from ltclaw_gy_x.game.config import (
     TableConvention,
     UserGameConfig,
 )
-from ltclaw_gy_x.game.service import GameService
+from ltclaw_gy_x.game.models import ChangeSet, DependencyGraph, TableIndex
+from ltclaw_gy_x.game.service import GameService, SimpleModelRouter
 
 
 @pytest.fixture
@@ -107,6 +108,7 @@ async def test_start_with_consumer_config_creates_proposal_store_and_change_appl
     assert service.proposal_store is not None
     assert service.change_applier is not None
     assert service.svn_committer is None
+    await service.stop()
 
 
 @pytest.mark.asyncio
@@ -125,3 +127,87 @@ async def test_start_with_maintainer_config_creates_svn_committer(tmp_path, isol
     assert service.proposal_store is not None
     assert service.change_applier is not None
     assert service.svn_committer is not None
+    await service.stop()
+
+
+def test_model_router_falls_back_to_simple_router(service):
+    router = service._model_router()
+    assert isinstance(router, SimpleModelRouter)
+
+
+@pytest.mark.asyncio
+async def test_start_with_watcher_starts_polling(tmp_path, isolated_home):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    svn_root = tmp_path / "svn"
+    svn_root.mkdir()
+    service = GameService(workspace_dir=workspace, runner=None, channel_manager=None)
+    watcher = MagicMock()
+    watcher.start = AsyncMock()
+    watcher.stop = AsyncMock()
+
+    with patch("ltclaw_gy_x.game.service.load_user_config", return_value=UserGameConfig(my_role="maintainer", svn_local_root=str(svn_root))), \
+         patch("ltclaw_gy_x.game.service.load_project_config", return_value=_project_config(svn_root)), \
+         patch("ltclaw_gy_x.game.service.SvnClient.check_installed", AsyncMock(return_value="svn")), \
+         patch("ltclaw_gy_x.game.service.SvnWatcher", return_value=watcher):
+        await service.start()
+
+    watcher.start.assert_awaited_once()
+    await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_handle_svn_change_rebuilds_snapshot(service, tmp_path):
+    svn_root = tmp_path / "svn"
+    table_dir = svn_root / "Assets" / "Data" / "Tables"
+    table_dir.mkdir(parents=True)
+    (table_dir / "SkillTable.csv").write_text("ID,Damage\n1,100\n", encoding="utf-8")
+    service._project_config = _project_config(svn_root)
+    service._table_indexer = MagicMock()
+    service._dependency_resolver = MagicMock()
+    service._index_committer = MagicMock()
+
+    existing_table = TableIndex(
+        table_name="OldTable",
+        source_path="Assets/Data/Tables/OldTable.csv",
+        source_hash="sha256:old",
+        svn_revision=1,
+        row_count=1,
+        primary_key="ID",
+        ai_summary="old",
+        ai_summary_confidence=0.5,
+        fields=[],
+        last_indexed_at=datetime.now(),
+        indexer_model="m",
+    )
+    updated_table = TableIndex(
+        table_name="SkillTable",
+        source_path="Assets/Data/Tables/SkillTable.csv",
+        source_hash="sha256:new",
+        svn_revision=2,
+        row_count=1,
+        primary_key="ID",
+        ai_summary="new",
+        ai_summary_confidence=0.8,
+        fields=[],
+        last_indexed_at=datetime.now(),
+        indexer_model="m",
+    )
+    service._index_committer.load_table_indexes.return_value = [existing_table]
+    service._index_committer.load_dependency_graph.return_value = DependencyGraph(edges=[], last_updated=datetime.now())
+    service.index_tables = AsyncMock(return_value=[updated_table])
+    service.resolve_dependencies = AsyncMock(return_value=DependencyGraph(edges=[], last_updated=datetime.now()))
+    service.commit_indexes = AsyncMock(return_value=True)
+
+    await service._handle_svn_change(ChangeSet(
+        from_rev=1,
+        to_rev=2,
+        added=[],
+        modified=["Assets/Data/Tables/SkillTable.csv"],
+        deleted=[],
+    ))
+
+    service.index_tables.assert_awaited_once()
+    committed_tables = service.commit_indexes.await_args.kwargs["tables"]
+    assert {table.table_name for table in committed_tables} == {"OldTable", "SkillTable"}
+    assert service._recent_changes_buffer[0]["revision"] == 2

@@ -2,7 +2,6 @@
 索引提交器: 负责索引文件的本地缓存与可选 SVN 提交。
 """
 
-import hashlib
 import json
 import logging
 import shutil
@@ -14,7 +13,6 @@ from .config import ProjectConfig
 from .models import TableIndex, DependencyGraph, ChangeSet
 from .svn_client import SvnClient
 from .paths import get_svn_cache_dir
-from .history_archiver import diff_and_archive
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +29,8 @@ class IndexCommitter:
         self.tables_index_file = self.cache_dir / "table_indexes.json"
         self.dependency_graph_file = self.cache_dir / "dependency_graph.json"
         self.changeset_file = self.cache_dir / "latest_changeset.json"
-        self.registry_file = self.cache_dir / "registry.json"
-        self.history_dir = self.cache_dir / "history"
         self.svn_tables_file: Optional[Path] = None
         self.svn_dependency_file: Optional[Path] = None
-        self.svn_registry_file: Optional[Path] = None
         self._setup_svn_paths()
 
     def _setup_svn_paths(self):
@@ -46,10 +41,9 @@ class IndexCommitter:
             output_dir = svn_root / self.index_output_dir
             self.svn_tables_file = output_dir / "table_indexes.json"
             self.svn_dependency_file = output_dir / "dependency_graph.json"
-            self.svn_registry_file = output_dir / "registry.json"
             output_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            logger.warning(f"setup paths failed: {e}")
+            logger.warning(f"setup svn paths failed: {e}")
 
     def _serialize_table_indexes(self, tables: List[TableIndex]) -> str:
         data = {
@@ -95,43 +89,6 @@ class IndexCommitter:
             logger.error(f"反序列化变更集失败: {e}")
             return None
 
-    def _serialize_registry(self, tables: List[TableIndex], graph: DependencyGraph) -> str:
-        tables_json = self._serialize_table_indexes(tables)
-        graph_json = self._serialize_dependency_graph(graph)
-        tables_sha = hashlib.sha256(tables_json.encode("utf-8")).hexdigest()
-        graph_sha = hashlib.sha256(graph_json.encode("utf-8")).hexdigest()
-        entries = []
-        for t in tables:
-            indexed_at = t.last_indexed_at
-            entries.append({
-                "name": t.table_name,
-                "path": t.source_path,
-                "hash": t.source_hash,
-                "row_count": t.row_count,
-                "system": t.system,
-                "svn_revision": t.svn_revision,
-                "indexed_at": indexed_at.isoformat() if hasattr(indexed_at, "isoformat") else str(indexed_at),
-            })
-        data = {
-            "schema_version": "registry.v1",
-            "version": "1.0",
-            "generated_at": datetime.now().isoformat(),
-            "tables": entries,
-            "dependencies_count": len(graph.edges),
-            "integrity": {
-                "table_indexes_sha256": tables_sha,
-                "dependency_graph_sha256": graph_sha,
-            },
-        }
-        return json.dumps(data, indent=2, ensure_ascii=False)
-
-    def _deserialize_registry(self, s: str) -> Optional[dict]:
-        try:
-            return json.loads(s)
-        except Exception as e:
-            logger.error(f"反序列化清单失败: {e}")
-            return None
-
     async def save_table_indexes(self, tables: List[TableIndex],
                                   commit_message: Optional[str] = None) -> bool:
         try:
@@ -174,19 +131,12 @@ class IndexCommitter:
     async def save_all(self, tables: List[TableIndex], graph: DependencyGraph,
                        changeset: ChangeSet, commit_message: Optional[str] = None) -> bool:
         try:
-            prev_tables = self.load_table_indexes()
             tj = self._serialize_table_indexes(tables)
             gj = self._serialize_dependency_graph(graph)
             cj = self._serialize_changeset(changeset)
-            rj = self._serialize_registry(tables, graph)
             self.tables_index_file.write_text(tj, encoding="utf-8")
             self.dependency_graph_file.write_text(gj, encoding="utf-8")
             self.changeset_file.write_text(cj, encoding="utf-8")
-            self.registry_file.write_text(rj, encoding="utf-8")
-            try:
-                diff_and_archive(prev_tables, tables, self.history_dir)
-            except Exception as e:
-                logger.warning(f"归档历史失败: {e}")
             files = []
             if self.svn_tables_file:
                 self.svn_tables_file.write_text(tj, encoding="utf-8")
@@ -194,9 +144,6 @@ class IndexCommitter:
             if self.svn_dependency_file:
                 self.svn_dependency_file.write_text(gj, encoding="utf-8")
                 files.append(self.svn_dependency_file)
-            if self.svn_registry_file:
-                self.svn_registry_file.write_text(rj, encoding="utf-8")
-                files.append(self.svn_registry_file)
             if files:
                 msg = commit_message or f"批量更新索引数据 ({len(tables)} tables, {len(graph.edges)} dependencies)"
                 if not await self._commit_to_svn(files, msg):
@@ -216,11 +163,11 @@ class IndexCommitter:
             try:
                 await self.svn.add(existing)
             except Exception as e:
-                logger.warning(f"add 警告: {e}")
+                logger.warning(f"svn add 警告: {e}")
             await self.svn.commit(existing, message)
             return True
         except Exception as e:
-            logger.error(f"提交失败: {e}")
+            logger.error(f"SVN提交失败: {e}")
             return False
 
     def load_table_indexes(self) -> List[TableIndex]:
@@ -250,21 +197,12 @@ class IndexCommitter:
             logger.error(f"加载变更集失败: {e}")
             return None
 
-    def load_registry(self) -> Optional[dict]:
-        try:
-            if self.registry_file.exists():
-                return self._deserialize_registry(self.registry_file.read_text(encoding="utf-8"))
-            return None
-        except Exception as e:
-            logger.error(f"加载清单失败: {e}")
-            return None
-
     async def create_backup(self, backup_dir: Optional[Path] = None) -> bool:
         try:
             if backup_dir is None:
                 backup_dir = self.cache_dir / "backups" / datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_dir.mkdir(parents=True, exist_ok=True)
-            for fp in [self.tables_index_file, self.dependency_graph_file, self.changeset_file, self.registry_file]:
+            for fp in [self.tables_index_file, self.dependency_graph_file, self.changeset_file]:
                 if fp.exists():
                     shutil.copy2(fp, backup_dir / fp.name)
             return True
@@ -280,7 +218,6 @@ class IndexCommitter:
                 ("table_indexes.json", self.tables_index_file),
                 ("dependency_graph.json", self.dependency_graph_file),
                 ("latest_changeset.json", self.changeset_file),
-                ("registry.json", self.registry_file),
             ]
             for name, target in mapping:
                 src = backup_dir / name
@@ -303,5 +240,4 @@ class IndexCommitter:
             "tables_index_file": info(self.tables_index_file),
             "dependency_graph_file": info(self.dependency_graph_file),
             "changeset_file": info(self.changeset_file),
-            "registry_file": info(self.registry_file),
         }

@@ -120,6 +120,40 @@ class SvnWatcher:
         except Exception as e:
             logger.error(f"变更回调执行失败: {e}")
 
+    async def trigger_now(self) -> Optional[ChangeSet]:
+        """手动触发一次完整同步: svn update -> diff -> 返回 ChangeSet"""
+        from_rev = self._last_checked_revision
+        try:
+            await self.svn.update()
+        except Exception as e:
+            logger.error(f"svn update 失败: {e}")
+            self._error_count += 1
+            raise
+        try:
+            current_revision = await self._get_current_revision()
+        except Exception as e:
+            logger.error(f"获取当前revision失败: {e}")
+            self._error_count += 1
+            raise
+        cs: Optional[ChangeSet] = None
+        if from_rev is not None and current_revision > from_rev:
+            try:
+                cs = await self.svn.diff_paths(from_rev + 1, current_revision)
+                cs = self._filter_changeset(cs)
+                if cs and self.change_callback:
+                    await self._trigger_change_callback(cs)
+                    self._change_count += 1
+            except Exception as e:
+                logger.error(f"获取变更集失败: {e}")
+        self._last_checked_revision = current_revision
+        self._last_check_time = datetime.now()
+        self._check_count += 1
+        if cs is None:
+            from .models import ChangeSet as _CS
+            cs = _CS(from_rev=from_rev or current_revision, to_rev=current_revision,
+                     added=[], modified=[], deleted=[])
+        return cs
+
     async def force_check(self) -> Optional[ChangeSet]:
         try:
             await self._check_for_changes()

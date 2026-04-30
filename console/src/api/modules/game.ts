@@ -7,7 +7,11 @@ import type {
   TableIndex,
   FieldPatch,
   SystemGroup,
-  ChangeSet
+  ChangeSet,
+  SvnStatusResponse,
+  RecentSvnChangesResponse,
+  PaginatedTableIndexesResponse,
+  DependenciesResponse,
 } from '../types/game';
 
 export const gameApi = {
@@ -52,8 +56,8 @@ export const gameApi = {
   },
 
   // SVN operations
-  async getSvnStatus(agentId: string) {
-    return request(`/agents/${agentId}/game/svn/status`);
+  async getSvnStatus(agentId: string): Promise<SvnStatusResponse> {
+    return request<SvnStatusResponse>(`/agents/${agentId}/game/svn/status`);
   },
   
   async triggerSync(agentId: string): Promise<ChangeSet> {
@@ -64,6 +68,10 @@ export const gameApi = {
   
   async getSvnLogRecent(agentId: string, limit: number = 200) {
     return request(`/agents/${agentId}/game/svn/log/recent?limit=${limit}`);
+  },
+
+  async getSvnChangesRecent(agentId: string, limit: number = 50): Promise<RecentSvnChangesResponse> {
+    return request<RecentSvnChangesResponse>(`/agents/${agentId}/game/svn/changes/recent?limit=${limit}`);
   },
   
   subscribeSvnLog(agentId: string, onMessage: (data: any) => void): EventSource {
@@ -89,7 +97,7 @@ export const gameApi = {
     query?: string;
     page?: number;
     size?: number;
-  }) {
+  }): Promise<PaginatedTableIndexesResponse> {
     const searchParams = new URLSearchParams();
     if (params?.system) searchParams.append('system', params.system);
     if (params?.query) searchParams.append('query', params.query);
@@ -98,7 +106,7 @@ export const gameApi = {
     
     const queryStr = searchParams.toString();
     const url = `/agents/${agentId}/game/index/tables${queryStr ? '?' + queryStr : ''}`;
-    return request(url);
+    return request<PaginatedTableIndexesResponse>(url);
   },
   
   async getTable(agentId: string, name: string): Promise<TableIndex> {
@@ -112,8 +120,8 @@ export const gameApi = {
     });
   },
   
-  async getDependencies(agentId: string, table: string) {
-    return request(`/agents/${agentId}/game/index/dependencies/${table}`);
+  async getDependencies(agentId: string, table: string): Promise<DependenciesResponse> {
+    return request<DependenciesResponse>(`/agents/${agentId}/game/index/dependencies/${table}`);
   },
   
   async findField(agentId: string, name: string) {

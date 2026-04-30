@@ -10,7 +10,6 @@ from .models import (
     FieldPatch,
 )
 from .paths import get_tables_dir
-from .index_committer import IndexCommitter
 
 
 class QueryRouter:
@@ -34,24 +33,24 @@ class QueryRouter:
             if not tables_dir.exists():
                 return {"items": [], "total": 0, "page": page, "size": size}
             tables = []
-            for tf in tables_dir.glob("*.json"):
+            for table_file in tables_dir.glob("*.json"):
                 try:
-                    ti = await self._load_table_from_file(tf)
-                    if ti:
-                        if system and ti.system != system:
+                    table_index = await self._load_table_from_file(table_file)
+                    if table_index:
+                        if system and table_index.system != system:
                             continue
-                        if query and query.lower() not in ti.table_name.lower():
+                        if query and query.lower() not in table_index.table_name.lower():
                             continue
-                        tables.append(ti)
+                        tables.append(table_index)
                 except Exception:
                     continue
-            tables.sort(key=lambda t: t.table_name)
+            tables.sort(key=lambda item: item.table_name)
             total = len(tables)
             start = (page - 1) * size
             end = start + size
             items = tables[start:end]
             return {
-                "items": [t.model_dump(mode="json") for t in items],
+                "items": [item.model_dump(mode="json") for item in items],
                 "total": total,
                 "page": page,
                 "size": size,
@@ -64,16 +63,16 @@ class QueryRouter:
             return None
         try:
             svn_root = Path(self.service.project_config.svn.root)
-            tf = get_tables_dir(svn_root) / f"{name}.json"
-            if not tf.exists():
+            table_file = get_tables_dir(svn_root) / f"{name}.json"
+            if not table_file.exists():
                 return None
-            return await self._load_table_from_file(tf)
+            return await self._load_table_from_file(table_file)
         except Exception:
             return None
 
     async def fields_of_table(self, table: str) -> List[FieldInfo]:
-        ti = await self.get_table(table)
-        return ti.fields if ti else []
+        table_index = await self.get_table(table)
+        return table_index.fields if table_index else []
 
     async def find_field(self, field_name: str) -> List[Tuple[str, FieldInfo]]:
         if not self.service.configured:
@@ -84,13 +83,13 @@ class QueryRouter:
             tables_dir = get_tables_dir(svn_root)
             if not tables_dir.exists():
                 return []
-            for tf in tables_dir.glob("*.json"):
+            for table_file in tables_dir.glob("*.json"):
                 try:
-                    ti = await self._load_table_from_file(tf)
-                    if ti:
-                        for field in ti.fields:
+                    table_index = await self._load_table_from_file(table_file)
+                    if table_index:
+                        for field in table_index.fields:
                             if field_name.lower() in field.name.lower():
-                                results.append((ti.table_name, field))
+                                results.append((table_index.table_name, field))
                 except Exception:
                     continue
         except Exception:
@@ -102,11 +101,11 @@ class QueryRouter:
             return {"upstream": [], "downstream": []}
         try:
             svn_root = Path(self.service.project_config.svn.root)
-            dep_file = svn_root / ".ltclaw_index" / "dependencies.json"
+            dep_file = svn_root / ".ltclaw_index" / "dependency_graph.json"
             if not dep_file.exists():
                 return {"upstream": [], "downstream": []}
-            with open(dep_file, "r", encoding="utf-8") as f:
-                dep_graph = DependencyGraph.model_validate_json(f.read())
+            with open(dep_file, "r", encoding="utf-8") as file_obj:
+                dep_graph = DependencyGraph.model_validate_json(file_obj.read())
             upstream = []
             downstream = []
             for edge in dep_graph.edges:
@@ -133,30 +132,30 @@ class QueryRouter:
             return None
         try:
             svn_root = Path(self.service.project_config.svn.root)
-            tf = get_tables_dir(svn_root) / f"{table}.json"
-            if not tf.exists():
+            table_file = get_tables_dir(svn_root) / f"{table}.json"
+            if not table_file.exists():
                 return None
-            ti = await self._load_table_from_file(tf)
-            if not ti:
+            table_index = await self._load_table_from_file(table_file)
+            if not table_index:
                 return None
             field_found = None
-            for f in ti.fields:
-                if f.name == field:
-                    field_found = f
+            for field_info in table_index.fields:
+                if field_info.name == field:
+                    field_found = field_info
                     if patch.description is not None:
-                        f.description = patch.description
+                        field_info.description = patch.description
                     if patch.confidence is not None:
-                        f.confidence = patch.confidence
+                        field_info.confidence = patch.confidence
                     if patch.confirmed_by is not None:
-                        f.confirmed_by = patch.confirmed_by
-                        f.confirmed_at = datetime.now()
+                        field_info.confirmed_by = patch.confirmed_by
+                        field_info.confirmed_at = datetime.now()
                     break
             if not field_found:
                 return None
-            temp_file = tf.with_suffix(".tmp")
-            with open(temp_file, "w", encoding="utf-8") as f:
-                f.write(ti.model_dump_json(indent=2))
-            temp_file.replace(tf)
+            temp_file = table_file.with_suffix(".tmp")
+            with open(temp_file, "w", encoding="utf-8") as file_obj:
+                file_obj.write(table_index.model_dump_json(indent=2))
+            temp_file.replace(table_file)
             return field_found
         except Exception:
             return None
@@ -173,23 +172,23 @@ class QueryRouter:
                 return {
                     "mode": "exact_field",
                     "results": [
-                        {"table": t, "field": f.model_dump(mode="json")}
-                        for t, f in field_results
+                        {"table": table, "field": field.model_dump(mode="json")}
+                        for table, field in field_results
                     ],
                 }
         return {"mode": "semantic_stub", "results": []}
 
-    async def _load_table_from_file(self, tf: Path) -> Optional[TableIndex]:
+    async def _load_table_from_file(self, table_file: Path) -> Optional[TableIndex]:
         try:
-            mtime = tf.stat().st_mtime
-            key = str(tf)
+            mtime = table_file.stat().st_mtime
+            key = str(table_file)
             if (key in self._table_cache and key in self._cache_timestamps
                     and self._cache_timestamps[key] >= mtime):
                 return self._table_cache[key]
-            with open(tf, "r", encoding="utf-8") as f:
-                ti = TableIndex.model_validate_json(f.read())
-            self._table_cache[key] = ti
+            with open(table_file, "r", encoding="utf-8") as file_obj:
+                table_index = TableIndex.model_validate_json(file_obj.read())
+            self._table_cache[key] = table_index
             self._cache_timestamps[key] = mtime
-            return ti
+            return table_index
         except Exception:
             return None

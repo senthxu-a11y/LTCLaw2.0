@@ -235,8 +235,6 @@ class GameService:
                         self._svn_client = SvnClient(
                             working_copy=svn_root,
                             username=self._user_config.svn_username,
-                            password=self._user_config.svn_password,
-                            trust_server_cert=self._user_config.svn_trust_cert,
                         )
                         await self._svn_client.check_installed()
                     except SvnNotInstalledError:
@@ -293,8 +291,6 @@ class GameService:
                         self._svn_client = SvnClient(
                             working_copy=svn_root,
                             username=self._user_config.svn_username,
-                            password=self._user_config.svn_password,
-                            trust_server_cert=self._user_config.svn_trust_cert,
                         )
                     except Exception as e:
                         logger.warning(f"SVN客户端重新初始化失败: {e}")
@@ -312,17 +308,12 @@ class GameService:
 
     async def index_tables(self, file_paths: list, svn_root: Path = None, svn_revision: int = 0):
         if not self._table_indexer:
-            raise RuntimeError("table indexer not initialized")
+            raise RuntimeError("表索引器未初始化")
         if svn_root is None and self._project_config:
             svn_root = Path(self._project_config.svn.root)
-        root = svn_root or Path(".")
-        resolved = []
-        for p in file_paths:
-            pp = Path(p)
-            resolved.append(pp if pp.is_absolute() else (root / pp))
         return await self._table_indexer.index_batch(
-            resolved,
-            root,
+            [Path(p) for p in file_paths],
+            svn_root or Path("."),
             svn_revision,
         )
 
@@ -469,48 +460,3 @@ class GameService:
         if not self._svn_watcher:
             return {"error": "SVN监控器未初始化"}
         return self._svn_watcher.get_status()
-
-    async def force_full_rescan(self) -> dict:
-        import fnmatch
-        if not self._project_config:
-            raise RuntimeError("project not configured")
-        svn_root = Path(self._project_config.svn.root)
-        if not svn_root.exists():
-            raise RuntimeError(f"svn working copy missing: {svn_root}")
-        current_rev = 0
-        if self._svn_client is not None:
-            try:
-                info = await self._svn_client.info()
-                current_rev = int(info.get("revision") or 0)
-            except Exception as e:
-                logger.warning(f"read svn revision failed: {e}")
-        include_ext = tuple(e.lower() for e in (self._project_config.filters.include_ext or []))
-        exclude_glob = list(self._project_config.filters.exclude_glob or [])
-        scanned = []
-        for f in svn_root.rglob("*"):
-            if not f.is_file():
-                continue
-            try:
-                rel = f.relative_to(svn_root).as_posix()
-            except ValueError:
-                continue
-            if include_ext and f.suffix.lower() not in include_ext:
-                continue
-            if any(fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(f.name, pat) for pat in exclude_glob):
-                continue
-            scanned.append(rel)
-        from .models import ChangeSet
-        cs = ChangeSet(
-            from_rev=0,
-            to_rev=current_rev,
-            added=[],
-            modified=scanned,
-            deleted=[],
-        )
-        await self._handle_svn_change(cs)
-        last = self._recent_changes_buffer[0] if self._recent_changes_buffer else {}
-        return {
-            "revision": current_rev,
-            "scanned_files": scanned,
-            "indexed": len(last.get("indexed_tables", [])),
-        }

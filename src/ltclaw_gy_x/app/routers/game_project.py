@@ -38,15 +38,28 @@ async def get_project_config(workspace=Depends(get_agent_for_request)):
 async def save_project_config_api(config: ProjectConfig, workspace=Depends(get_agent_for_request)):
     game_service = _game_service_or_404(workspace)
     user_config = game_service.user_config
-    if not user_config.svn_local_root:
-        raise HTTPException(status_code=400, detail="\u7528\u6237\u672a\u914d\u7f6eSVN\u6839\u76ee\u5f55")
+    # SVN working copy path: prefer user_config.svn_local_root, fallback to config.svn.root
+    svn_local_root = user_config.svn_local_root or config.svn.root
+    if not svn_local_root:
+        raise HTTPException(
+            status_code=400,
+            detail="\u672a\u914d\u7f6eSVN\u5de5\u4f5c\u526f\u672c\u8def\u5f84\uff1a\u8bf7\u5728\u201c\u672c\u5730\u5de5\u4f5c\u526f\u672c\u8def\u5f84\u201d\u586b\u5199\u5df2checkout\u7684\u672c\u5730\u76ee\u5f55"
+        )
+    svn_root = Path(svn_local_root)
+    if not svn_root.exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"\u672c\u5730\u5de5\u4f5c\u526f\u672c\u8def\u5f84\u4e0d\u5b58\u5728: {svn_root}\uff0c\u8bf7\u5148\u8fd0\u884c svn checkout"
+        )
     issues = validate_project_config(config)
     errors = [i for i in issues if i.severity == "error"]
     if errors:
         msgs = [f"{i.path}: {i.message}" for i in errors]
         raise HTTPException(status_code=400, detail=f"\u914d\u7f6e\u9a8c\u8bc1\u5931\u8d25: {'; '.join(msgs)}")
-    svn_root = Path(user_config.svn_local_root)
     save_project_config(svn_root, config)
+    if not user_config.svn_local_root:
+        user_config.svn_local_root = str(svn_root)
+        save_user_config(user_config)
     await game_service.reload_config()
     return {"message": "\u914d\u7f6e\u4fdd\u5b58\u6210\u529f"}
 

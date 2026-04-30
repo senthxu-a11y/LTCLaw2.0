@@ -18,7 +18,9 @@ import {
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
+import { gameApi } from "../../api/modules/game";
 import { gameChangeApi } from "../../api/modules/gameChange";
+import type { RecentSvnChangeItem, SvnStatusResponse } from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
 import styles from "./SvnSync.module.less";
 
@@ -78,72 +80,58 @@ export default function SvnSync() {
 
   const canUseGameChange = !!selectedAgent;
 
+  const buildSyncStatus = (status: SvnStatusResponse): SvnSyncStatus => {
+    const lastSyncTime = status.last_check_time ?? status.last_polled_at ?? undefined;
+    const nextScheduledSync = lastSyncTime && status.poll_interval
+      ? new Date(new Date(lastSyncTime).getTime() + status.poll_interval * 1000).toISOString()
+      : status.next_poll_at ?? undefined;
+    return {
+      is_syncing: false,
+      last_sync_time: lastSyncTime,
+      sync_progress: status.running ? undefined : 100,
+      current_operation: status.running ? t("svnSync.syncing") : "",
+      next_scheduled_sync: nextScheduledSync,
+    };
+  };
+
+  const buildWatchStats = (status: SvnStatusResponse): WatchStats => ({
+    total_files_watched: status.watch_paths?.length ?? 0,
+    active_watchers: status.running ? 1 : 0,
+    changes_detected_today: status.stats?.change_count ?? 0,
+    last_change_time: (status.stats?.change_count ?? 0) > 0
+      ? status.last_check_time ?? status.last_polled_at ?? undefined
+      : undefined,
+  });
+
+  const mapRecentChange = (item: RecentSvnChangeItem): SvnChange => ({
+    id: item.id,
+    revision: item.revision,
+    author: item.author || "system",
+    timestamp: item.timestamp,
+    message: item.message,
+    paths: item.paths,
+    action: item.action,
+  });
+
   const fetchSyncStatus = async () => {
+    if (!selectedAgent) {
+      setSyncStatus(null);
+      setRecentChanges([]);
+      setWatchStats(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      // Note: These endpoints would need to be implemented in the backend
-      const [statusResponse, changesResponse, statsResponse] = await Promise.allSettled([
-        // These are placeholder calls - actual API endpoints need to be implemented
-        fetch('/api/game-project/sync/status'),
-        fetch('/api/game-project/sync/changes?limit=10'),
-        fetch('/api/game-project/watch/stats'),
+      const [statusResponse, changesResponse] = await Promise.all([
+        gameApi.getSvnStatus(selectedAgent),
+        gameApi.getSvnChangesRecent(selectedAgent, 10),
       ]);
-      
-      if (statusResponse.status === 'fulfilled' && statusResponse.value.ok) {
-        const status = await statusResponse.value.json();
-        setSyncStatus(status);
-      } else {
-        // Mock data for demonstration
-        setSyncStatus({
-          is_syncing: false,
-          last_sync_time: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-          sync_progress: 100,
-          current_operation: '',
-          next_scheduled_sync: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-        });
-      }
 
-      if (changesResponse.status === 'fulfilled' && changesResponse.value.ok) {
-        const changes = await changesResponse.value.json();
-        setRecentChanges(changes);
-      } else {
-        // Mock data for demonstration
-        setRecentChanges([
-          {
-            id: '1',
-            revision: 1234,
-            author: 'developer1',
-            timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-            message: '更新配置表数据',
-            paths: ['Tables/Items.xlsx', 'Tables/NPCs.csv'],
-            action: 'M',
-          },
-          {
-            id: '2',
-            revision: 1233,
-            author: 'developer2',
-            timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-            message: '新增技能配置',
-            paths: ['Tables/Skills.xlsx'],
-            action: 'A',
-          },
-        ]);
-      }
-
-      if (statsResponse.status === 'fulfilled' && statsResponse.value.ok) {
-        const stats = await statsResponse.value.json();
-        setWatchStats(stats);
-      } else {
-        // Mock data for demonstration
-        setWatchStats({
-          total_files_watched: 128,
-          active_watchers: 3,
-          changes_detected_today: 7,
-          last_change_time: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-        });
-      }
-      
+      setSyncStatus(buildSyncStatus(statusResponse));
+      setWatchStats(buildWatchStats(statusResponse));
+      setRecentChanges((changesResponse.items || []).map(mapRecentChange));
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : t("svnSync.loadFailed");
       setError(errMsg);
@@ -170,15 +158,19 @@ export default function SvnSync() {
   };
 
   const handleManualSync = async () => {
+    if (!selectedAgent) return;
     try {
       message.info(t("svnSync.syncStarted"));
-      // Placeholder - actual API call would be:
-      // await fetch('/api/game-project/sync/trigger', { method: 'POST' });
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+      const result = await gameApi.triggerSync(selectedAgent);
       message.success(t("svnSync.syncSuccess"));
-      fetchSyncStatus(); // Refresh status
-    } catch (err) {
-      message.error(t("svnSync.syncFailed"));
+      await fetchSyncStatus();
+      const changedCount = result.added.length + result.modified.length + result.deleted.length;
+      if (changedCount > 0) {
+        message.info(t("svnSync.recentChanges") + `: ${changedCount}`);
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || t("svnSync.syncFailed");
+      message.error(errMsg);
     }
   };
 

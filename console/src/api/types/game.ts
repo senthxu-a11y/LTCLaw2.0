@@ -53,7 +53,10 @@ export interface ProjectConfig {
 export interface UserGameConfig {
   my_role: "maintainer" | "consumer";
   svn_local_root?: string | null;
+  svn_url?: string | null;
   svn_username?: string | null;
+  svn_password?: string | null;
+  svn_trust_cert?: boolean;
 }
 
 export interface ValidationIssue {
@@ -119,4 +122,63 @@ export interface ChangeSet {
   added: string[];
   modified: string[];
   deleted: string[];
+}
+
+export interface SvnWatcherStats {
+  check_count: number;
+  change_count: number;
+  error_count: number;
+}
+
+export interface SvnStatusResponse {
+  configured: boolean;
+  running: boolean;
+  poll_interval?: number;
+  watch_paths?: string[];
+  last_checked_revision?: number | null;
+  last_check_time?: string | null;
+  uptime_seconds?: number | null;
+  stats?: SvnWatcherStats;
+  has_callback?: boolean;
+  my_role?: "maintainer" | "consumer";
+  current_rev?: number | null;
+  last_polled_at?: string | null;
+  next_poll_at?: string | null;
+}
+
+export interface RecentSvnChangeItem {
+  id: string;
+  revision: number;
+  from_rev?: number;
+  author: string;
+  timestamp: string;
+  message: string;
+  paths: string[];
+  action: "A" | "M" | "D";
+}
+
+export interface RecentSvnChangesResponse {
+  items: RecentSvnChangeItem[];
+  count: number;
+}
+
+export interface DependencyItem {
+  table: string;
+  field: string;
+  target_field?: string;
+  source_field?: string;
+  confidence: number;
+}
+
+export interface DependenciesResponse {
+  upstream: DependencyItem[];
+  downstream: DependencyItem[];
+}
+
+export interface PaginatedTableIndexesResponse {
+  items: TableIndex[];
+  total: number;
+  page: number;
+  size: number;
+  error?: string;
 }

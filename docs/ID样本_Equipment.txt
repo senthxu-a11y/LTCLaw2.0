@@ -1,0 +1,627 @@
+﻿Id┇Type=Int;Name=Id;Collection=None;Key=A;Out=2;IDType=101;Split=;Doc=HSR装备基础信息		Name┇Type=String;Name=Name;Collection=None;Key=B;Out=0	Type┇Type=EquipmentPartType;Name=Type;Collection=None;Key=C;Out=2	Quality┇Type=QualityType;Name=Quality;Collection=None;Key=D;Out=2	Group┇Type=Int;Name=Group;Collection=None;Key=E;Out=2	Super┇Type=Bool;Name=Super;Collection=None;Key=F;Out=2	Icon┇Type=String;Name=Icon;Collection=None;Key=G;Out=0	Desc┇Type=String;Name=Desc;Collection=None;Key=H;Out=0	Suits┇Type=HSRSuit;Name=Suits;Collection=List;Key=I;Out=0	SellPrice┇Type=Int;Name=SellPrice;Collection=None;Key=J;Out=2	UseMods┇Type=PlayerMod;Name=UseMods;Collection=List;Key=K;Out=0	SourceJumps┇Type=CurrencyJump;Name=SourceJumps;Collection=List;Key=L;Out=0
+编号	备注	名字	类型（0头1项链2胸甲3护腕4手套5腰带6裤子7鞋子8戒指）┇枚举(EquipmentPartType)	品质（1白2绿3蓝4紫5黄6橙7红8彩）┇枚举(QualityType)	装备组（升品找寻）	S级装备（0不是1是）	图标	说明	套装┇枚举(HSRSuit)	出售价格	替换模型┇数据表(PlayerMod)	来源跳转┇数据表(CurrencyJump)
+1011001	黑铁头盔（白色）	EquipName_1011001	0	1	1	0	ui://2opvcgqbdweg2zn			0	10101	
+1011002	生铁板甲（白色）	EquipName_1011003	2	1	2	0	ui://2opvcgqbdweg2zp			0	10103	
+1011003	铁片手套（白色）	EquipName_1011005	4	1	3	0	ui://2opvcgqbdweg2zo			0	10102	
+1011004	铁环腰带（白色）	EquipName_1011006	5	1	4	0	ui://2opvcgqbdweg2xy			0		
+1011005	粗铁护腿（白色）	EquipName_1011007	6	1	5	0	ui://2opvcgqbdweg2zl			0	10104	
+1011006	铁包头靴（白色）	EquipName_1011008	7	1	6	0	ui://2opvcgqbdweg2zj			0	10105	
+1011007	生铁护腕（白色）	EquipName_1011004	3	1	7	0	ui://2opvcgqbdweg2zq			0		
+1011008	锈铁挂坠（白色）	EquipName_1011002	1	1	8	0	ui://2opvcgqbdweg2zm			0		
+1011009	黑铁圈环（白色）	EquipName_1011009	8	1	9	0	ui://2opvcgqbdweg2zk			0		
+1012001	青铜兽面盔（绿色）	EquipName_1012001	0	2	1	0	ui://2opvcgqbdweg2ze			0	10201	
+1012002	青铜鳞甲（绿色）	EquipName_1012003	2	2	2	0	ui://2opvcgqbdweg2zg			0	10203	
+1012003	螺纹臂铠（绿色）	EquipName_1012005	4	2	3	0	ui://2opvcgqbdweg2zf			0	10202	
+1012004	铜钉皮带（绿色）	EquipName_1012006	5	2	4	0	ui://2opvcgqbdweg2zi			0		
+1012005	青铜护胫（绿色）	EquipName_1012007	6	2	5	0	ui://2opvcgqbdweg2zc			0	10204	
+1012006	铜扣战靴（绿色）	EquipName_1012008	7	2	6	0	ui://2opvcgqbdweg2za			0	10205	
+1012007	铜片裹腕（绿色）	EquipName_1012004	3	2	7	0	ui://2opvcgqbdweg2zh			0		
+1012008	青铜兽面坠（绿色）	EquipName_1012002	1	2	8	0	ui://2opvcgqbdweg2zd			0		
+1012009	古铜螺纹戒（绿色）	EquipName_1012009	8	2	9	0	ui://2opvcgqbdweg2zb			0		
+1013001	新月银盔（蓝色）	EquipName_1013001	0	3	1	0	ui://2opvcgqbdweg30e			0	10301	
+1013002	镶银皮甲（蓝色）	EquipName_1013003	2	3	2	0	ui://2opvcgqbdweg2zr			0	10303	
+1013003	银丝手套（蓝色）	EquipName_1013005	4	3	3	0	ui://2opvcgqbdweg2zt			0	10302	
+1013004	银扣皮带（蓝色）	EquipName_1013006	5	3	4	0	ui://2opvcgqbdweg2z9			0		
+1013005	银边护腿（蓝色）	EquipName_1013007	6	3	5	0	ui://2opvcgqbdweg30d			0	10304	
+1013006	银钉战靴（蓝色）	EquipName_1013008	7	3	6	0	ui://2opvcgqbdweg30b			0	10305	
+1013007	镶银皮腕（蓝色）	EquipName_1013004	3	3	7	0	ui://2opvcgqbdweg2z8			0		
+1013008	新月银坠（蓝色）	EquipName_1013002	1	3	8	0	ui://2opvcgqbdweg2zu			0		
+1013009	银丝环（蓝色）	EquipName_1013009	8	3	9	0	ui://2opvcgqbdweg30c			0		
+1014001	游侠头盔（紫色）	EquipName_1014001	0	4	101	0	ui://2opvcgqbdweg306			0	10401	
+1014002	游侠胸甲（紫色）	EquipName_1014002	2	4	102	0	ui://2opvcgqbdweg308			0	10403	
+1014003	游侠手套（紫色）	EquipName_1014003	4	4	103	0	ui://2opvcgqbdweg307			0	10402	
+1014004	游侠腰带（紫色）	EquipName_1014004	5	4	104	0	ui://2opvcgqbdweg30a			0		
+1014005	游侠裤子（紫色）	EquipName_1014005	6	4	105	0	ui://2opvcgqbdweg304			0	10404	
+1014006	游侠鞋子（紫色）	EquipName_1014006	7	4	106	0	ui://2opvcgqbdweg302			0	10405	
+1014007	软皮护腕（紫色）	EquipName_1014007	3	4	107	0	ui://2opvcgqbdweg309			0		
+1014008	游隼羽坠（紫色）	EquipName_1014008	1	4	108	0	ui://2opvcgqbdweg305			0		
+1014009	猎弦指环（紫色）	EquipName_1014009	8	4	109	0	ui://2opvcgqbdweg303			0		
+1014011	角斗士头盔（紫色）	EquipName_1014011	0	4	111	0	ui://2opvcgqbdweg2zx		1	0	10411	
+1014012	角斗士胸甲（紫色）	EquipName_1014012	2	4	112	0	ui://2opvcgqbdweg2zz		1	0	10413	
+1014013	角斗士手套（紫色）	EquipName_1014013	4	4	113	0	ui://2opvcgqbdweg2zy		1	0	10412	
+1014014	角斗士腰带（紫色）	EquipName_1014014	5	4	114	0	ui://2opvcgqbdweg301		1	0		
+1014015	角斗士裤子（紫色）	EquipName_1014015	6	4	115	0	ui://2opvcgqbdweg2zv		1	0	10414	
+1014016	角斗士鞋子（紫色）	EquipName_1014016	7	4	116	0	ui://2opvcgqbdweg2z6		1	0	10415	
+1014017	斗兽徽记（紫色）	EquipName_1014017	3	4	117	0	ui://2opvcgqbdweg300		16	0		
+1014018	铁棘指环（紫色）	EquipName_1014018	1	4	118	0	ui://2opvcgqbdweg2zw		16	0		
+1014019	绑带护腕（紫色）	EquipName_1014019	8	4	119	0	ui://2opvcgqbdweg2z7		16	0		
+1014020	角斗士披风（紫色）	EquipName_1014020	9	4	120	0	ui://2opvcgqbkry03ep			0	10416	
+1014021	勇气头盔（紫色）	EquipName_1014021	0	4	121	0	ui://2opvcgqb9m1r3c7			0	10431	
+1014022	勇气胸甲（紫色）	EquipName_1014022	2	4	122	0	ui://2opvcgqb9m1r3c9			0	10433	
+1014023	勇气手套（紫色）	EquipName_1014023	4	4	123	0	ui://2opvcgqb9m1r3c8			0	10432	
+1014024	勇气腰带（紫色）	EquipName_1014024	5	4	124	0	ui://2opvcgqb9m1r39k			0		
+1014025	勇气裤子（紫色）	EquipName_1014025	6	4	125	0	ui://2opvcgqb9m1r3c5			0	10434	
+1014026	勇气鞋子（紫色）	EquipName_1014026	7	4	126	0	ui://2opvcgqb9m1r3c3			0	10435	
+1014027	铁箍护腕（紫色）	EquipName_1014027	3	4	127	0	ui://2opvcgqb9m1r3ca			0		
+1014028	狮心吊坠（紫色）	EquipName_1014028	1	4	128	0	ui://2opvcgqb9m1r3c6			0		
+1014029	誓言指环（紫色）	EquipName_1014029	8	4	129	0	ui://2opvcgqb9m1r3c4			0		
+1015001	游侠头盔（黄色）	EquipName_1014001	0	5	101	0	ui://2opvcgqbdweg306			0	10401	
+1015002	游侠胸甲（黄色）	EquipName_1014002	2	5	102	0	ui://2opvcgqbdweg308			0	10403	
+1015003	游侠手套（黄色）	EquipName_1014003	4	5	103	0	ui://2opvcgqbdweg307			0	10402	
+1015004	游侠腰带（黄色）	EquipName_1014004	5	5	104	0	ui://2opvcgqbdweg30a			0		
+1015005	游侠裤子（黄色）	EquipName_1014005	6	5	105	0	ui://2opvcgqbdweg304			0	10404	
+1015006	游侠鞋子（黄色）	EquipName_1014006	7	5	106	0	ui://2opvcgqbdweg302			0	10405	
+1015007	软皮护腕（黄色）	EquipName_1014007	3	5	107	0	ui://2opvcgqbdweg309			0		
+1015008	游隼羽坠（黄色）	EquipName_1014008	1	5	108	0	ui://2opvcgqbdweg305			0		
+1015009	猎弦指环（黄色）	EquipName_1014009	8	5	109	0	ui://2opvcgqbdweg303			0		
+1015011	角斗士头盔（黄色）	EquipName_1014011	0	5	111	0	ui://2opvcgqbdweg2zx		1	0	10411	
+1015012	角斗士胸甲（黄色）	EquipName_1014012	2	5	112	0	ui://2opvcgqbdweg2zz		1	0	10413	
+1015013	角斗士手套（黄色）	EquipName_1014013	4	5	113	0	ui://2opvcgqbdweg2zy		1	0	10412	
+1015014	角斗士腰带（黄色）	EquipName_1014014	5	5	114	0	ui://2opvcgqbdweg301		1	0		
+1015015	角斗士裤子（黄色）	EquipName_1014015	6	5	115	0	ui://2opvcgqbdweg2zv		1	0	10414	
+1015016	角斗士鞋子（黄色）	EquipName_1014016	7	5	116	0	ui://2opvcgqbdweg2z6		1	0	10415	
+1015017	碎骨缚腕（黄色）	EquipName_1014017	3	5	117	0	ui://2opvcgqbdweg300		16	0		
+1015018	铁棘指环（黄色）	EquipName_1014018	1	5	118	0	ui://2opvcgqbdweg2zw		16	0		
+1015019	斗兽徽记（黄色）	EquipName_1014019	8	5	119	0	ui://2opvcgqbdweg2z7		16	0		
+1015020	角斗士披风（黄色）	EquipName_1014020	9	5	120	0	ui://2opvcgqbkry03ep			0	10416	
+1015021	勇气头盔（黄色）	EquipName_1014021	0	5	121	0	ui://2opvcgqb9m1r3c7			0	10431	
+1015022	勇气胸甲（黄色）	EquipName_1014022	2	5	122	0	ui://2opvcgqb9m1r3c9			0	10433	
+1015023	勇气手套（黄色）	EquipName_1014023	4	5	123	0	ui://2opvcgqb9m1r3c8			0	10432	
+1015024	勇气腰带（黄色）	EquipName_1014024	5	5	124	0	ui://2opvcgqb9m1r39k			0		
+1015025	勇气裤子（黄色）	EquipName_1014025	6	5	125	0	ui://2opvcgqb9m1r3c5			0	10434	
+1015026	勇气鞋子（黄色）	EquipName_1014026	7	5	126	0	ui://2opvcgqb9m1r3c3			0	10435	
+1015027	铁箍护腕（黄色）	EquipName_1014027	3	5	127	0	ui://2opvcgqb9m1r3ca			0		
+1015028	狮心吊坠（黄色）	EquipName_1014028	1	5	128	0	ui://2opvcgqb9m1r3c6			0		
+1015029	誓言指环（黄色）	EquipName_1014029	8	5	129	0	ui://2opvcgqb9m1r3c4			0		
+1015031	无畏头盔（黄色）	EquipName_1015031	0	5	131	0	ui://2opvcgqbdweg2ye			0	10511	
+1015032	无畏胸甲（黄色）	EquipName_1015032	2	5	132	0	ui://2opvcgqbdweg2yg			0	10513	
+1015033	无畏手套（黄色）	EquipName_1015033	4	5	133	0	ui://2opvcgqbdweg2yf			0	10512	
+1015034	无畏腰带（黄色）	EquipName_1015034	5	5	134	0	ui://2opvcgqbdweg2z5			0		
+1015035	无畏裤子（黄色）	EquipName_1015035	6	5	135	0	ui://2opvcgqbdweg2yc			0	10514	
+1015036	无畏鞋子（黄色）	EquipName_1015036	7	5	136	0	ui://2opvcgqbdweg2ya			0	10515	
+1015037	铁壁护腕（黄色）	EquipName_1015037	3	5	137	0	ui://2opvcgqbdweg2z4			0		
+1015038	狮鹫徽记（黄色）	EquipName_1015038	1	5	138	0	ui://2opvcgqbdweg2yd			0		
+1015039	不屈指环（黄色）	EquipName_1015039	8	5	139	0	ui://2opvcgqbdweg2yb			0		
+1015041	湮灭头盔（黄色）	EquipName_1015041	0	5	141	0	ui://2opvcgqb9m1r3d9			0	10521	
+1015042	湮灭胸甲（黄色）	EquipName_1015042	2	5	142	0	ui://2opvcgqb9m1r3cw			0	10523	
+1015043	湮灭手套（黄色）	EquipName_1015043	4	5	143	0	ui://2opvcgqb9m1r3cv			0	10522	
+1015044	湮灭腰带（黄色）	EquipName_1015044	5	5	144	0	ui://2opvcgqb9m1r3cy			0		
+1015045	湮灭裤子（黄色）	EquipName_1015045	6	5	145	0	ui://2opvcgqb9m1r3cs			0	10524	
+1015046	湮灭鞋子（黄色）	EquipName_1015046	7	5	146	0	ui://2opvcgqb9m1r3cq			0	10525	
+1015047	暗蚀护腕（黄色）	EquipName_1015047	3	5	147	0	ui://2opvcgqb9m1r3cx			0		
+1015048	虚空之眼（黄色）	EquipName_1015048	1	5	148	0	ui://2opvcgqb9m1r3cu			0		
+1015049	凋零指环（黄色）	EquipName_1015049	8	5	149	0	ui://2opvcgqb9m1r3cr			0		
+1015051	近卫头盔（黄色）	EquipName_1015051	0	5	151	0	ui://2opvcgqb9m1r3bf		2	0	10531	
+1015052	近卫胸甲（黄色）	EquipName_1015052	2	5	152	0	ui://2opvcgqb9m1r3bg		2	0	10533	
+1015053	近卫手套（黄色）	EquipName_1015053	4	5	153	0	ui://2opvcgqb9m1r3cc		2	0	10532	
+1015054	近卫腰带（黄色）	EquipName_1015054	5	5	154	0	ui://2opvcgqb9m1r3cg		2	0		
+1015055	近卫裤子（黄色）	EquipName_1015055	6	5	155	0	ui://2opvcgqb9m1r3ae		2	0	10534	
+1015056	近卫鞋子（黄色）	EquipName_1015056	7	5	156	0	ui://2opvcgqb9m1r3ac		2	0	10535	
+1015057	鸢盾护腕（黄色）	EquipName_1015057	3	5	157	0	ui://2opvcgqb9m1r3cf		17	0		
+1015058	守护徽章（黄色）	EquipName_1015058	1	5	158	0	ui://2opvcgqb9m1r3ag		17	0		
+1015059	忠诚指环（黄色）	EquipName_1015059	8	5	159	0	ui://2opvcgqb9m1r3ad		17	0		
+1016001	游侠头盔（橙色）	EquipName_1014001	0	6	101	0	ui://2opvcgqbdweg306			0	10401	
+1016002	游侠胸甲（橙色）	EquipName_1014002	2	6	102	0	ui://2opvcgqbdweg308			0		
+1016003	游侠手套（橙色）	EquipName_1014003	4	6	103	0	ui://2opvcgqbdweg307			0	10403	
+1016004	游侠腰带（橙色）	EquipName_1014004	5	6	104	0	ui://2opvcgqbdweg30a			0		
+1016005	游侠裤子（橙色）	EquipName_1014005	6	6	105	0	ui://2opvcgqbdweg304			0	10402	
+1016006	游侠鞋子（橙色）	EquipName_1014006	7	6	106	0	ui://2opvcgqbdweg302			0		
+1016007	软皮护腕（橙色）	EquipName_1014007	3	6	107	0	ui://2opvcgqbdweg309			0	10404	
+1016008	游隼羽坠（橙色）	EquipName_1014008	1	6	108	0	ui://2opvcgqbdweg305			0	10405	
+1016009	猎弦指环（橙色）	EquipName_1014009	8	6	109	0	ui://2opvcgqbdweg303			0		
+1016011	角斗士头盔（橙色）	EquipName_1014011	0	6	111	0	ui://2opvcgqbdweg2zx		1	0	10411	
+1016012	角斗士胸甲（橙色）	EquipName_1014012	2	6	112	0	ui://2opvcgqbdweg2zz		1	0		
+1016013	角斗士手套（橙色）	EquipName_1014013	4	6	113	0	ui://2opvcgqbdweg2zy		1	0	10413	
+1016014	角斗士腰带（橙色）	EquipName_1014014	5	6	114	0	ui://2opvcgqbdweg301		1	0		
+1016015	角斗士裤子（橙色）	EquipName_1014015	6	6	115	0	ui://2opvcgqbdweg2zv		1	0	10412	
+1016016	角斗士鞋子（橙色）	EquipName_1014016	7	6	116	0	ui://2opvcgqbdweg2z6		1	0		
+1016017	碎骨缚腕（橙色）	EquipName_1014017	3	6	117	0	ui://2opvcgqbdweg300		16	0	10414	
+1016018	铁棘指环（橙色）	EquipName_1014018	1	6	118	0	ui://2opvcgqbdweg2zw		16	0	10415	
+1016019	斗兽徽记（橙色）	EquipName_1014019	8	6	119	0	ui://2opvcgqbdweg2z7		16	0		
+1016020	角斗士披风（橙色）	EquipName_1014020	9	6	120	0	ui://2opvcgqbkry03ep			0	10416	
+1016021	勇气头盔（橙色）	EquipName_1014021	0	6	121	0	ui://2opvcgqb9m1r3c7			0	10431	
+1016022	勇气胸甲（橙色）	EquipName_1014022	2	6	122	0	ui://2opvcgqb9m1r3c9			0		
+1016023	勇气手套（橙色）	EquipName_1014023	4	6	123	0	ui://2opvcgqb9m1r3c8			0	10433	
+1016024	勇气腰带（橙色）	EquipName_1014024	5	6	124	0	ui://2opvcgqb9m1r39k			0		
+1016025	勇气裤子（橙色）	EquipName_1014025	6	6	125	0	ui://2opvcgqb9m1r3c5			0	10432	
+1016026	勇气鞋子（橙色）	EquipName_1014026	7	6	126	0	ui://2opvcgqb9m1r3c3			0		
+1016027	铁箍护腕（橙色）	EquipName_1014027	3	6	127	0	ui://2opvcgqb9m1r3ca			0	10434	
+1016028	狮心吊坠（橙色）	EquipName_1014028	1	6	128	0	ui://2opvcgqb9m1r3c6			0	10435	
+1016029	誓言指环（橙色）	EquipName_1014029	8	6	129	0	ui://2opvcgqb9m1r3c4			0		
+1016031	无畏头盔（橙色）	EquipName_1015031	0	6	131	0	ui://2opvcgqbdweg2ye			0	10511	
+1016032	无畏胸甲（橙色）	EquipName_1015032	2	6	132	0	ui://2opvcgqbdweg2yg			0		
+1016033	无畏手套（橙色）	EquipName_1015033	4	6	133	0	ui://2opvcgqbdweg2yf			0	10513	
+1016034	无畏腰带（橙色）	EquipName_1015034	5	6	134	0	ui://2opvcgqbdweg2z5			0		
+1016035	无畏裤子（橙色）	EquipName_1015035	6	6	135	0	ui://2opvcgqbdweg2yc			0	10512	
+1016036	无畏鞋子（橙色）	EquipName_1015036	7	6	136	0	ui://2opvcgqbdweg2ya			0		
+1016037	铁壁护腕（橙色）	EquipName_1015037	3	6	137	0	ui://2opvcgqbdweg2z4			0	10514	
+1016038	狮鹫徽记（橙色）	EquipName_1015038	1	6	138	0	ui://2opvcgqbdweg2yd			0	10515	
+1016039	不屈指环（橙色）	EquipName_1015039	8	6	139	0	ui://2opvcgqbdweg2yb			0		
+1016041	湮灭头盔（橙色）	EquipName_1015041	0	6	141	0	ui://2opvcgqb9m1r3d9			0	10521	
+1016042	湮灭胸甲（橙色）	EquipName_1015042	2	6	142	0	ui://2opvcgqb9m1r3cw			0		
+1016043	湮灭手套（橙色）	EquipName_1015043	4	6	143	0	ui://2opvcgqb9m1r3cv			0	10523	
+1016044	湮灭腰带（橙色）	EquipName_1015044	5	6	144	0	ui://2opvcgqb9m1r3cy			0		
+1016045	湮灭裤子（橙色）	EquipName_1015045	6	6	145	0	ui://2opvcgqb9m1r3cs			0	10522	
+1016046	湮灭鞋子（橙色）	EquipName_1015046	7	6	146	0	ui://2opvcgqb9m1r3cq			0		
+1016047	暗蚀护腕（橙色）	EquipName_1015047	3	6	147	0	ui://2opvcgqb9m1r3cx			0	10524	
+1016048	虚空之眼（橙色）	EquipName_1015048	1	6	148	0	ui://2opvcgqb9m1r3cu			0	10525	
+1016049	凋零指环（橙色）	EquipName_1015049	8	6	149	0	ui://2opvcgqb9m1r3cr			0		
+1016051	近卫头盔（橙色）	EquipName_1015051	0	6	151	0	ui://2opvcgqb9m1r3bf		2	0	10531	
+1016052	近卫胸甲（橙色）	EquipName_1015052	2	6	152	0	ui://2opvcgqb9m1r3bg		2	0		
+1016053	近卫手套（橙色）	EquipName_1015053	4	6	153	0	ui://2opvcgqb9m1r3cc		2	0	10533	
+1016054	近卫腰带（橙色）	EquipName_1015054	5	6	154	0	ui://2opvcgqb9m1r3cg		2	0		
+1016055	近卫裤子（橙色）	EquipName_1015055	6	6	155	0	ui://2opvcgqb9m1r3ae		2	0	10532	
+1016056	近卫鞋子（橙色）	EquipName_1015056	7	6	156	0	ui://2opvcgqb9m1r3ac		2	0		
+1016057	鸢盾护腕（橙色）	EquipName_1015057	3	6	157	0	ui://2opvcgqb9m1r3cf		17	0	10534	
+1016058	守护徽章（橙色）	EquipName_1015058	1	6	158	0	ui://2opvcgqb9m1r3ag		17	0	10535	
+1016059	忠诚指环（橙色）	EquipName_1015059	8	6	159	0	ui://2opvcgqb9m1r3ad		17	0		
+1016061	星术师帽子（橙色）	EquipName_1016061	0	6	161	0	ui://2opvcgqb9m1r3bp			0	10441	
+1016062	星术师胸甲（橙色）	EquipName_1016062	2	6	162	0	ui://2opvcgqb9m1r3br			0	10443	
+1016063	星术师手套（橙色）	EquipName_1016063	4	6	163	0	ui://2opvcgqb9m1r3bq			0	10442	
+1016064	星术师腰带（橙色）	EquipName_1016064	5	6	164	0	ui://2opvcgqb9m1r3bt			0		
+1016065	星术师裤子（橙色）	EquipName_1016065	6	6	165	0	ui://2opvcgqb9m1r3bn			0	10444	
+1016066	星术师鞋子（橙色）	EquipName_1016066	7	6	166	0	ui://2opvcgqb9m1r3bl			0	10445	
+1016067	星辉护腕（橙色）	EquipName_1016067	3	6	167	0	ui://2opvcgqb9m1r3bs			0		
+1016068	星轨吊坠（橙色）	EquipName_1016068	1	6	168	0	ui://2opvcgqb9m1r3bo			0		
+1016069	占星指环（橙色）	EquipName_1016069	8	6	169	0	ui://2opvcgqb9m1r3bm			0		
+1016070	星术师披风（橙色）	EquipName_1016070	9	6	170	0	ui://2opvcgqbkry03eo			0	10446	
+1016071	虚空头盔（橙色）	EquipName_1016071	0	6	171	0	ui://2opvcgqb9m1r3bv			0	10451	
+1016072	虚空胸甲（橙色）	EquipName_1016072	2	6	172	0	ui://2opvcgqb9m1r3bi			0	10453	
+1016073	虚空手套（橙色）	EquipName_1016073	4	6	173	0	ui://2opvcgqb9m1r3bh			0	10452	
+1016074	虚空腰带（橙色）	EquipName_1016074	5	6	174	0	ui://2opvcgqb9m1r3bk			0		
+1016075	虚空裤子（橙色）	EquipName_1016075	6	6	175	0	ui://2opvcgqb9m1r3ct			0	10454	
+1016076	虚空鞋子（橙色）	EquipName_1016076	7	6	176	0	ui://2opvcgqb9m1r3d8			0	10455	
+1016077	虚无缠腕（橙色）	EquipName_1016077	3	6	177	0	ui://2opvcgqb9m1r3bj			0		
+1016078	虚空之瞳（橙色）	EquipName_1016078	1	6	178	0	ui://2opvcgqb9m1r3cd			0		
+1016079	暗界指环（橙色）	EquipName_1016079	8	6	179	0	ui://2opvcgqb9m1r3ce			0		
+1016081	审判头盔（橙色）	EquipName_1016081	0	6	181	0	ui://2opvcgqbdweg2y5			0	10611	
+1016082	审判胸甲（橙色）	EquipName_1016082	2	6	182	0	ui://2opvcgqbdweg2y8			0	10613	
+1016083	审判手套（橙色）	EquipName_1016083	4	6	183	0	ui://2opvcgqbdweg2y6			0	10612	
+1016084	审判腰带（橙色）	EquipName_1016084	5	6	184	0	ui://2opvcgqbdweg2y9			0		
+1016085	审判裤子（橙色）	EquipName_1016085	6	6	185	0	ui://2opvcgqbdweg2y3			0	10614	
+1016086	审判鞋子（橙色）	EquipName_1016086	7	6	186	0	ui://2opvcgqbdweg2y1			0	10615	
+1016087	律法护腕（橙色）	EquipName_1016087	3	6	187	0	ui://2opvcgqbdweg2yh			0		
+1016088	裁决天秤（橙色）	EquipName_1016088	1	6	188	0	ui://2opvcgqbdweg2y4			0		
+1016089	公正指环（橙色）	EquipName_1016089	8	6	189	0	ui://2opvcgqbdweg2y2			0		
+1016090	审判披风（橙色）	EquipName_1016090	9	6	190	0	ui://2opvcgqbkry03eq			0	10616	
+1016091	血法头盔（橙色）	EquipName_1016091	0	6	191	0	ui://2opvcgqbdweg2yj		3	0	10621	
+1016092	血法胸甲（橙色）	EquipName_1016092	2	6	192	0	ui://2opvcgqbdweg2y7		3	0	10623	
+1016093	血法手套（橙色）	EquipName_1016093	4	6	193	0	ui://2opvcgqbdweg2yi		3	0	10622	
+1016094	血法腰带（橙色）	EquipName_1016094	5	6	194	0	ui://2opvcgqbdweg2y0		3	0	10624	
+1016095	血法裤子（橙色）	EquipName_1016095	6	6	195	0	ui://2opvcgqbdweg2z3		3	0	10625	
+1016096	血法鞋子（橙色）	EquipName_1016096	7	6	196	0	ui://2opvcgqbdweg2z1		3	0		
+1016097	血缚护腕（橙色）	EquipName_1016097	3	6	197	0	ui://2opvcgqbdweg2xz		18	0		
+1016098	噬血魂坠（橙色）	EquipName_1016098	1	6	198	0	ui://2opvcgqbdweg2yk		18	0		
+1016099	血誓指环（橙色）	EquipName_1016099	8	6	199	0	ui://2opvcgqbdweg2z2		18	0		
+1016101	领主头盔（橙色）	EquipName_1016101	0	6	201	0	ui://2opvcgqb9m1r3au		4	0	10641	
+1016102	领主胸甲（橙色）	EquipName_1016102	2	6	202	0	ui://2opvcgqb9m1r3aw		4	0	10643	
+1016103	领主手套（橙色）	EquipName_1016103	4	6	203	0	ui://2opvcgqb9m1r3av		4	0	10642	
+1016104	领主腰带（橙色）	EquipName_1016104	5	6	204	0	ui://2opvcgqb9m1r3bd		4	0		
+1016105	领主裤子（橙色）	EquipName_1016105	6	6	205	0	ui://2opvcgqb9m1r3as		4	0	10644	
+1016106	领主鞋子（橙色）	EquipName_1016106	7	6	206	0	ui://2opvcgqb9m1r3aq		4	0	10645	
+1016107	威仪臂铠（橙色）	EquipName_1016107	3	6	207	0	ui://2opvcgqb9m1r3ay		19	0		
+1016108	权柄坠饰（橙色）	EquipName_1016108	1	6	208	0	ui://2opvcgqb9m1r3at		19	0		
+1016109	权玺指环（橙色）	EquipName_1016109	8	6	209	0	ui://2opvcgqb9m1r3ar		19	0		
+1016110	领主披风（橙色）	EquipName_1016110	9	6	210	0	ui://2opvcgqbkry03es			0	10646	
+1017001	游侠头盔（红色）	EquipName_1014001	0	7	101	0	ui://2opvcgqbdweg306			0	10401	
+1017002	游侠胸甲（红色）	EquipName_1014002	2	7	102	0	ui://2opvcgqbdweg308			0		
+1017003	游侠手套（红色）	EquipName_1014003	4	7	103	0	ui://2opvcgqbdweg307			0	10403	
+1017004	游侠腰带（红色）	EquipName_1014004	5	7	104	0	ui://2opvcgqbdweg30a			0		
+1017005	游侠裤子（红色）	EquipName_1014005	6	7	105	0	ui://2opvcgqbdweg304			0	10402	
+1017006	游侠鞋子（红色）	EquipName_1014006	7	7	106	0	ui://2opvcgqbdweg302			0		
+1017007	软皮护腕（红色）	EquipName_1014007	3	7	107	0	ui://2opvcgqbdweg309			0	10404	
+1017008	游隼羽坠（红色）	EquipName_1014008	1	7	108	0	ui://2opvcgqbdweg305			0	10405	
+1017009	猎弦指环（红色）	EquipName_1014009	8	7	109	0	ui://2opvcgqbdweg303			0		
+1017011	角斗士头盔（红色）	EquipName_1014011	0	7	111	0	ui://2opvcgqbdweg2zx		1	0	10411	
+1017012	角斗士胸甲（红色）	EquipName_1014012	2	7	112	0	ui://2opvcgqbdweg2zz		1	0		
+1017013	角斗士手套（红色）	EquipName_1014013	4	7	113	0	ui://2opvcgqbdweg2zy		1	0	10413	
+1017014	角斗士腰带（红色）	EquipName_1014014	5	7	114	0	ui://2opvcgqbdweg301		1	0		
+1017015	角斗士裤子（红色）	EquipName_1014015	6	7	115	0	ui://2opvcgqbdweg2zv		1	0	10412	
+1017016	角斗士鞋子（红色）	EquipName_1014016	7	7	116	0	ui://2opvcgqbdweg2z6		1	0		
+1017017	碎骨缚腕（红色）	EquipName_1014017	3	7	117	0	ui://2opvcgqbdweg300		16	0	10414	
+1017018	铁棘指环（红色）	EquipName_1014018	1	7	118	0	ui://2opvcgqbdweg2zw		16	0	10415	
+1017019	斗兽徽记（红色）	EquipName_1014019	8	7	119	0	ui://2opvcgqbdweg2z7		16	0		
+1017020	角斗士披风（红色）	EquipName_1014020	9	7	120	0	ui://2opvcgqbkry03ep			0	10416	
+1017021	勇气头盔（红色）	EquipName_1014021	0	7	121	0	ui://2opvcgqb9m1r3c7			0	10431	
+1017022	勇气胸甲（红色）	EquipName_1014022	2	7	122	0	ui://2opvcgqb9m1r3c9			0		
+1017023	勇气手套（红色）	EquipName_1014023	4	7	123	0	ui://2opvcgqb9m1r3c8			0	10433	
+1017024	勇气腰带（红色）	EquipName_1014024	5	7	124	0	ui://2opvcgqb9m1r39k			0		
+1017025	勇气裤子（红色）	EquipName_1014025	6	7	125	0	ui://2opvcgqb9m1r3c5			0	10432	
+1017026	勇气鞋子（红色）	EquipName_1014026	7	7	126	0	ui://2opvcgqb9m1r3c3			0		
+1017027	铁箍护腕（红色）	EquipName_1014027	3	7	127	0	ui://2opvcgqb9m1r3ca			0	10434	
+1017028	狮心吊坠（红色）	EquipName_1014028	1	7	128	0	ui://2opvcgqb9m1r3c6			0	10435	
+1017029	誓言指环（红色）	EquipName_1014029	8	7	129	0	ui://2opvcgqb9m1r3c4			0		
+1017031	无畏头盔（红色）	EquipName_1015031	0	7	131	0	ui://2opvcgqbdweg2ye			0	10511	
+1017032	无畏胸甲（红色）	EquipName_1015032	2	7	132	0	ui://2opvcgqbdweg2yg			0		
+1017033	无畏手套（红色）	EquipName_1015033	4	7	133	0	ui://2opvcgqbdweg2yf			0	10513	
+1017034	无畏腰带（红色）	EquipName_1015034	5	7	134	0	ui://2opvcgqbdweg2z5			0		
+1017035	无畏裤子（红色）	EquipName_1015035	6	7	135	0	ui://2opvcgqbdweg2yc			0	10512	
+1017036	无畏鞋子（红色）	EquipName_1015036	7	7	136	0	ui://2opvcgqbdweg2ya			0		
+1017037	铁壁护腕（红色）	EquipName_1015037	3	7	137	0	ui://2opvcgqbdweg2z4			0	10514	
+1017038	狮鹫徽记（红色）	EquipName_1015038	1	7	138	0	ui://2opvcgqbdweg2yd			0	10515	
+1017039	不屈指环（红色）	EquipName_1015039	8	7	139	0	ui://2opvcgqbdweg2yb			0		
+1017041	湮灭头盔（红色）	EquipName_1015041	0	7	141	0	ui://2opvcgqb9m1r3d9			0	10521	
+1017042	湮灭胸甲（红色）	EquipName_1015042	2	7	142	0	ui://2opvcgqb9m1r3cw			0		
+1017043	湮灭手套（红色）	EquipName_1015043	4	7	143	0	ui://2opvcgqb9m1r3cv			0	10523	
+1017044	湮灭腰带（红色）	EquipName_1015044	5	7	144	0	ui://2opvcgqb9m1r3cy			0		
+1017045	湮灭裤子（红色）	EquipName_1015045	6	7	145	0	ui://2opvcgqb9m1r3cs			0	10522	
+1017046	湮灭鞋子（红色）	EquipName_1015046	7	7	146	0	ui://2opvcgqb9m1r3cq			0		
+1017047	暗蚀护腕（红色）	EquipName_1015047	3	7	147	0	ui://2opvcgqb9m1r3cx			0	10524	
+1017048	虚空之眼（红色）	EquipName_1015048	1	7	148	0	ui://2opvcgqb9m1r3cu			0	10525	
+1017049	凋零指环（红色）	EquipName_1015049	8	7	149	0	ui://2opvcgqb9m1r3cr			0		
+1017051	近卫头盔（红色）	EquipName_1015051	0	7	151	0	ui://2opvcgqb9m1r3bf		2	0	10531	
+1017052	近卫胸甲（红色）	EquipName_1015052	2	7	152	0	ui://2opvcgqb9m1r3bg		2	0		
+1017053	近卫手套（红色）	EquipName_1015053	4	7	153	0	ui://2opvcgqb9m1r3cc		2	0	10533	
+1017054	近卫腰带（红色）	EquipName_1015054	5	7	154	0	ui://2opvcgqb9m1r3cg		2	0		
+1017055	近卫裤子（红色）	EquipName_1015055	6	7	155	0	ui://2opvcgqb9m1r3ae		2	0	10532	
+1017056	近卫鞋子（红色）	EquipName_1015056	7	7	156	0	ui://2opvcgqb9m1r3ac		2	0		
+1017057	鸢盾护腕（红色）	EquipName_1015057	3	7	157	0	ui://2opvcgqb9m1r3cf		17	0	10534	
+1017058	守护徽章（红色）	EquipName_1015058	1	7	158	0	ui://2opvcgqb9m1r3ag		17	0	10535	
+1017059	忠诚指环（红色）	EquipName_1015059	8	7	159	0	ui://2opvcgqb9m1r3ad		17	0		
+1017061	星术师帽子（红色）	EquipName_1016061	0	7	161	0	ui://2opvcgqb9m1r3bp			0	10441	
+1017062	星术师胸甲（红色）	EquipName_1016062	2	7	162	0	ui://2opvcgqb9m1r3br			0		
+1017063	星术师手套（红色）	EquipName_1016063	4	7	163	0	ui://2opvcgqb9m1r3bq			0	10443	
+1017064	星术师腰带（红色）	EquipName_1016064	5	7	164	0	ui://2opvcgqb9m1r3bt			0		
+1017065	星术师裤子（红色）	EquipName_1016065	6	7	165	0	ui://2opvcgqb9m1r3bn			0	10442	
+1017066	星术师鞋子（红色）	EquipName_1016066	7	7	166	0	ui://2opvcgqb9m1r3bl			0		
+1017067	星辉护腕（红色）	EquipName_1016067	3	7	167	0	ui://2opvcgqb9m1r3bs			0	10444	
+1017068	星轨吊坠（红色）	EquipName_1016068	1	7	168	0	ui://2opvcgqb9m1r3bo			0	10445	
+1017069	占星指环（红色）	EquipName_1016069	8	7	169	0	ui://2opvcgqb9m1r3bm			0		
+1017070	星术师披风（红色）	EquipName_1016070	9	7	170	0	ui://2opvcgqbkry03eo			0	10446	
+1017071	虚空头盔（红色）	EquipName_1016071	0	7	171	0	ui://2opvcgqb9m1r3bv			0	10451	
+1017072	虚空胸甲（红色）	EquipName_1016072	2	7	172	0	ui://2opvcgqb9m1r3bi			0		
+1017073	虚空手套（红色）	EquipName_1016073	4	7	173	0	ui://2opvcgqb9m1r3bh			0	10453	
+1017074	虚空腰带（红色）	EquipName_1016074	5	7	174	0	ui://2opvcgqb9m1r3bk			0		
+1017075	虚空裤子（红色）	EquipName_1016075	6	7	175	0	ui://2opvcgqb9m1r3ct			0	10452	
+1017076	虚空鞋子（红色）	EquipName_1016076	7	7	176	0	ui://2opvcgqb9m1r3d8			0		
+1017077	虚无缠腕（红色）	EquipName_1016077	3	7	177	0	ui://2opvcgqb9m1r3bj			0	10454	
+1017078	虚空之瞳（红色）	EquipName_1016078	1	7	178	0	ui://2opvcgqb9m1r3cd			0	10455	
+1017079	暗界指环（红色）	EquipName_1016079	8	7	179	0	ui://2opvcgqb9m1r3ce			0		
+1017081	审判头盔（红色）	EquipName_1016081	0	7	181	0	ui://2opvcgqbdweg2y5			0	10611	
+1017082	审判胸甲（红色）	EquipName_1016082	2	7	182	0	ui://2opvcgqbdweg2y8			0		
+1017083	审判手套（红色）	EquipName_1016083	4	7	183	0	ui://2opvcgqbdweg2y6			0	10613	
+1017084	审判腰带（红色）	EquipName_1016084	5	7	184	0	ui://2opvcgqbdweg2y9			0		
+1017085	审判裤子（红色）	EquipName_1016085	6	7	185	0	ui://2opvcgqbdweg2y3			0	10612	
+1017086	审判鞋子（红色）	EquipName_1016086	7	7	186	0	ui://2opvcgqbdweg2y1			0		
+1017087	律法护腕（红色）	EquipName_1016087	3	7	187	0	ui://2opvcgqbdweg2yh			0	10614	
+1017088	裁决天秤（红色）	EquipName_1016088	1	7	188	0	ui://2opvcgqbdweg2y4			0	10615	
+1017089	公正指环（红色）	EquipName_1016089	8	7	189	0	ui://2opvcgqbdweg2y2			0		
+1017090	审判披风（红色）	EquipName_1016090	9	7	190	0	ui://2opvcgqbkry03eq			0	10616	
+1017091	血法头盔（红色）	EquipName_1016091	0	7	191	0	ui://2opvcgqbdweg2yj		3	0	10621	
+1017092	血法胸甲（红色）	EquipName_1016092	2	7	192	0	ui://2opvcgqbdweg2y7		3	0		
+1017093	血法手套（红色）	EquipName_1016093	4	7	193	0	ui://2opvcgqbdweg2yi		3	0	10623	
+1017094	血法腰带（红色）	EquipName_1016094	5	7	194	0	ui://2opvcgqbdweg2y0		3	0		
+1017095	血法裤子（红色）	EquipName_1016095	6	7	195	0	ui://2opvcgqbdweg2z3		3	0	10622	
+1017096	血法鞋子（红色）	EquipName_1016096	7	7	196	0	ui://2opvcgqbdweg2z1		3	0	10624	
+1017097	血缚护腕（红色）	EquipName_1016097	3	7	197	0	ui://2opvcgqbdweg2xz		18	0	10625	
+1017098	噬血魂坠（红色）	EquipName_1016098	1	7	198	0	ui://2opvcgqbdweg2yk		18	0		
+1017099	血誓指环（红色）	EquipName_1016099	8	7	199	0	ui://2opvcgqbdweg2z2		18	0		
+1017101	领主头盔（红色）	EquipName_1016101	0	7	201	0	ui://2opvcgqb9m1r3au		4	0	10641	
+1017102	领主胸甲（红色）	EquipName_1016102	2	7	202	0	ui://2opvcgqb9m1r3aw		4	0		
+1017103	领主手套（红色）	EquipName_1016103	4	7	203	0	ui://2opvcgqb9m1r3av		4	0	10643	
+1017104	领主腰带（红色）	EquipName_1016104	5	7	204	0	ui://2opvcgqb9m1r3bd		4	0		
+1017105	领主裤子（红色）	EquipName_1016105	6	7	205	0	ui://2opvcgqb9m1r3as		4	0	10642	
+1017106	领主鞋子（红色）	EquipName_1016106	7	7	206	0	ui://2opvcgqb9m1r3aq		4	0		
+1017107	威仪臂铠（红色）	EquipName_1016107	3	7	207	0	ui://2opvcgqb9m1r3ay		19	0	10644	
+1017108	权柄坠饰（红色）	EquipName_1016108	1	7	208	0	ui://2opvcgqb9m1r3at		19	0	10645	
+1017109	权玺指环（红色）	EquipName_1016109	8	7	209	0	ui://2opvcgqb9m1r3ar		19	0		
+1017110	领主披风（红色）	EquipName_1016110	9	7	210	0	ui://2opvcgqbkry03es			0	10646	
+1017111	伯爵头盔（红色）	EquipName_1017111	0	7	211	0	ui://2opvcgqb9m1r3a7		5	0	10631	
+1017112	伯爵胸甲（红色）	EquipName_1017112	2	7	212	0	ui://2opvcgqb9m1r3a9		5	0	10633	
+1017113	伯爵手套（红色）	EquipName_1017113	4	7	213	0	ui://2opvcgqb9m1r3a8		5	0	10632	
+1017114	伯爵腰带（红色）	EquipName_1017114	5	7	214	0	ui://2opvcgqb9m1r3ab		5	0		
+1017115	伯爵裤子（红色）	EquipName_1017115	6	7	215	0	ui://2opvcgqb9m1r3a5		5	0	10634	
+1017116	伯爵鞋子（红色）	EquipName_1017116	7	7	216	0	ui://2opvcgqb9m1r3a3		5	0	10635	
+1017117	永夜裹腕（红色）	EquipName_1017117	3	7	217	0	ui://2opvcgqb9m1r3aa		20	0		
+1017118	永夜蔷薇（红色）	EquipName_1017118	1	7	218	0	ui://2opvcgqb9m1r3a6		20	0		
+1017119	猩红徽记（红色）	EquipName_1017119	8	7	219	0	ui://2opvcgqb9m1r3a4		20	0		
+1017121	狼人头盔（红色）	EquipName_1017121	0	7	221	0	ui://2opvcgqb9m1r3cl		6	0	10501	
+1017122	狼人胸甲（红色）	EquipName_1017122	2	7	222	0	ui://2opvcgqb9m1r3cn		6	0	10503	
+1017123	狼人手套（红色）	EquipName_1017123	4	7	223	0	ui://2opvcgqb9m1r3cm		6	0	10502	
+1017124	狼人腰带（红色）	EquipName_1017124	5	7	224	0	ui://2opvcgqb9m1r3cp		6	0		
+1017125	狼人裤子（红色）	EquipName_1017125	6	7	225	0	ui://2opvcgqb9m1r3cj		6	0	10504	
+1017126	狼人鞋子（红色）	EquipName_1017126	7	7	226	0	ui://2opvcgqb9m1r3ch		6	0		
+1017127	狂化臂缚（红色）	EquipName_1017127	3	7	227	0	ui://2opvcgqb9m1r3co		21	0		
+1017128	满月之嚎（红色）	EquipName_1017128	1	7	228	0	ui://2opvcgqb9m1r3ck		21	0		
+1017129	月契之戒（红色）	EquipName_1017129	8	7	229	0	ui://2opvcgqb9m1r3ci		21	0		
+1017131	忍者兜帽（红色）	EquipName_1017131	0	7	231	0	ui://2opvcgqb9m1r3by		7	0	10421	
+1017132	忍者胸甲（红色）	EquipName_1017132	2	7	232	0	ui://2opvcgqb9m1r3c0		7	0	10423	
+1017133	忍者手套（红色）	EquipName_1017133	4	7	233	0	ui://2opvcgqb9m1r3bz		7	0	10422	
+1017134	忍者腰带（红色）	EquipName_1017134	5	7	234	0	ui://2opvcgqb9m1r3c2		7	0		
+1017135	忍者裤子（红色）	EquipName_1017135	6	7	235	0	ui://2opvcgqb9m1r3cb		7	0	10424	
+1017136	忍者鞋子（红色）	EquipName_1017136	7	7	236	0	ui://2opvcgqb9m1r3bu		7	0	10425	
+1017137	暗杀裹手（红色）	EquipName_1017137	3	7	237	0	ui://2opvcgqb9m1r3c1		22	0		
+1017138	胧影勾玉（红色）	EquipName_1017138	1	7	238	0	ui://2opvcgqb9m1r3bx		22	0		
+1017139	断息指环（红色）	EquipName_1017139	8	7	239	0	ui://2opvcgqb9m1r3bw		22	0		
+1017140	忍者披风（红色）	EquipName_1017140	9	7	240	0	ui://2opvcgqbkry03en			0	10426	
+1017141	灵风头盔（红色）	EquipName_1017141	0	7	241	0	ui://2opvcgqbdweg2yn		8	0	10711	
+1017142	灵风胸甲（红色）	EquipName_1017142	2	7	242	0	ui://2opvcgqbdweg2yp		8	0	10713	
+1017143	灵风手套（红色）	EquipName_1017143	4	7	243	0	ui://2opvcgqbdweg2yo		8	0	10712	
+1017144	灵风腰带（红色）	EquipName_1017144	5	7	244	0	ui://2opvcgqbdweg2yr		8	0		
+1017145	灵风裤子（红色）	EquipName_1017145	6	7	245	0	ui://2opvcgqbdweg2yl		8	0	10714	
+1017146	灵风鞋子（红色）	EquipName_1017146	7	7	246	0	ui://2opvcgqbdweg30f		8	0	10715	
+1017147	羽织护腕（红色）	EquipName_1017147	3	7	247	0	ui://2opvcgqbdweg2yq		23	0		
+1017148	风语吊坠（红色）	EquipName_1017148	1	7	248	0	ui://2opvcgqbdweg2ym		23	0		
+1017149	风痕之戒（红色）	EquipName_1017149	8	7	249	0	ui://2opvcgqbdweg2zs		23	0		
+1017150	灵风披风（红色）	EquipName_1017150	9	7	250	0	ui://2opvcgqbkry03eu			0	10706	
+1017151	暗影头盔（红色）	EquipName_1017151	0	7	251	0	ui://2opvcgqbdweg2yw		9	0	10721	
+1017152	暗影胸甲（红色）	EquipName_1017152	2	7	252	0	ui://2opvcgqbdweg2yy		9	0	10723	
+1017153	暗影手套（红色）	EquipName_1017153	4	7	253	0	ui://2opvcgqbdweg2yx		9	0	10722	
+1017154	暗影腰带（红色）	EquipName_1017154	5	7	254	0	ui://2opvcgqbdweg2z0		9	0		
+1017155	暗影裤子（红色）	EquipName_1017155	6	7	255	0	ui://2opvcgqbdweg2yu		9	0	10724	
+1017156	暗影鞋子（红色）	EquipName_1017156	7	7	256	0	ui://2opvcgqbdweg2ys		9	0	10725	
+1017157	暗缚裹腕（红色）	EquipName_1017157	3	7	257	0	ui://2opvcgqbdweg2yz		24	0		
+1017158	影核之心（红色）	EquipName_1017158	1	7	258	0	ui://2opvcgqbdweg2yv		24	0		
+1017159	幽影之戒（红色）	EquipName_1017159	8	7	259	0	ui://2opvcgqbdweg2yt		24	0		
+1017161	愤怒头盔（红色）	EquipName_1017161	0	7	261	0	ui://2opvcgqb9m1r39p		10	0	10601	
+1017162	愤怒胸甲（红色）	EquipName_1017162	2	7	262	0	ui://2opvcgqb9m1r39r		10	0	10603	
+1017163	愤怒手套（红色）	EquipName_1017163	4	7	263	0	ui://2opvcgqb9m1r39q		10	0	10602	
+1017164	愤怒腰带（红色）	EquipName_1017164	5	7	264	0	ui://2opvcgqb9m1r39t		10	0		
+1017165	愤怒裤子（红色）	EquipName_1017165	6	7	265	0	ui://2opvcgqb9m1r39n		10	0	10604	
+1017166	愤怒鞋子（红色）	EquipName_1017166	7	7	266	0	ui://2opvcgqb9m1r39l		10	0	10605	
+1017167	怒痕护腕（红色）	EquipName_1017167	3	7	267	0	ui://2opvcgqb9m1r39s		25	0		
+1017168	怒焰心坠（红色）	EquipName_1017168	1	7	268	0	ui://2opvcgqb9m1r39o		25	0		
+1017169	怒火焚戒（红色）	EquipName_1017169	8	7	269	0	ui://2opvcgqb9m1r39m		25	0		
+1017171	恐惧头盔（红色）	EquipName_1017171	0	7	271	0	ui://2opvcgqb9m1r3d3		11	0	10541	
+1017172	恐惧胸甲（红色）	EquipName_1017172	2	7	272	0	ui://2opvcgqb9m1r3d5		11	0	10543	
+1017173	恐惧手套（红色）	EquipName_1017173	4	7	273	0	ui://2opvcgqb9m1r3d4		11	0	10542	
+1017174	恐惧腰带（红色）	EquipName_1017174	5	7	274	0	ui://2opvcgqb9m1r3d7		11	0		
+1017175	恐惧裤子（红色）	EquipName_1017175	6	7	275	0	ui://2opvcgqb9m1r3d1		11	0	10544	
+1017176	恐惧鞋子（红色）	EquipName_1017176	7	7	276	0	ui://2opvcgqb9m1r3cz		11	0	10545	
+1017177	深渊缠腕（红色）	EquipName_1017177	3	7	277	0	ui://2opvcgqb9m1r3d6		26	0		
+1017178	梦魇吊坠（红色）	EquipName_1017178	1	7	278	0	ui://2opvcgqb9m1r3d2		26	0		
+1017179	战栗之戒（红色）	EquipName_1017179	8	7	279	0	ui://2opvcgqb9m1r3d0		26	0		
+1017181	厄运头盔（红色）	EquipName_1017181	0	7	281	0	ui://2opvcgqb9m1r39y		13	0	10661	
+1017182	厄运胸甲（红色）	EquipName_1017182	2	7	282	0	ui://2opvcgqb9m1r3af		13	0	10663	
+1017183	厄运手套（红色）	EquipName_1017183	4	7	283	0	ui://2opvcgqb9m1r3a0		13	0	10662	
+1017184	厄运腰带（红色）	EquipName_1017184	5	7	284	0	ui://2opvcgqb9m1r3a2		13	0		
+1017185	厄运裤子（红色）	EquipName_1017185	6	7	285	0	ui://2opvcgqb9m1r39w		13	0	10664	
+1017186	厄运鞋子（红色）	EquipName_1017186	7	7	286	0	ui://2opvcgqb9m1r39u		13	0	10665	
+1017187	诅咒缠腕（红色）	EquipName_1017187	3	7	287	0	ui://2opvcgqb9m1r3a1		28	0		
+1017188	永咒厄坠（红色）	EquipName_1017188	1	7	288	0	ui://2opvcgqb9m1r39x		28	0		
+1017189	命劫之戒（红色）	EquipName_1017189	8	7	289	0	ui://2opvcgqb9m1r39w		28	0		
+1017191	君王头盔（红色）	EquipName_1017191	0	7	291	0	ui://2opvcgqb9m1r3al		12	0	10721	
+1017192	君王胸甲（红色）	EquipName_1017192	2	7	292	0	ui://2opvcgqb9m1r3an		12	0	10723	
+1017193	君王手套（红色）	EquipName_1017193	4	7	293	0	ui://2opvcgqb9m1r3am		12	0	10722	
+1017194	君王腰带（红色）	EquipName_1017194	5	7	294	0	ui://2opvcgqb9m1r3ap		12	0		
+1017195	君王裤子（红色）	EquipName_1017195	6	7	295	0	ui://2opvcgqb9m1r3aj		12	0	10724	
+1017196	君王鞋子（红色）	EquipName_1017196	7	7	296	0	ui://2opvcgqb9m1r3da		12	0	10725	
+1017197	神谕臂铠（红色）	EquipName_1017197	3	7	297	0	ui://2opvcgqb9m1r3ao		27	0		
+1017198	天命星坠（红色）	EquipName_1017198	1	7	298	0	ui://2opvcgqb9m1r3ak		27	0		
+1017199	至尊华戒（红色）	EquipName_1017199	8	7	299	0	ui://2opvcgqb9m1r3be		27	0		
+1017200	君王披风（红色）	EquipName_1017200	9	7	300	0	ui://2opvcgqbkry03et			0	10726	
+1017201	追猎者头盔（红色）	EquipName_1017201	0	7	301	0	ui://2opvcgqb9m1r3b3		14	0	10651	
+1017202	追猎者胸甲（红色）	EquipName_1017202	2	7	302	0	ui://2opvcgqb9m1r3b5		14	0	10653	
+1017203	追猎者手套（红色）	EquipName_1017203	4	7	303	0	ui://2opvcgqb9m1r3b4		14	0	10652	
+1017204	追猎者腰带（红色）	EquipName_1017204	5	7	304	0	ui://2opvcgqb9m1r3b7		14	0		
+1017205	追猎者裤子（红色）	EquipName_1017205	6	7	305	0	ui://2opvcgqb9m1r3b1		14	0		
+1017206	追猎者鞋子（红色）	EquipName_1017206	7	7	306	0	ui://2opvcgqb9m1r3az		14	0	10655	
+1017207	猎杀缚腕（红色）	EquipName_1017207	3	7	307	0	ui://2opvcgqb9m1r3b6		29	0		
+1017208	狩猎之心（红色）	EquipName_1017208	1	7	308	0	ui://2opvcgqb9m1r3b2		29	0		
+1017209	猎物之瞳（红色）	EquipName_1017209	8	7	309	0	ui://2opvcgqb9m1r3b0		29	0		
+1017210	追猎者披风（红色）	EquipName_1017210	9	7	310	0	ui://2opvcgqbkry03er			0	10656	
+1017211	瘟疫头盔（红色）	EquipName_1017211	0	7	311	0	ui://2opvcgqb9m1r3ai		15	0	10671	
+1017212	瘟疫胸甲（红色）	EquipName_1017212	2	7	312	0	ui://2opvcgqb9m1r3ah		15	0	10673	
+1017213	瘟疫手套（红色）	EquipName_1017213	4	7	313	0	ui://2opvcgqb9m1r3ax		15	0	10672	
+1017214	瘟疫腰带（红色）	EquipName_1017214	5	7	314	0	ui://2opvcgqb9m1r3bb		15	0		
+1017215	瘟疫裤子（红色）	EquipName_1017215	6	7	315	0	ui://2opvcgqb9m1r3ba		15	0	10674	
+1017216	瘟疫鞋子（红色）	EquipName_1017216	7	7	316	0	ui://2opvcgqb9m1r3b8		15	0	10675	
+1017217	腐朽缚腕（红色）	EquipName_1017217	3	7	317	0	ui://2opvcgqb9m1r39z		30	0		
+1017218	疫病之源（红色）	EquipName_1017218	1	7	318	0	ui://2opvcgqb9m1r3bc		30	0		
+1017219	腐朽印戒（红色）	EquipName_1017219	8	7	319	0	ui://2opvcgqb9m1r3b9		30	0		
+1018001	游侠头盔（彩色）	EquipName_1014001	0	8	101	0	ui://2opvcgqbdweg306			0	10401	
+1018002	游侠胸甲（彩色）	EquipName_1014002	2	8	102	0	ui://2opvcgqbdweg308			0		
+1018003	游侠手套（彩色）	EquipName_1014003	4	8	103	0	ui://2opvcgqbdweg307			0	10403	
+1018004	游侠腰带（彩色）	EquipName_1014004	5	8	104	0	ui://2opvcgqbdweg30a			0		
+1018005	游侠裤子（彩色）	EquipName_1014005	6	8	105	0	ui://2opvcgqbdweg304			0	10402	
+1018006	游侠鞋子（彩色）	EquipName_1014006	7	8	106	0	ui://2opvcgqbdweg302			0		
+1018007	软皮护腕（彩色）	EquipName_1014007	3	8	107	0	ui://2opvcgqbdweg309			0	10404	
+1018008	游隼羽坠（彩色）	EquipName_1014008	1	8	108	0	ui://2opvcgqbdweg305			0	10405	
+1018009	猎弦指环（彩色）	EquipName_1014009	8	8	109	0	ui://2opvcgqbdweg303			0		
+1018011	角斗士头盔（彩色）	EquipName_1014011	0	8	111	0	ui://2opvcgqbdweg2zx		1	0	10411	
+1018012	角斗士胸甲（彩色）	EquipName_1014012	2	8	112	0	ui://2opvcgqbdweg2zz		1	0		
+1018013	角斗士手套（彩色）	EquipName_1014013	4	8	113	0	ui://2opvcgqbdweg2zy		1	0	10413	
+1018014	角斗士腰带（彩色）	EquipName_1014014	5	8	114	0	ui://2opvcgqbdweg301		1	0		
+1018015	角斗士裤子（彩色）	EquipName_1014015	6	8	115	0	ui://2opvcgqbdweg2zv		1	0	10412	
+1018016	角斗士鞋子（彩色）	EquipName_1014016	7	8	116	0	ui://2opvcgqbdweg2z6		1	0		
+1018017	碎骨缚腕（彩色）	EquipName_1014017	3	8	117	0	ui://2opvcgqbdweg300		16	0	10414	
+1018018	铁棘指环（彩色）	EquipName_1014018	1	8	118	0	ui://2opvcgqbdweg2zw		16	0	10415	
+1018019	斗兽徽记（彩色）	EquipName_1014019	8	8	119	0	ui://2opvcgqbdweg2z7		16	0		
+1018020	角斗士披风（彩色）	EquipName_1014020	9	8	120	0	ui://2opvcgqbkry03ep			0	10416	
+1018021	勇气头盔（彩色）	EquipName_1014021	0	8	121	0	ui://2opvcgqb9m1r3c7			0	10431	
+1018022	勇气胸甲（彩色）	EquipName_1014022	2	8	122	0	ui://2opvcgqb9m1r3c9			0		
+1018023	勇气手套（彩色）	EquipName_1014023	4	8	123	0	ui://2opvcgqb9m1r3c8			0	10433	
+1018024	勇气腰带（彩色）	EquipName_1014024	5	8	124	0	ui://2opvcgqb9m1r39k			0		
+1018025	勇气裤子（彩色）	EquipName_1014025	6	8	125	0	ui://2opvcgqb9m1r3c5			0	10432	
+1018026	勇气鞋子（彩色）	EquipName_1014026	7	8	126	0	ui://2opvcgqb9m1r3c3			0		
+1018027	铁箍护腕（彩色）	EquipName_1014027	3	8	127	0	ui://2opvcgqb9m1r3ca			0	10434	
+1018028	狮心吊坠（彩色）	EquipName_1014028	1	8	128	0	ui://2opvcgqb9m1r3c6			0	10435	
+1018029	誓言指环（彩色）	EquipName_1014029	8	8	129	0	ui://2opvcgqb9m1r3c4			0		
+1018031	无畏头盔（彩色）	EquipName_1015031	0	8	131	0	ui://2opvcgqbdweg2ye			0	10511	
+1018032	无畏胸甲（彩色）	EquipName_1015032	2	8	132	0	ui://2opvcgqbdweg2yg			0		
+1018033	无畏手套（彩色）	EquipName_1015033	4	8	133	0	ui://2opvcgqbdweg2yf			0	10513	
+1018034	无畏腰带（彩色）	EquipName_1015034	5	8	134	0	ui://2opvcgqbdweg2z5			0		
+1018035	无畏裤子（彩色）	EquipName_1015035	6	8	135	0	ui://2opvcgqbdweg2yc			0	10512	
+1018036	无畏鞋子（彩色）	EquipName_1015036	7	8	136	0	ui://2opvcgqbdweg2ya			0		
+1018037	铁壁护腕（彩色）	EquipName_1015037	3	8	137	0	ui://2opvcgqbdweg2z4			0	10514	
+1018038	狮鹫徽记（彩色）	EquipName_1015038	1	8	138	0	ui://2opvcgqbdweg2yd			0	10515	
+1018039	不屈指环（彩色）	EquipName_1015039	8	8	139	0	ui://2opvcgqbdweg2yb			0		
+1018041	湮灭头盔（彩色）	EquipName_1015041	0	8	141	0	ui://2opvcgqb9m1r3d9			0	10521	
+1018042	湮灭胸甲（彩色）	EquipName_1015042	2	8	142	0	ui://2opvcgqb9m1r3cw			0		
+1018043	湮灭手套（彩色）	EquipName_1015043	4	8	143	0	ui://2opvcgqb9m1r3cv			0	10523	
+1018044	湮灭腰带（彩色）	EquipName_1015044	5	8	144	0	ui://2opvcgqb9m1r3cy			0		
+1018045	湮灭裤子（彩色）	EquipName_1015045	6	8	145	0	ui://2opvcgqb9m1r3cs			0	10522	
+1018046	湮灭鞋子（彩色）	EquipName_1015046	7	8	146	0	ui://2opvcgqb9m1r3cq			0		
+1018047	暗蚀护腕（彩色）	EquipName_1015047	3	8	147	0	ui://2opvcgqb9m1r3cx			0	10524	
+1018048	虚空之眼（彩色）	EquipName_1015048	1	8	148	0	ui://2opvcgqb9m1r3cu			0	10525	
+1018049	凋零指环（彩色）	EquipName_1015049	8	8	149	0	ui://2opvcgqb9m1r3cr			0		
+1018051	近卫头盔（彩色）	EquipName_1015051	0	8	151	0	ui://2opvcgqb9m1r3bf		2	0	10531	
+1018052	近卫胸甲（彩色）	EquipName_1015052	2	8	152	0	ui://2opvcgqb9m1r3bg		2	0		
+1018053	近卫手套（彩色）	EquipName_1015053	4	8	153	0	ui://2opvcgqb9m1r3cc		2	0	10533	
+1018054	近卫腰带（彩色）	EquipName_1015054	5	8	154	0	ui://2opvcgqb9m1r3cg		2	0		
+1018055	近卫裤子（彩色）	EquipName_1015055	6	8	155	0	ui://2opvcgqb9m1r3ae		2	0	10532	
+1018056	近卫鞋子（彩色）	EquipName_1015056	7	8	156	0	ui://2opvcgqb9m1r3ac		2	0		
+1018057	鸢盾护腕（彩色）	EquipName_1015057	3	8	157	0	ui://2opvcgqb9m1r3cf		17	0	10534	
+1018058	守护徽章（彩色）	EquipName_1015058	1	8	158	0	ui://2opvcgqb9m1r3ag		17	0	10535	
+1018059	忠诚指环（彩色）	EquipName_1015059	8	8	159	0	ui://2opvcgqb9m1r3ad		17	0		
+1018061	星术师帽子（彩色）	EquipName_1016061	0	8	161	0	ui://2opvcgqb9m1r3bp			0	10441	
+1018062	星术师胸甲（彩色）	EquipName_1016062	2	8	162	0	ui://2opvcgqb9m1r3br			0		
+1018063	星术师手套（彩色）	EquipName_1016063	4	8	163	0	ui://2opvcgqb9m1r3bq			0	10443	
+1018064	星术师腰带（彩色）	EquipName_1016064	5	8	164	0	ui://2opvcgqb9m1r3bt			0		
+1018065	星术师裤子（彩色）	EquipName_1016065	6	8	165	0	ui://2opvcgqb9m1r3bn			0	10442	
+1018066	星术师鞋子（彩色）	EquipName_1016066	7	8	166	0	ui://2opvcgqb9m1r3bl			0		
+1018067	星辉护腕（彩色）	EquipName_1016067	3	8	167	0	ui://2opvcgqb9m1r3bs			0	10444	
+1018068	星轨吊坠（彩色）	EquipName_1016068	1	8	168	0	ui://2opvcgqb9m1r3bo			0	10445	
+1018069	占星指环（彩色）	EquipName_1016069	8	8	169	0	ui://2opvcgqb9m1r3bm			0		
+1018070	星术师披风（彩色）	EquipName_1016070	9	8	170	0	ui://2opvcgqbkry03eo			0	10446	
+1018071	虚空头盔（彩色）	EquipName_1016071	0	8	171	0	ui://2opvcgqb9m1r3bv			0	10451	
+1018072	虚空胸甲（彩色）	EquipName_1016072	2	8	172	0	ui://2opvcgqb9m1r3bi			0		
+1018073	虚空手套（彩色）	EquipName_1016073	4	8	173	0	ui://2opvcgqb9m1r3bh			0	10453	
+1018074	虚空腰带（彩色）	EquipName_1016074	5	8	174	0	ui://2opvcgqb9m1r3bk			0		
+1018075	虚空裤子（彩色）	EquipName_1016075	6	8	175	0	ui://2opvcgqb9m1r3ct			0	10452	
+1018076	虚空鞋子（彩色）	EquipName_1016076	7	8	176	0	ui://2opvcgqb9m1r3d8			0		
+1018077	虚无缠腕（彩色）	EquipName_1016077	3	8	177	0	ui://2opvcgqb9m1r3bj			0	10454	
+1018078	虚空之瞳（彩色）	EquipName_1016078	1	8	178	0	ui://2opvcgqb9m1r3cd			0	10455	
+1018079	暗界指环（彩色）	EquipName_1016079	8	8	179	0	ui://2opvcgqb9m1r3ce			0		
+1018081	审判头盔（彩色）	EquipName_1016081	0	8	181	0	ui://2opvcgqbdweg2y5			0	10611	
+1018082	审判胸甲（彩色）	EquipName_1016082	2	8	182	0	ui://2opvcgqbdweg2y8			0		
+1018083	审判手套（彩色）	EquipName_1016083	4	8	183	0	ui://2opvcgqbdweg2y6			0	10613	
+1018084	审判腰带（彩色）	EquipName_1016084	5	8	184	0	ui://2opvcgqbdweg2y9			0		
+1018085	审判裤子（彩色）	EquipName_1016085	6	8	185	0	ui://2opvcgqbdweg2y3			0	10612	
+1018086	审判鞋子（彩色）	EquipName_1016086	7	8	186	0	ui://2opvcgqbdweg2y1			0		
+1018087	律法护腕（彩色）	EquipName_1016087	3	8	187	0	ui://2opvcgqbdweg2yh			0	10614	
+1018088	裁决天秤（彩色）	EquipName_1016088	1	8	188	0	ui://2opvcgqbdweg2y4			0	10615	
+1018089	公正指环（彩色）	EquipName_1016089	8	8	189	0	ui://2opvcgqbdweg2y2			0		
+1018090	审判披风（彩色）	EquipName_1016090	9	8	190	0	ui://2opvcgqbkry03eq			0	10616	
+1018091	血法头盔（彩色）	EquipName_1016091	0	8	191	0	ui://2opvcgqbdweg2yj		3	0	10621	
+1018092	血法胸甲（彩色）	EquipName_1016092	2	8	192	0	ui://2opvcgqbdweg2y7		3	0		
+1018093	血法手套（彩色）	EquipName_1016093	4	8	193	0	ui://2opvcgqbdweg2yi		3	0	10623	
+1018094	血法腰带（彩色）	EquipName_1016094	5	8	194	0	ui://2opvcgqbdweg2y0		3	0		
+1018095	血法裤子（彩色）	EquipName_1016095	6	8	195	0	ui://2opvcgqbdweg2z3		3	0	10622	
+1018096	血法鞋子（彩色）	EquipName_1016096	7	8	196	0	ui://2opvcgqbdweg2z1		3	0	10624	
+1018097	血缚护腕（彩色）	EquipName_1016097	3	8	197	0	ui://2opvcgqbdweg2xz		18	0	10625	
+1018098	噬血魂坠（彩色）	EquipName_1016098	1	8	198	0	ui://2opvcgqbdweg2yk		18	0		
+1018099	血誓指环（彩色）	EquipName_1016099	8	8	199	0	ui://2opvcgqbdweg2z2		18	0		
+1018101	领主头盔（彩色）	EquipName_1016101	0	8	201	0	ui://2opvcgqb9m1r3au		4	0	10641	
+1018102	领主胸甲（彩色）	EquipName_1016102	2	8	202	0	ui://2opvcgqb9m1r3aw		4	0		
+1018103	领主手套（彩色）	EquipName_1016103	4	8	203	0	ui://2opvcgqb9m1r3av		4	0	10643	
+1018104	领主腰带（彩色）	EquipName_1016104	5	8	204	0	ui://2opvcgqb9m1r3bd		4	0		
+1018105	领主裤子（彩色）	EquipName_1016105	6	8	205	0	ui://2opvcgqb9m1r3as		4	0	10642	
+1018106	领主鞋子（彩色）	EquipName_1016106	7	8	206	0	ui://2opvcgqb9m1r3aq		4	0		
+1018107	威仪臂铠（彩色）	EquipName_1016107	3	8	207	0	ui://2opvcgqb9m1r3ay		19	0	10644	
+1018108	权柄坠饰（彩色）	EquipName_1016108	1	8	208	0	ui://2opvcgqb9m1r3at		19	0	10645	
+1018109	权玺指环（彩色）	EquipName_1016109	8	8	209	0	ui://2opvcgqb9m1r3ar		19	0		
+1018110	领主披风（彩色）	EquipName_1016110	9	8	210	0	ui://2opvcgqbkry03es			0	10646	
+1018111	伯爵头盔（彩色）	EquipName_1017111	0	8	211	0	ui://2opvcgqb9m1r3a7		5	0	10631	
+1018112	伯爵胸甲（彩色）	EquipName_1017112	2	8	212	0	ui://2opvcgqb9m1r3a9		5	0	10633	
+1018113	伯爵手套（彩色）	EquipName_1017113	4	8	213	0	ui://2opvcgqb9m1r3a8		5	0	10632	
+1018114	伯爵腰带（彩色）	EquipName_1017114	5	8	214	0	ui://2opvcgqb9m1r3ab		5	0		
+1018115	伯爵裤子（彩色）	EquipName_1017115	6	8	215	0	ui://2opvcgqb9m1r3a5		5	0	10634	
+1018116	伯爵鞋子（彩色）	EquipName_1017116	7	8	216	0	ui://2opvcgqb9m1r3a3		5	0	10635	
+1018117	永夜裹腕（彩色）	EquipName_1017117	3	8	217	0	ui://2opvcgqb9m1r3aa		20	0		
+1018118	永夜蔷薇（彩色）	EquipName_1017118	1	8	218	0	ui://2opvcgqb9m1r3a6		20	0		
+1018119	猩红徽记（彩色）	EquipName_1017119	8	8	219	0	ui://2opvcgqb9m1r3a4		20	0		
+1018121	狼人头盔（彩色）	EquipName_1017121	0	8	221	0	ui://2opvcgqb9m1r3cl		6	0	10501	
+1018122	狼人胸甲（彩色）	EquipName_1017122	2	8	222	0	ui://2opvcgqb9m1r3cn		6	0	10503	
+1018123	狼人手套（彩色）	EquipName_1017123	4	8	223	0	ui://2opvcgqb9m1r3cm		6	0	10502	
+1018124	狼人腰带（彩色）	EquipName_1017124	5	8	224	0	ui://2opvcgqb9m1r3cp		6	0		
+1018125	狼人裤子（彩色）	EquipName_1017125	6	8	225	0	ui://2opvcgqb9m1r3cj		6	0	10504	
+1018126	狼人鞋子（彩色）	EquipName_1017126	7	8	226	0	ui://2opvcgqb9m1r3ch		6	0		
+1018127	狂化臂缚（彩色）	EquipName_1017127	3	8	227	0	ui://2opvcgqb9m1r3co		21	0		
+1018128	满月之嚎（彩色）	EquipName_1017128	1	8	228	0	ui://2opvcgqb9m1r3ck		21	0		
+1018129	月契之戒（彩色）	EquipName_1017129	8	8	229	0	ui://2opvcgqb9m1r3ci		21	0		
+1018131	忍者兜帽（彩色）	EquipName_1017131	0	8	231	0	ui://2opvcgqb9m1r3by		7	0	10421	
+1018132	忍者胸甲（彩色）	EquipName_1017132	2	8	232	0	ui://2opvcgqb9m1r3c0		7	0	10423	
+1018133	忍者手套（彩色）	EquipName_1017133	4	8	233	0	ui://2opvcgqb9m1r3bz		7	0	10422	
+1018134	忍者腰带（彩色）	EquipName_1017134	5	8	234	0	ui://2opvcgqb9m1r3c2		7	0		
+1018135	忍者裤子（彩色）	EquipName_1017135	6	8	235	0	ui://2opvcgqb9m1r3cb		7	0	10424	
+1018136	忍者鞋子（彩色）	EquipName_1017136	7	8	236	0	ui://2opvcgqb9m1r3bu		7	0	10425	
+1018137	暗杀裹手（彩色）	EquipName_1017137	3	8	237	0	ui://2opvcgqb9m1r3c1		22	0		
+1018138	胧影勾玉（彩色）	EquipName_1017138	1	8	238	0	ui://2opvcgqb9m1r3bx		22	0		
+1018139	断息指环（彩色）	EquipName_1017139	8	8	239	0	ui://2opvcgqb9m1r3bw		22	0		
+1018140	忍者披风（彩色）	EquipName_1017140	9	8	240	0	ui://2opvcgqbkry03en			0	10426	
+1018141	灵风头盔（彩色）	EquipName_1017141	0	8	241	0	ui://2opvcgqbdweg2yn		8	0	10711	
+1018142	灵风胸甲（彩色）	EquipName_1017142	2	8	242	0	ui://2opvcgqbdweg2yp		8	0	10713	
+1018143	灵风手套（彩色）	EquipName_1017143	4	8	243	0	ui://2opvcgqbdweg2yo		8	0	10712	
+1018144	灵风腰带（彩色）	EquipName_1017144	5	8	244	0	ui://2opvcgqbdweg2yr		8	0		
+1018145	灵风裤子（彩色）	EquipName_1017145	6	8	245	0	ui://2opvcgqbdweg2yl		8	0	10714	
+1018146	灵风鞋子（彩色）	EquipName_1017146	7	8	246	0	ui://2opvcgqbdweg30f		8	0	10715	
+1018147	羽织护腕（彩色）	EquipName_1017147	3	8	247	0	ui://2opvcgqbdweg2yq		23	0		
+1018148	风语吊坠（彩色）	EquipName_1017148	1	8	248	0	ui://2opvcgqbdweg2ym		23	0		
+1018149	风痕之戒（彩色）	EquipName_1017149	8	8	249	0	ui://2opvcgqbdweg2zs		23	0		
+1018150	灵风披风（彩色）	EquipName_1017150	9	8	250	0	ui://2opvcgqbkry03eu			0	10706	
+1018151	暗影头盔（彩色）	EquipName_1017151	0	8	251	0	ui://2opvcgqbdweg2yw		9	0	10721	
+1018152	暗影胸甲（彩色）	EquipName_1017152	2	8	252	0	ui://2opvcgqbdweg2yy		9	0	10723	
+1018153	暗影手套（彩色）	EquipName_1017153	4	8	253	0	ui://2opvcgqbdweg2yx		9	0	10722	
+1018154	暗影腰带（彩色）	EquipName_1017154	5	8	254	0	ui://2opvcgqbdweg2z0		9	0		
+1018155	暗影裤子（彩色）	EquipName_1017155	6	8	255	0	ui://2opvcgqbdweg2yu		9	0	10724	
+1018156	暗影鞋子（彩色）	EquipName_1017156	7	8	256	0	ui://2opvcgqbdweg2ys		9	0	10725	
+1018157	暗缚裹腕（彩色）	EquipName_1017157	3	8	257	0	ui://2opvcgqbdweg2yz		24	0		
+1018158	影核之心（彩色）	EquipName_1017158	1	8	258	0	ui://2opvcgqbdweg2yv		24	0		
+1018159	幽影之戒（彩色）	EquipName_1017159	8	8	259	0	ui://2opvcgqbdweg2yt		24	0		
+1018161	愤怒头盔（彩色）	EquipName_1017161	0	8	261	0	ui://2opvcgqb9m1r39p		10	0	10601	
+1018162	愤怒胸甲（彩色）	EquipName_1017162	2	8	262	0	ui://2opvcgqb9m1r39r		10	0	10603	
+1018163	愤怒手套（彩色）	EquipName_1017163	4	8	263	0	ui://2opvcgqb9m1r39q		10	0	10602	
+1018164	愤怒腰带（彩色）	EquipName_1017164	5	8	264	0	ui://2opvcgqb9m1r39t		10	0		
+1018165	愤怒裤子（彩色）	EquipName_1017165	6	8	265	0	ui://2opvcgqb9m1r39n		10	0	10604	
+1018166	愤怒鞋子（彩色）	EquipName_1017166	7	8	266	0	ui://2opvcgqb9m1r39l		10	0	10605	
+1018167	怒痕护腕（彩色）	EquipName_1017167	3	8	267	0	ui://2opvcgqb9m1r39s		25	0		
+1018168	怒焰心坠（彩色）	EquipName_1017168	1	8	268	0	ui://2opvcgqb9m1r39o		25	0		
+1018169	怒火焚戒（彩色）	EquipName_1017169	8	8	269	0	ui://2opvcgqb9m1r39m		25	0		
+1018171	恐惧头盔（彩色）	EquipName_1017171	0	8	271	0	ui://2opvcgqb9m1r3d3		11	0	10541	
+1018172	恐惧胸甲（彩色）	EquipName_1017172	2	8	272	0	ui://2opvcgqb9m1r3d5		11	0	10543	
+1018173	恐惧手套（彩色）	EquipName_1017173	4	8	273	0	ui://2opvcgqb9m1r3d4		11	0	10542	
+1018174	恐惧腰带（彩色）	EquipName_1017174	5	8	274	0	ui://2opvcgqb9m1r3d7		11	0		
+1018175	恐惧裤子（彩色）	EquipName_1017175	6	8	275	0	ui://2opvcgqb9m1r3d1		11	0	10544	
+1018176	恐惧鞋子（彩色）	EquipName_1017176	7	8	276	0	ui://2opvcgqb9m1r3cz		11	0	10545	
+1018177	深渊缠腕（彩色）	EquipName_1017177	3	8	277	0	ui://2opvcgqb9m1r3d6		26	0		
+1018178	梦魇吊坠（彩色）	EquipName_1017178	1	8	278	0	ui://2opvcgqb9m1r3d2		26	0		
+1018179	战栗之戒（彩色）	EquipName_1017179	8	8	279	0	ui://2opvcgqb9m1r3d0		26	0		
+1018181	厄运头盔（彩色）	EquipName_1017181	0	8	281	0	ui://2opvcgqb9m1r39y		13	0	10661	
+1018182	厄运胸甲（彩色）	EquipName_1017182	2	8	282	0	ui://2opvcgqb9m1r3af		13	0	10663	
+1018183	厄运手套（彩色）	EquipName_1017183	4	8	283	0	ui://2opvcgqb9m1r3a0		13	0	10662	
+1018184	厄运腰带（彩色）	EquipName_1017184	5	8	284	0	ui://2opvcgqb9m1r3a2		13	0		
+1018185	厄运裤子（彩色）	EquipName_1017185	6	8	285	0	ui://2opvcgqb9m1r39w		13	0	10664	
+1018186	厄运鞋子（彩色）	EquipName_1017186	7	8	286	0	ui://2opvcgqb9m1r39u		13	0	10665	
+1018187	诅咒缠腕（彩色）	EquipName_1017187	3	8	287	0	ui://2opvcgqb9m1r3a1		28	0		
+1018188	永咒厄坠（彩色）	EquipName_1017188	1	8	288	0	ui://2opvcgqb9m1r39x		28	0		
+1018189	命劫之戒（彩色）	EquipName_1017189	8	8	289	0	ui://2opvcgqb9m1r39w		28	0		
+1018191	君王头盔（彩色）	EquipName_1017191	0	8	291	0	ui://2opvcgqb9m1r3al		12	0	10721	
+1018192	君王胸甲（彩色）	EquipName_1017192	2	8	292	0	ui://2opvcgqb9m1r3an		12	0	10723	
+1018193	君王手套（彩色）	EquipName_1017193	4	8	293	0	ui://2opvcgqb9m1r3am		12	0	10722	
+1018194	君王腰带（彩色）	EquipName_1017194	5	8	294	0	ui://2opvcgqb9m1r3ap		12	0		
+1018195	君王裤子（彩色）	EquipName_1017195	6	8	295	0	ui://2opvcgqb9m1r3aj		12	0	10724	
+1018196	君王鞋子（彩色）	EquipName_1017196	7	8	296	0	ui://2opvcgqb9m1r3da		12	0	10725	
+1018197	神谕臂铠（彩色）	EquipName_1017197	3	8	297	0	ui://2opvcgqb9m1r3ao		27	0		
+1018198	天命星坠（彩色）	EquipName_1017198	1	8	298	0	ui://2opvcgqb9m1r3ak		27	0		
+1018199	至尊华戒（彩色）	EquipName_1017199	8	8	299	0	ui://2opvcgqb9m1r3be		27	0		
+1018200	君王披风（彩色）	EquipName_1017200	9	8	300	0	ui://2opvcgqbkry03et			0	10726	
+1018201	追猎者头盔（彩色）	EquipName_1017201	0	8	301	0	ui://2opvcgqb9m1r3b3		14	0	10651	
+1018202	追猎者胸甲（彩色）	EquipName_1017202	2	8	302	0	ui://2opvcgqb9m1r3b5		14	0	10653	
+1018203	追猎者手套（彩色）	EquipName_1017203	4	8	303	0	ui://2opvcgqb9m1r3b4		14	0	10652	
+1018204	追猎者腰带（彩色）	EquipName_1017204	5	8	304	0	ui://2opvcgqb9m1r3b7		14	0		
+1018205	追猎者裤子（彩色）	EquipName_1017205	6	8	305	0	ui://2opvcgqb9m1r3b1		14	0		
+1018206	追猎者鞋子（彩色）	EquipName_1017206	7	8	306	0	ui://2opvcgqb9m1r3az		14	0	10655	
+1018207	猎杀缚腕（彩色）	EquipName_1017207	3	8	307	0	ui://2opvcgqb9m1r3b6		29	0		
+1018208	狩猎之心（彩色）	EquipName_1017208	1	8	308	0	ui://2opvcgqb9m1r3b2		29	0		
+1018209	猎物之瞳（彩色）	EquipName_1017209	8	8	309	0	ui://2opvcgqb9m1r3b0		29	0		
+1018210	追猎者披风（彩色）	EquipName_1017210	9	8	310	0	ui://2opvcgqbkry03er			0	10656	
+1018211	瘟疫头盔（彩色）	EquipName_1017211	0	8	311	0	ui://2opvcgqb9m1r3ai		15	0	10671	
+1018212	瘟疫胸甲（彩色）	EquipName_1017212	2	8	312	0	ui://2opvcgqb9m1r3ah		15	0	10673	
+1018213	瘟疫手套（彩色）	EquipName_1017213	4	8	313	0	ui://2opvcgqb9m1r3ax		15	0	10672	
+1018214	瘟疫腰带（彩色）	EquipName_1017214	5	8	314	0	ui://2opvcgqb9m1r3bb		15	0		
+1018215	瘟疫裤子（彩色）	EquipName_1017215	6	8	315	0	ui://2opvcgqb9m1r3ba		15	0	10674	
+1018216	瘟疫鞋子（彩色）	EquipName_1017216	7	8	316	0	ui://2opvcgqb9m1r3b8		15	0	10675	
+1018217	腐朽缚腕（彩色）	EquipName_1017217	3	8	317	0	ui://2opvcgqb9m1r39z		30	0		
+1018218	疫病之源（彩色）	EquipName_1017218	1	8	318	0	ui://2opvcgqb9m1r3bc		30	0		
+1018219	腐朽印戒（彩色）	EquipName_1017219	8	8	319	0	ui://2opvcgqb9m1r3b9		30	0		

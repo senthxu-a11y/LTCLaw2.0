@@ -14,6 +14,7 @@ const { TextArea } = Input;
 interface GameProjectFormData {
   name: string;
   description?: string;
+  is_maintainer: boolean;
   svn_url: string;
   svn_username?: string;
   svn_password?: string;
@@ -45,42 +46,48 @@ export default function GameProject() {
     setLoading(true);
     setError(null);
     try {
-      const config = await gameApi.getProjectConfig(selectedAgent);
-      if (config) {
-        const currentConfig = config as any;
+      const [projectConfig, userConfig] = await Promise.all([
+        gameApi.getProjectConfig(selectedAgent),
+        gameApi.getUserConfig(selectedAgent).catch(() => null),
+      ]);
+      if (projectConfig) {
+        const pc = projectConfig as any;
+        const uc = (userConfig || {}) as any;
         form.setFieldsValue({
-          name: currentConfig.project?.name || "",
-          description: currentConfig.project?.language || "",
-          svn_url: currentConfig.svn?.root || "",
-          svn_username: "",
-          svn_password: "",
-          svn_trust_cert: false,
-          svn_working_copy_path: "",
-          watch_paths: (currentConfig.paths || []).map((item: any) => item.path).join('\n'),
-          watch_patterns: (currentConfig.filters?.include_ext || []).join('\n'),
-          watch_exclude_patterns: (currentConfig.filters?.exclude_glob || []).join('\n'),
+          name: pc.project?.name || "",
+          description: pc.project?.engine || "",
+          is_maintainer: uc.my_role === "maintainer",
+          svn_url: uc.svn_url || "",
+          svn_username: uc.svn_username || "",
+          svn_password: uc.svn_password || "",
+          svn_trust_cert: !!uc.svn_trust_cert,
+          svn_working_copy_path: uc.svn_local_root || pc.svn?.root || "",
+          watch_paths: (pc.paths || []).map((item: any) => item.path).join("\n"),
+          watch_patterns: (pc.filters?.include_ext || []).join("\n"),
+          watch_exclude_patterns: (pc.filters?.exclude_glob || []).join("\n"),
           auto_sync: false,
           auto_index: true,
           auto_resolve_dependencies: true,
-          index_commit_message_template: "",
+          index_commit_message_template: "Auto-index update: {files_changed} files",
         });
       } else {
         // Set default values for new configuration
         form.setFieldsValue({
-          name: '',
-          description: '',
-          svn_url: '',
-          svn_username: '',
-          svn_password: '',
+          name: "",
+          description: "Unity",
+          is_maintainer: false,
+          svn_url: "",
+          svn_username: "",
+          svn_password: "",
           svn_trust_cert: false,
-          svn_working_copy_path: '',
-          watch_paths: 'Tables\nConfigs',
-          watch_patterns: '*.xlsx\n*.csv\n*.json\n*.yaml',
-          watch_exclude_patterns: '~$*\n*.tmp\n*.bak',
+          svn_working_copy_path: "",
+          watch_paths: "Tables\nConfigs",
+          watch_patterns: ".xlsx\n.xls\n.csv\n.md\n.txt\n.docx",
+          watch_exclude_patterns: "**/temp/**\n**/.svn/**\n**/~$*",
           auto_sync: true,
           auto_index: true,
           auto_resolve_dependencies: true,
-          index_commit_message_template: 'Auto-index update: {files_changed} files',
+          index_commit_message_template: "Auto-index update: {files_changed} files",
         });
       }
     } catch (err) {
@@ -95,31 +102,63 @@ export default function GameProject() {
     try {
       const values = await form.validateFields();
       setSaving(true);
-      
-      const config = {
-        name: values.name,
-        description: values.description,
-        svn: {
-          url: values.svn_url,
-          username: values.svn_username,
-          password: values.svn_password,
-          trust_cert: values.svn_trust_cert,
-          working_copy_path: values.svn_working_copy_path,
-        },
-        watch: {
-          paths: values.watch_paths.split('\n').filter(p => p.trim()),
-          patterns: values.watch_patterns.split('\n').filter(p => p.trim()),
-          exclude_patterns: values.watch_exclude_patterns.split('\n').filter(p => p.trim()),
-        },
-        workflow: {
-          auto_sync: values.auto_sync,
-          auto_index: values.auto_index,
-          auto_resolve_dependencies: values.auto_resolve_dependencies,
-          index_commit_message_template: values.index_commit_message_template,
-        },
-      } as any as ProjectConfig;
 
-      const result = await gameApi.saveProjectConfig(selectedAgent, config);
+      const splitLines = (s: string | undefined) =>
+        (s || "")
+          .split(/\r?\n/)
+          .map((p) => p.trim())
+          .filter((p) => p.length > 0);
+
+      const workingCopyPath = (values.svn_working_copy_path || "").trim();
+      if (!workingCopyPath) {
+        message.error(t("gameProject.svnWorkingCopyPathRequired", { defaultValue: "请填写本地SVN工作副本路径（先 svn checkout 到本地）" }));
+        setSaving(false);
+        return;
+      }
+
+      // 1) 用户级配置（账号密码不入 SVN）
+      const userPayload = {
+        my_role: (values.is_maintainer ? "maintainer" : "consumer") as "maintainer" | "consumer",
+        svn_local_root: workingCopyPath,
+        svn_url: values.svn_url || null,
+        svn_username: values.svn_username || null,
+        svn_password: values.svn_password || null,
+        svn_trust_cert: !!values.svn_trust_cert,
+      };
+      await gameApi.saveUserConfig(selectedAgent!, userPayload as any);
+
+      // 2) 项目级配置（落 .ltclaw_index/project_config.yaml，入 SVN 共享）
+      const paths = splitLines(values.watch_paths).map((p) => ({
+        path: p,
+        semantic: "table" as const,
+      }));
+      const projectPayload: any = {
+        schema_version: "project-config.v1",
+        project: {
+          name: values.name,
+          engine: values.description || "Unity",
+          language: "zh",
+        },
+        svn: {
+          root: workingCopyPath,
+          poll_interval_seconds: 300,
+          jitter_seconds: 30,
+        },
+        paths,
+        filters: {
+          include_ext: splitLines(values.watch_patterns),
+          exclude_glob: splitLines(values.watch_exclude_patterns),
+        },
+        table_convention: {
+          header_row: 1,
+          comment_row: null,
+          primary_key_field: "ID",
+          id_ranges: [],
+        },
+        doc_templates: {},
+        models: {},
+      };
+      const result = await gameApi.saveProjectConfig(selectedAgent!, projectPayload as ProjectConfig);
       message.success(result.message || t("gameProject.saveSuccess"));
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : t("gameProject.saveFailed");
@@ -216,6 +255,14 @@ export default function GameProject() {
 
           {/* SVN Configuration Section */}
           <Card title={t("gameProject.svnConfig")} className={styles.section}>
+            <Form.Item
+              label="我是维护者 (允许提交索引到 SVN)"
+              name="is_maintainer"
+              valuePropName="checked"
+              tooltip="开启=维护者maintainer (可写回索引/提案)；关闭=使用者consumer (只读)"
+            >
+              <Switch />
+            </Form.Item>
             <Form.Item
               label={t("gameProject.svnUrl")}
               name="svn_url"

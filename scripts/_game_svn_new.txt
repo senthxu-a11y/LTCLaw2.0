@@ -63,27 +63,13 @@ async def trigger_sync(workspace: Workspace = Depends(get_agent_for_request)):
         raise HTTPException(status_code=400, detail="Game service not configured")
     if game_service.user_config.my_role != "maintainer":
         raise HTTPException(status_code=409, detail="not maintainer, sync skipped")
-
-    cli = getattr(game_service, "svn", None)
-    gui_only = False
-    if cli is not None:
-        try:
-            installed = await cli.check_installed()
-            gui_only = installed == "tortoise-gui-only"
-        except Exception:
-            gui_only = False
-
-    if gui_only:
-        result = await game_service.force_full_rescan()
-        return {"mode": "rescan", **result}
-
-    watcher = getattr(game_service, "svn_watcher", None)
-    if watcher is None:
-        raise HTTPException(status_code=400, detail="watcher not available")
-    cs = await watcher.trigger_now()
-    if hasattr(cs, "model_dump"):
-        return cs.model_dump(mode="json")
-    return cs
+    svn_watcher = getattr(game_service, "svn_watcher", None)
+    if svn_watcher is None:
+        raise HTTPException(status_code=400, detail="SVN watcher not available")
+    changeset = await svn_watcher.trigger_now()
+    if hasattr(changeset, "model_dump"):
+        return changeset.model_dump(mode="json")
+    return changeset
 
 
 @router.get("/log/recent")
@@ -102,6 +88,7 @@ async def get_recent_changes(
     limit: int = Query(20, ge=1, le=100),
     workspace: Workspace = Depends(get_agent_for_request),
 ):
+    """Return最近 N 个 SVN changeset（来自 in-memory buffer，fallback 到最后一次持久化的 changeset）。"""
     game_service = _service(workspace)
     buffer = list(getattr(game_service, "_recent_changes_buffer", []) or [])
     if buffer:

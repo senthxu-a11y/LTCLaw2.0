@@ -80,8 +80,11 @@ class ProjectConfig(BaseModel):
 class UserGameConfig(BaseModel):
     """用户游戏配置"""
     my_role: Literal["maintainer", "consumer"] = Field(default="consumer", description="我的角色")
-    svn_local_root: Union[str, None] = Field(default=None, description="本地SVN根目录")
+    svn_local_root: Union[str, None] = Field(default=None, description="本地SVN工作副本根目录")
+    svn_url: Union[str, None] = Field(default=None, description="SVN远端URL")
     svn_username: Union[str, None] = Field(default=None, description="SVN用户名")
+    svn_password: Union[str, None] = Field(default=None, description="SVN密码(落盘加密)")
+    svn_trust_cert: bool = Field(default=False, description="信任自签证书")
 
 
 class ValidationIssue(BaseModel):
@@ -171,23 +174,37 @@ def validate_project_config(cfg: ProjectConfig) -> list[ValidationIssue]:
     return issues
 
 
+_USER_SECRET_FIELDS: frozenset[str] = frozenset({"svn_password"})
+
+
 def load_user_config() -> UserGameConfig:
-    """加载用户配置，不存在则返回默认值"""
+    """加载用户配置，解密敏感字段"""
     config_path = get_user_config_path()
     if not config_path.exists():
         return UserGameConfig()
     try:
         with open(config_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        return UserGameConfig.model_validate(data or {})
+            data = yaml.safe_load(f) or {}
+        try:
+            from ltclaw_gy_x.security.secret_store import decrypt_dict_fields
+            data = decrypt_dict_fields(dict(data), _USER_SECRET_FIELDS)
+        except Exception:
+            pass
+        return UserGameConfig.model_validate(data)
     except Exception:
         return UserGameConfig()
 
 
 def save_user_config(cfg: UserGameConfig) -> None:
-    """保存用户配置，原子写入"""
+    """保存用户配置，原子写入；敏感字段加密"""
     config_path = get_user_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = cfg.model_dump(exclude_defaults=False)
+    try:
+        from ltclaw_gy_x.security.secret_store import encrypt_dict_fields
+        payload = encrypt_dict_fields(payload, _USER_SECRET_FIELDS)
+    except Exception:
+        pass
     with tempfile.NamedTemporaryFile(
         mode="w",
         encoding="utf-8",
@@ -196,7 +213,7 @@ def save_user_config(cfg: UserGameConfig) -> None:
         suffix=".tmp"
     ) as tmp:
         yaml.dump(
-            cfg.model_dump(exclude_defaults=False),
+            payload,
             tmp,
             allow_unicode=True,
             default_flow_style=False,

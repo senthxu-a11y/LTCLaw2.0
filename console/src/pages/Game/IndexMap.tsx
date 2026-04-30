@@ -28,13 +28,19 @@ import {
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
+import { gameApi } from "../../api/modules/game";
+import type {
+  DependenciesResponse,
+  FieldInfo as ApiFieldInfo,
+  TableIndex as ApiTableIndex,
+} from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
 import styles from "./IndexMap.module.less";
 
 const { Text } = Typography;
 const { Option } = Select;
 
-interface TableIndex {
+interface TableRow {
   id: string;
   name: string;
   path: string;
@@ -49,7 +55,7 @@ interface TableIndex {
   description?: string;
 }
 
-interface FieldInfo {
+interface FieldDetail {
   name: string;
   type: string;
   description?: string;
@@ -61,84 +67,55 @@ interface FieldInfo {
 }
 
 interface TableDetail {
-  index: TableIndex;
-  fields: FieldInfo[];
+  index: TableRow;
+  fields: FieldDetail[];
   sample_data: any[];
 }
 
-// Mock data for demonstration
-const mockTableIndexes: TableIndex[] = [
-  {
-    id: "items",
-    name: "Items",
-    path: "Tables/Items.xlsx",
-    file_type: "excel",
-    last_modified: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    indexed_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    field_count: 12,
-    row_count: 1247,
-    status: "indexed",
-    dependencies: ["ItemTypes", "Rarities"],
-    referenced_by: ["Drops", "Shops", "Rewards"],
-    description: "游戏物品配置表，包含装备、道具、材料等",
-  },
-  {
-    id: "npcs",
-    name: "NPCs",
-    path: "Tables/NPCs.csv",
-    file_type: "csv",
-    last_modified: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-    indexed_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-    field_count: 8,
-    row_count: 356,
-    status: "indexed",
-    dependencies: ["NPCTypes", "DialogueGroups"],
-    referenced_by: ["Quests", "Spawns"],
-    description: "NPC 配置表，定义游戏中的非玩家角色",
-  },
-  {
-    id: "skills",
-    name: "Skills",
-    path: "Tables/Skills.xlsx",
-    file_type: "excel", 
-    last_modified: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    indexed_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    field_count: 15,
-    row_count: 89,
-    status: "indexed",
-    dependencies: ["SkillTypes", "Elements"],
-    referenced_by: ["Characters", "Effects"],
-    description: "技能配置表，包含主动技能和被动技能",
-  },
-  {
-    id: "quests_new",
-    name: "QuestsNew",
-    path: "Tables/QuestsNew.xlsx",
-    file_type: "excel",
-    last_modified: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-    indexed_at: new Date().toISOString(),
-    field_count: 0,
-    row_count: 0,
-    status: "pending",
-    dependencies: [],
-    referenced_by: [],
-    description: "新任务配置表 - 正在索引中",
-  },
-  {
-    id: "levels_broken",
-    name: "LevelsBroken",
-    path: "Tables/Levels.xlsx",
-    file_type: "excel",
-    last_modified: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    indexed_at: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
-    field_count: 0,
-    row_count: 0,
-    status: "error",
-    dependencies: [],
-    referenced_by: [],
-    description: "关卡配置表 - 索引失败",
-  },
-];
+const uniqueTables = (items: Array<{ table: string }>) => Array.from(new Set(items.map(item => item.table)));
+
+const getFileType = (path: string): 'excel' | 'csv' | 'json' => {
+  const lowerPath = path.toLowerCase();
+  if (lowerPath.endsWith('.xlsx') || lowerPath.endsWith('.xls')) {
+    return 'excel';
+  }
+  if (lowerPath.endsWith('.json')) {
+    return 'json';
+  }
+  return 'csv';
+};
+
+const buildReference = (field: ApiFieldInfo) => {
+  const firstReference = field.references?.[0];
+  if (!firstReference || !firstReference.includes('.')) {
+    return undefined;
+  }
+  const [table, targetField] = firstReference.split('.', 2);
+  return { table, field: targetField };
+};
+
+const toFieldDetail = (field: ApiFieldInfo, primaryKey: string): FieldDetail => ({
+  name: field.name,
+  type: field.type,
+  description: field.description,
+  is_key: field.name === primaryKey,
+  references: buildReference(field),
+});
+
+const toTableRow = (table: ApiTableIndex, dependencies?: DependenciesResponse): TableRow => ({
+  id: table.table_name,
+  name: table.table_name,
+  path: table.source_path,
+  file_type: getFileType(table.source_path),
+  last_modified: table.last_indexed_at,
+  indexed_at: table.last_indexed_at,
+  field_count: table.fields.length,
+  row_count: table.row_count,
+  status: 'indexed',
+  dependencies: uniqueTables(dependencies?.upstream ?? []),
+  referenced_by: uniqueTables(dependencies?.downstream ?? []),
+  description: table.ai_summary,
+});
 
 export default function IndexMap() {
   const { t } = useTranslation();
@@ -146,7 +123,7 @@ export default function IndexMap() {
   const { selectedAgent } = useAgentStore();
   
   const [loading, setLoading] = useState(false);
-  const [tableIndexes, setTableIndexes] = useState<TableIndex[]>(mockTableIndexes);
+  const [tableIndexes, setTableIndexes] = useState<TableRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -155,17 +132,21 @@ export default function IndexMap() {
   const [detailLoading, setDetailLoading] = useState(false);
 
   const fetchTableIndexes = async () => {
+    if (!selectedAgent) {
+      setTableIndexes([]);
+      return;
+    }
     setLoading(true);
     try {
-      // Placeholder for actual API call
-      // const response = await fetch('/api/game-project/indexes');
-      // const data = await response.json();
-      // setTableIndexes(data);
-      
-      // Using mock data for demonstration
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setTableIndexes(mockTableIndexes);
-      
+      const response = await gameApi.listTables(selectedAgent, { page: 1, size: 200 });
+      const dependencyResults = await Promise.allSettled(
+        response.items.map((table) => gameApi.getDependencies(selectedAgent, table.table_name)),
+      );
+      const rows = response.items.map((table, index) => {
+        const deps = dependencyResults[index];
+        return toTableRow(table, deps.status === 'fulfilled' ? deps.value : undefined);
+      });
+      setTableIndexes(rows);
     } catch (err) {
       message.error(t("indexMap.loadFailed"));
     } finally {
@@ -174,54 +155,20 @@ export default function IndexMap() {
   };
 
   const fetchTableDetail = async (tableId: string) => {
+    if (!selectedAgent) {
+      return;
+    }
     setDetailLoading(true);
     try {
-      // Mock detail data
-      const index = tableIndexes.find(t => t.id === tableId);
-      if (!index) return;
-
-      // Mock field data
-      const mockFields: FieldInfo[] = [
-        {
-          name: "id",
-          type: "integer",
-          description: "物品唯一标识符",
-          is_key: true,
-        },
-        {
-          name: "name",
-          type: "string",
-          description: "物品名称",
-          is_key: false,
-        },
-        {
-          name: "type_id",
-          type: "integer", 
-          description: "物品类型ID",
-          is_key: false,
-          references: { table: "ItemTypes", field: "id" },
-        },
-        {
-          name: "rarity_id",
-          type: "integer",
-          description: "稀有度ID",
-          is_key: false,
-          references: { table: "Rarities", field: "id" },
-        },
-      ];
-
-      const mockSampleData = [
-        { id: 1001, name: "铁剑", type_id: 1, rarity_id: 1 },
-        { id: 1002, name: "银剑", type_id: 1, rarity_id: 2 },
-        { id: 2001, name: "生命药水", type_id: 2, rarity_id: 1 },
-      ];
-
+      const [index, dependencies] = await Promise.all([
+        gameApi.getTable(selectedAgent, tableId),
+        gameApi.getDependencies(selectedAgent, tableId),
+      ]);
       setTableDetail({
-        index,
-        fields: mockFields,
-        sample_data: mockSampleData,
+        index: toTableRow(index, dependencies),
+        fields: index.fields.map((field) => toFieldDetail(field, index.primary_key)),
+        sample_data: [],
       });
-
     } catch (err) {
       message.error(t("indexMap.detailLoadFailed"));
     } finally {
@@ -293,7 +240,7 @@ export default function IndexMap() {
       title: t("indexMap.tableName"),
       dataIndex: "name",
       key: "name",
-      render: (name: string, record: TableIndex) => (
+      render: (name: string, record: TableRow) => (
         <Space>
           <span>{getFileTypeIcon(record.file_type)}</span>
           <Text strong>{name}</Text>
@@ -331,7 +278,7 @@ export default function IndexMap() {
       key: "fields",
       width: 80,
       align: "center" as const,
-      render: (record: TableIndex) => (
+      render: (record: TableRow) => (
         <Badge count={record.field_count} style={{ backgroundColor: '#1677ff' }} />
       ),
     },
@@ -349,7 +296,7 @@ export default function IndexMap() {
       title: t("indexMap.dependencies"),
       key: "dependencies",
       width: 150,
-      render: (record: TableIndex) => (
+      render: (record: TableRow) => (
         <Space wrap>
           {record.dependencies.slice(0, 2).map(dep => (
             <Tag key={dep}>{dep}</Tag>
@@ -375,7 +322,7 @@ export default function IndexMap() {
       title: t("indexMap.actions"),
       key: "actions",
       width: 100,
-      render: (record: TableIndex) => (
+      render: (record: TableRow) => (
         <Space>
           <Tooltip title={t("indexMap.viewDetails")}>
             <Button
@@ -605,7 +552,7 @@ export default function IndexMap() {
               <List
                 size="small"
                 dataSource={tableDetail.fields}
-                renderItem={(field: FieldInfo) => (
+                renderItem={(field: FieldDetail) => (
                   <List.Item>
                     <div style={{ width: '100%' }}>
                       <Space>
