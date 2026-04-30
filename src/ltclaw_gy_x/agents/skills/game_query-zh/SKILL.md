@@ -14,6 +14,7 @@ require_tools:
   - game_query_tables
   - game_describe_field
   - game_table_dependencies
+  - game_reverse_impact
 ---
 
 # 游戏数值表查询
@@ -27,7 +28,10 @@ require_tools:
 2. 用户问"哪些表引用 Y 表 / Y 表的依赖"
    → `game_table_dependencies(table="Y")`
 
-3. 用户问"我们项目有哪些系统/有多少张表"
+3. 用户问"改 Y.f 会影响哪些下游 / 改动影响范围"
+   → `game_reverse_impact(table="Y", field="f", max_depth=3)`
+
+4. 用户问"我们项目有哪些系统/有多少张表"
    → `game_list_systems()`
 
 回答时务必给出：

@@ -95,6 +95,78 @@ async def game_table_dependencies(table: str) -> Dict[str, Any]:
     return {"table": table, "dependencies": deps}
 
 
+async def game_reverse_impact(
+    table: str,
+    field: str = "",
+    max_depth: int = 3,
+) -> Dict[str, Any]:
+    """Analyse downstream impact of changing a table/field via reverse BFS over
+    the dependency graph.
+
+    Args:
+        table: target table that would be modified.
+        field: optional target field; empty string = whole table.
+        max_depth: BFS depth cap (default 3).
+
+    Returns:
+        {"target": {...}, "tables": [...], "impacts": [...], "total": n}
+        Each impact item has {from_table, from_field, to_table, to_field,
+        confidence, depth, path}.
+    """
+    service, err = await _get_game_service()
+    if err:
+        return err
+    committer = getattr(service, "index_committer", None)
+    if committer is None:
+        return {"error": "Index committer not available"}
+    try:
+        dep = committer.load_dependency_graph()
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"Dependency graph load failed: {e}"}
+    if dep is None:
+        return {"target": {"table": table, "field": field or None}, "impacts": [], "tables": [], "total": 0}
+
+    by_to: Dict[str, list] = {}
+    for e in getattr(dep, "edges", []) or []:
+        by_to.setdefault(e.to_table, []).append(e)
+
+    field_filter = field or None
+    seen: set = set()
+    impacts: list = []
+    queue: list = [(table, field_filter, 0, [f"{table}{('.' + field_filter) if field_filter else ''}"])]
+    while queue:
+        cur_table, cur_field, depth, path = queue.pop(0)
+        if depth >= max(1, min(max_depth, 6)):
+            continue
+        for edge in by_to.get(cur_table, []):
+            if cur_field is not None and edge.to_field != cur_field:
+                continue
+            key = (edge.from_table, edge.from_field)
+            if key in seen:
+                continue
+            seen.add(key)
+            conf = getattr(edge.confidence, "value", str(edge.confidence))
+            new_path = path + [f"{edge.from_table}.{edge.from_field}"]
+            impacts.append({
+                "from_table": edge.from_table,
+                "from_field": edge.from_field,
+                "to_table": edge.to_table,
+                "to_field": edge.to_field,
+                "confidence": conf,
+                "depth": depth + 1,
+                "path": new_path,
+            })
+            queue.append((edge.from_table, None, depth + 1, new_path))
+
+    return {
+        "target": {"table": table, "field": field or None},
+        "max_depth": max_depth,
+        "tables": sorted({i["from_table"] for i in impacts}),
+        "impacts": impacts,
+        "total": len(impacts),
+    }
+
+
 async def game_search_knowledge(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
     """Search the design knowledge base. Phase-2 stub: returns empty list."""
     return []

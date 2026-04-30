@@ -14,6 +14,7 @@ require_tools:
   - game_query_tables
   - game_describe_field
   - game_table_dependencies
+  - game_reverse_impact
 ---
 
 # Game Data Table Query
@@ -27,7 +28,10 @@ When users ask about data tables/fields/dependencies, use tools in this order:
 2. User asks "Which tables reference table Y / Y's dependencies"
    → `game_table_dependencies(table="Y")`
 
-3. User asks "What systems/how many tables do we have"
+3. User asks "What downstream is affected if I change Y.f / impact scope"
+   → `game_reverse_impact(table="Y", field="f", max_depth=3)`
+
+4. User asks "What systems/how many tables do we have"
    → `game_list_systems()`
 
 Always provide in response:

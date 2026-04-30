@@ -107,3 +107,41 @@ async def test_game_commit_proposal_updates_store(monkeypatch):
 
 async def _async_result(value):
     return value
+
+
+@pytest.mark.asyncio
+async def test_game_reverse_impact(monkeypatch):
+    edge1 = SimpleNamespace(
+        from_table="Skill", from_field="HeroId", to_table="Hero", to_field="ID",
+        confidence=SimpleNamespace(value="confirmed"), inferred_by="rule",
+    )
+    edge2 = SimpleNamespace(
+        from_table="Buff", from_field="SkillId", to_table="Skill", to_field="ID",
+        confidence=SimpleNamespace(value="confirmed"), inferred_by="rule",
+    )
+    committer = SimpleNamespace(
+        load_dependency_graph=lambda: SimpleNamespace(edges=[edge1, edge2]),
+    )
+    service = SimpleNamespace(index_committer=committer)
+    monkeypatch.setattr(
+        gamedev_tools, "_get_game_service",
+        lambda: _async_result((service, None)),
+    )
+
+    result = await gamedev_tools.game_reverse_impact("Hero", max_depth=3)
+    assert result["total"] == 2
+    assert sorted(result["tables"]) == ["Buff", "Skill"]
+    depths = {i["from_table"]: i["depth"] for i in result["impacts"]}
+    assert depths == {"Skill": 1, "Buff": 2}
+
+
+@pytest.mark.asyncio
+async def test_game_reverse_impact_no_graph(monkeypatch):
+    service = SimpleNamespace(index_committer=SimpleNamespace(load_dependency_graph=lambda: None))
+    monkeypatch.setattr(
+        gamedev_tools, "_get_game_service",
+        lambda: _async_result((service, None)),
+    )
+    result = await gamedev_tools.game_reverse_impact("X")
+    assert result["total"] == 0
+    assert result["tables"] == []
