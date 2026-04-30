@@ -1,1 +1,49 @@
-*.bat text eol=crlf
+# 默认：文本文件自动识别，统一为 LF（Windows 上 git 检出时由各自 core.autocrlf 决定）
+* text=auto eol=lf
+
+# Windows 专属脚本必须 CRLF（否则 cmd / PowerShell 解析异常）
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Unix shell 脚本强制 LF（Windows 上别被 autocrlf 改坏）
+*.sh    text eol=lf
+
+# 源码统一 LF
+*.py    text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.json  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.toml  text eol=lf
+*.md    text eol=lf
+*.css   text eol=lf
+*.less  text eol=lf
+*.html  text eol=lf
+
+# 二进制文件不做换行转换 / 不参与 diff
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.svg   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.tar   binary
+*.whl   binary
+*.so    binary
+*.dll   binary
+*.dylib binary
+*.exe   binary
+*.xlsx  binary
+*.xls   binary
+*.docx  binary
+*.doc   binary
+*.db    binary
+*.sqlite binary
