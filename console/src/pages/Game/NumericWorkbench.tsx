@@ -27,6 +27,7 @@ import {
   SendOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
 import { useAgentStore } from "../../stores/agentStore";
@@ -66,6 +67,21 @@ export default function NumericWorkbench() {
   const { t } = useTranslation();
   const { message } = useAppMessage();
   const { selectedAgent } = useAgentStore();
+  const [searchParams] = useSearchParams();
+
+  // Deep-link 参数 (从 Chat / 联动卡片跳转携带)
+  // 兼容 spec 风格 (tableId/fieldKey/rowId) 与简短风格 (table/field/row)
+  const dlTable =
+    searchParams.get("table") || searchParams.get("tableId") || "";
+  const dlRow = searchParams.get("row") || searchParams.get("rowId") || "";
+  const dlField =
+    searchParams.get("field") || searchParams.get("fieldKey") || "";
+  const [highlight, setHighlight] = useState<{
+    table?: string;
+    field?: string;
+    row?: string;
+    ts: number;
+  }>({ ts: 0 });
 
   const [tableNames, setTableNames] = useState<string[]>([]);
   const [tablesLoading, setTablesLoading] = useState(false);
@@ -141,6 +157,33 @@ export default function NumericWorkbench() {
   }, [selectedAgent, message, t]);
 
   useEffect(() => { loadTables(); }, [loadTables]);
+
+  // Deep-link: 从 Chat 卡片 / 跨页跳转携带 ?table=...&row=...&field=... 时
+  // 自动打开目标表、切 tab、预填全表搜索过滤到目标行、高亮目标列约 1.8s
+  useEffect(() => {
+    if (!dlTable) return;
+    if (tableNames.length === 0) return;
+    if (!tableNames.includes(dlTable)) return;
+    setOpenTables((prev) =>
+      prev.includes(dlTable) ? prev : [...prev, dlTable],
+    );
+    setActiveTab(dlTable);
+    if (dlRow) {
+      setSearchByTable((prev) => ({ ...prev, [dlTable]: dlRow }));
+    }
+    setHighlight({
+      table: dlTable,
+      field: dlField || undefined,
+      row: dlRow || undefined,
+      ts: Date.now(),
+    });
+    const tid = window.setTimeout(
+      () => setHighlight((h) => ({ ...h, ts: 0 })),
+      1800,
+    );
+    return () => window.clearTimeout(tid);
+  }, [dlTable, dlRow, dlField, tableNames]);
+
   // 为新打开但还没加载详情/行的表自动加载
   useEffect(() => {
     openTables.forEach((name) => {
@@ -688,6 +731,18 @@ export default function NumericWorkbench() {
                         sticky
                         scroll={{ x: "max-content", y: "calc(100vh - 460px)" }}
                         pagination={{ pageSize: 50, size: "small", showSizeChanger: false }}
+                        rowClassName={(row) => {
+                          if (
+                            !highlight.ts ||
+                            highlight.table !== tname ||
+                            !highlight.row
+                          )
+                            return "";
+                          const pkVal = String(
+                            (row as Record<string, unknown>)[data.headers[0]] ?? "",
+                          );
+                          return pkVal === highlight.row ? styles.highlightRow : "";
+                        }}
                         dataSource={(() => {
                           const q = (searchByTable[tname] ?? "").trim().toLowerCase();
                           const base = data.rows.map((r, i) => ({
@@ -701,12 +756,21 @@ export default function NumericWorkbench() {
                         })()}
                         columns={[
                           { title: "#", width: 50, fixed: "left", render: (_: unknown, __: unknown, idx: number) => idx + 1 },
-                          ...data.headers.map((h, ci) => ({
-                            title: h,
-                            dataIndex: h,
-                            key: `${h}__${ci}`,
-                            ellipsis: true,
-                            width: ci === 0 ? 110 : 140,
+                          ...data.headers.map((h, ci) => {
+                            const isHl =
+                              highlight.ts > 0 &&
+                              highlight.table === tname &&
+                              highlight.field === h;
+                            return {
+                              title: h,
+                              dataIndex: h,
+                              key: `${h}__${ci}`,
+                              ellipsis: true,
+                              width: ci === 0 ? 110 : 140,
+                              className: isHl ? styles.highlightCol : undefined,
+                              onHeaderCell: () => ({
+                                className: isHl ? styles.highlightCol : "",
+                              }),
                             render: (val: unknown, _row: unknown, rIdx: number) => {
                               const text = val === null || val === undefined || val === "" ? "—" : String(val);
                               const origIdx = (_row as { __idx?: number })?.__idx ?? rIdx;
@@ -738,7 +802,8 @@ export default function NumericWorkbench() {
                                 </span>
                               );
                             },
-                          })),
+                            };
+                          }),
                         ]}
                       />
                     </div>
