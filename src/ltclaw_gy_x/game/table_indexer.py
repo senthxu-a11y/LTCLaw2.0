@@ -10,12 +10,12 @@ import logging
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any, Optional
 
 import openpyxl
 
 from .config import ProjectConfig
-from .models import TableIndex, FieldInfo, FieldConfidence
+from .models import FieldConfidence, FieldInfo, TableIndex
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +81,21 @@ class TableIndexer:
             return "list"
         return "str"
 
+    def _is_blank_llm_response(self, response: Any) -> bool:
+        if response is None:
+            return True
+        if isinstance(response, dict):
+            return not any(str(v).strip() for v in response.values() if v is not None)
+        return not str(response).strip()
+
     async def _describe_fields_with_llm(self, table_name: str, fields_data: list) -> dict:
         if not fields_data:
             return {}
         try:
             prompt = self._build_field_description_prompt(table_name, fields_data)
             response = await self.model_router.call_model(prompt, model_type="field_describer")
+            if self._is_blank_llm_response(response):
+                raise ValueError(f"字段描述模型返回空响应: {table_name}")
             return self._parse_field_description_response(response, fields_data)
         except Exception as e:
             logger.error(f"LLM字段描述生成失败: {e}")
@@ -120,9 +129,14 @@ class TableIndexer:
                 name = f["name"]
                 if name in data:
                     fd = data[name]
+                    description = str(fd.get("description", "")).strip()
+                    confidence = fd.get("confidence", 0.5)
+                    if not description:
+                        description = f"{name}字段"
+                        confidence = 0.1
                     result[name] = {
-                        "description": fd.get("description", f"{name}字段"),
-                        "confidence": min(1.0, max(0.0, fd.get("confidence", 0.5))),
+                        "description": description,
+                        "confidence": min(1.0, max(0.0, confidence)),
                     }
                 else:
                     result[name] = {"description": f"{name}字段", "confidence": 0.1}
@@ -144,11 +158,15 @@ class TableIndexer:
                 "样本:" + nl + nl.join(sample_desc)
             )
             response = await self.model_router.call_model(prompt, model_type="table_summarizer")
+            if self._is_blank_llm_response(response):
+                raise ValueError(f"表摘要模型返回空响应: {table_name}")
             if isinstance(response, dict):
                 summary = response.get("summary", response.get("text", str(response)))
             else:
                 summary = str(response).strip()
             summary = summary.replace("**", "").replace("*", "").strip()
+            if not summary:
+                raise ValueError(f"表摘要解析为空: {table_name}")
             return summary, 0.8
         except Exception as e:
             logger.error(f"生成表格摘要失败: {e}")
@@ -219,8 +237,13 @@ class TableIndexer:
                     return rule.system
         return None
 
-    async def index_one(self, source: Path, svn_root: Path, svn_revision: int,
-                        prev: Optional[TableIndex] = None) -> TableIndex:
+    async def index_one(
+        self,
+        source: Path,
+        svn_root: Path,
+        svn_revision: int,
+        prev: Optional[TableIndex] = None,
+    ) -> TableIndex:
         logger.info(f"开始索引表格: {source}")
         file_hash = self._calculate_file_hash(source)
         if prev and prev.source_hash == file_hash:
@@ -238,8 +261,10 @@ class TableIndexer:
         header_row_idx = self.project.table_convention.header_row - 1
         if len(raw_data) <= header_row_idx:
             raise ValueError(f"文件行数不足: {source}")
-        headers = [str(c).strip() if c is not None else f"Column_{i}"
-                   for i, c in enumerate(raw_data[header_row_idx])]
+        headers = [
+            str(c).strip() if c is not None else f"Column_{i}"
+            for i, c in enumerate(raw_data[header_row_idx])
+        ]
         valid_count = 0
         for h in headers:
             if h and h != "None":
@@ -249,10 +274,9 @@ class TableIndexer:
         headers = headers[:valid_count]
         if not headers:
             raise ValueError(f"未找到有效表头: {source}")
-        data_rows = raw_data[header_row_idx + 1:]
-        data_rows = [row[:len(headers)] for row in data_rows]
-        data_rows = [row for row in data_rows
-                     if any(c is not None and str(c).strip() for c in row)]
+        data_rows = raw_data[header_row_idx + 1 :]
+        data_rows = [row[: len(headers)] for row in data_rows]
+        data_rows = [row for row in data_rows if any(c is not None and str(c).strip() for c in row)]
         row_count = len(data_rows)
         fields_data = []
         for i, header in enumerate(headers):
@@ -271,13 +295,15 @@ class TableIndexer:
             di = descs.get(name, {"description": f"{name}字段", "confidence": 0.1})
             score = di["confidence"]
             confidence = FieldConfidence.HIGH_AI if score >= 0.4 else FieldConfidence.LOW_AI
-            fields.append(FieldInfo(
-                name=name,
-                type=fd["type"],
-                description=di["description"],
-                confidence=confidence,
-                ai_raw_description=di["description"],
-            ))
+            fields.append(
+                FieldInfo(
+                    name=name,
+                    type=fd["type"],
+                    description=di["description"],
+                    confidence=confidence,
+                    ai_raw_description=di["description"],
+                )
+            )
         primary_key = self.project.table_convention.primary_key_field
         pk_index = None
         for i, h in enumerate(headers):

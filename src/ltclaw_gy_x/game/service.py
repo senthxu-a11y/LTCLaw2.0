@@ -59,18 +59,34 @@ class SimpleModelRouter:
         if provider is None or active is None:
             logger.debug("SimpleModelRouter: no active model, returning empty")
             return ""
+        model_id = getattr(active, "model_id", None) or getattr(active, "model", None)
+        if not model_id:
+            logger.warning("SimpleModelRouter: active model has no model id")
+            return ""
+        provider_type = type(provider).__name__
         try:
+            if provider_type == "AnthropicProvider":
+                client = provider._client(timeout=60)
+                resp = await client.messages.create(
+                    model=model_id,
+                    max_tokens=2048,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                parts = []
+                for blk in (getattr(resp, "content", []) or []):
+                    tx = getattr(blk, "text", None)
+                    if tx:
+                        parts.append(tx)
+                return "".join(parts)
             base_url = getattr(provider, "base_url", None)
             api_key = getattr(provider, "api_key", None)
-            model_id = getattr(active, "model_id", None)
-            if not (base_url and api_key and model_id):
+            if not (base_url and api_key):
                 return ""
             try:
                 from openai import AsyncOpenAI
             except Exception:
-                logger.debug("openai 包不可用，跳过 LLM 调用")
                 return ""
-            client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+            client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=60)
             resp = await client.chat.completions.create(
                 model=model_id,
                 messages=[{"role": "user", "content": prompt}],
@@ -81,7 +97,7 @@ class SimpleModelRouter:
                 return choice.message.content
             return ""
         except Exception as e:
-            logger.warning(f"SimpleModelRouter.call_model failed ({model_type}): {e}")
+            logger.warning(f"SimpleModelRouter.call_model failed ({model_type}, provider={provider_type}): {e}")
             return ""
 
 
