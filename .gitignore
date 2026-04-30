@@ -118,3 +118,7 @@ src/.hypothesis/
 .tmp_pytest/
 _wrapped_files.txt
 _wrapped_py.txt
+
+# Accidental nested duplicate of repo root
+LTclaw2.0/
+
