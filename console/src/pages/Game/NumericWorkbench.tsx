@@ -118,6 +118,8 @@ export default function NumericWorkbench() {
   const [aiPanel, setAiPanel] = useState<AiSuggestPanelResponse | null>(null);
   const [aiPanelLoading, setAiPanelLoading] = useState(false);
   const [aiPanelField, setAiPanelField] = useState<string | undefined>(undefined);
+  // 影响范围 (反向依赖, /game/index/impact)
+  const [impact, setImpact] = useState<Awaited<ReturnType<typeof gameApi.reverseImpact>> | null>(null);
 
   // 左右分割比例（左侧占比）
   const [topRatio, setTopRatio] = useState(0.6);
@@ -203,17 +205,25 @@ export default function NumericWorkbench() {
   useEffect(() => {
     if (!drawerOpen || !selectedAgent || !activeTable) {
       setAiPanel(null);
+      setImpact(null);
       return;
     }
     let cancelled = false;
     setAiPanelLoading(true);
-    gameWorkbenchApi
-      .aiSuggestPanel(selectedAgent, activeTable, aiPanelField)
-      .then((resp) => {
-        if (!cancelled) setAiPanel(resp);
+    Promise.all([
+      gameWorkbenchApi.aiSuggestPanel(selectedAgent, activeTable, aiPanelField),
+      gameApi.reverseImpact(selectedAgent, activeTable, aiPanelField, 3).catch(() => null),
+    ])
+      .then(([panel, imp]) => {
+        if (cancelled) return;
+        setAiPanel(panel);
+        setImpact(imp);
       })
       .catch(() => {
-        if (!cancelled) setAiPanel(null);
+        if (!cancelled) {
+          setAiPanel(null);
+          setImpact(null);
+        }
       })
       .finally(() => {
         if (!cancelled) setAiPanelLoading(false);
@@ -1193,6 +1203,42 @@ export default function NumericWorkbench() {
                     </div>
                   )}
                 </>
+              )}
+
+              {impact && impact.total > 0 && (
+                <div className={styles.panelSection}>
+                  <Text strong>
+                    {t("gameWorkbench.impactScope", {
+                      count: impact.total,
+                      defaultValue: `影响范围 (${impact.total})`,
+                    })}
+                    <Tag style={{ marginLeft: 6 }} color="volcano">
+                      {impact.tables.length} 张下游表
+                    </Tag>
+                  </Text>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {impact.impacts.slice(0, 15).map((it, i) => (
+                      <Tooltip
+                        key={i}
+                        title={it.path.join(" → ")}
+                      >
+                        <div style={{ fontSize: 12 }}>
+                          <Tag color={it.depth === 1 ? "red" : "orange"}>
+                            d{it.depth}
+                          </Tag>
+                          <Text code>{it.from_table}</Text>
+                          <Text type="secondary"> .{it.from_field}</Text>
+                          <Text type="secondary"> ← {it.to_field}</Text>
+                        </div>
+                      </Tooltip>
+                    ))}
+                    {impact.total > 15 && (
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        … {impact.total - 15} more
+                      </Text>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           )}

@@ -55,8 +55,53 @@ class TableConvention(BaseModel):
     """表格约定"""
     header_row: int = Field(default=1, description="表头行号(1-based)")
     comment_row: Union[int, None] = Field(default=None, description="注释行号(1-based)")
-    primary_key_field: str = Field(default="ID", description="主键字段名")
+    primary_key_field: str = Field(default="ID", description="主键字段名 (project 默认)")
+    per_table_primary_keys: dict[str, str] = Field(
+        default_factory=dict,
+        description="按表名覆盖主键字段，例如 {\"道具\": \"道具id\"}",
+    )
+    auto_detect_primary_key: bool = Field(
+        default=True,
+        description="未命中默认/覆盖时，按表头自动嗅探含 'id' 的字段（支持中英文）",
+    )
     id_ranges: list[IDRange] = Field(default_factory=list, description="ID分段规则")
+
+    def resolve_primary_key(
+        self,
+        table_name: str | None = None,
+        headers: list[str] | None = None,
+    ) -> str:
+        """根据 per-table 覆盖 + 自动嗅探返回最终主键字段名。
+
+        优先级：
+          1) per_table_primary_keys[table_name]
+          2) project 默认 primary_key_field（若在 headers 中能匹配）
+          3) auto_detect_primary_key=True 时按 headers 中
+             "id" 关键字 (大小写不敏感, 支持中文 "id"/"编号"/"序号") 嗅探
+          4) 回退到 project 默认 primary_key_field
+        """
+        if table_name and table_name in self.per_table_primary_keys:
+            override = self.per_table_primary_keys[table_name]
+            if override:
+                return override
+        default_key = self.primary_key_field
+        if not headers:
+            return default_key
+        lowered = [str(h or "").strip() for h in headers]
+        lower_set = {h.lower(): h for h in lowered if h}
+        if default_key and default_key.lower() in lower_set:
+            return lower_set[default_key.lower()]
+        if not self.auto_detect_primary_key:
+            return default_key
+        # 嗅探：优先精确 "id" / "编号" / "序号"，再退化到包含 "id" 的字段
+        sniff_exact = ("id", "编号", "序号")
+        for h in lowered:
+            if h.lower() in sniff_exact:
+                return h
+        for h in lowered:
+            if "id" in h.lower() or "编号" in h or "序号" in h:
+                return h
+        return default_key
 
 
 class ModelSlotRef(BaseModel):

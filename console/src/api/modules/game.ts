@@ -158,4 +158,32 @@ export const gameApi = {
       `/agents/${agentId}/game/index/tables/${encodeURIComponent(name)}/rows?offset=${offset}&limit=${limit}`,
     );
   },
+
+  async reverseImpact(
+    agentId: string,
+    table: string,
+    field?: string,
+    maxDepth: number = 3,
+  ): Promise<{
+    target: { table: string; field: string | null };
+    max_depth: number;
+    tables: string[];
+    impacts: Array<{
+      from_table: string;
+      from_field: string;
+      to_table: string;
+      to_field: string;
+      confidence: string;
+      inferred_by: string;
+      depth: number;
+      path: string[];
+    }>;
+    total: number;
+  }> {
+    const qs = new URLSearchParams({ table, max_depth: String(maxDepth) });
+    if (field) qs.set("field", field);
+    return request(
+      `/agents/${agentId}/game/index/impact?${qs.toString()}`,
+    );
+  },
 };

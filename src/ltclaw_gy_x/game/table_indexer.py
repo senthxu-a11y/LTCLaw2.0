@@ -379,7 +379,10 @@ class TableIndexer:
                     ai_raw_description=di["description"],
                 )
             )
-        primary_key = self.project.table_convention.primary_key_field
+        primary_key = self.project.table_convention.resolve_primary_key(
+            table_name=table_name,
+            headers=headers,
+        )
         pk_index = None
         for i, h in enumerate(headers):
             if h.lower() == primary_key.lower():

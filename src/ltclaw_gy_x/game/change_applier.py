@@ -331,7 +331,10 @@ class ChangeApplier:
                 continue
             field_map[name] = index
             field_map_ci.setdefault(name.lower(), index)
-        primary_key = self.project.table_convention.primary_key_field
+        primary_key = self.project.table_convention.resolve_primary_key(
+            table_name=op.table,
+            headers=headers,
+        )
         pk_index = field_map.get(primary_key)
         if pk_index is None:
             pk_index = field_map_ci.get(primary_key.lower())

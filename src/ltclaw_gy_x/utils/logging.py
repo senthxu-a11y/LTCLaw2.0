@@ -99,6 +99,24 @@ class PlainFormatter(logging.Formatter):
         return f"{formatted_time} | {prefix} | {record.getMessage()}"
 
 
+class SafeStreamHandler(logging.StreamHandler):
+    """StreamHandler that swallows errors on closed/broken stderr pipes.
+
+    When a service is shut down (e.g. `svc.stop()` after subprocess exit),
+    the underlying stderr pipe may already be closed, causing every
+    subsequent log emit to raise `ValueError: I/O operation on closed file`
+    or `BrokenPipeError`. Those errors are harmless during teardown but
+    spam the test output and obscure real failures. We trap them here.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:  # type: ignore[override]
+        try:
+            super().emit(record)
+        except (ValueError, BrokenPipeError, OSError):
+            # closed pipe / detached stream during shutdown — drop the record.
+            pass
+
+
 class SuppressPathAccessLogFilter(logging.Filter):
     """
     Filter out uvicorn access log lines whose message contains any of the
@@ -151,7 +169,9 @@ def setup_logger(level: int | str = logging.INFO):
         # Use sys.stderr directly. Wrapping sys.stderr.buffer in a
         # TextIOWrapper takes ownership of the buffer and closes it on GC,
         # which corrupts sys.stderr for subsequent tests/code.
-        handler = logging.StreamHandler(sys.stderr)
+        # SafeStreamHandler swallows ValueError/BrokenPipeError raised
+        # during late teardown when stderr pipe is already closed.
+        handler = SafeStreamHandler(sys.stderr)
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 

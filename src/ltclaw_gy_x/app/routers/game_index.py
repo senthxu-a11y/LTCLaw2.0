@@ -124,3 +124,73 @@ async def rebuild_index(workspace: Workspace = Depends(get_agent_for_request)):
         return await svc.force_full_rescan()
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/impact")
+async def reverse_impact(
+    table: str = Query(..., description="目标表名"),
+    field: Optional[str] = Query(None, description="目标字段（可选，留空则按整表分析）"),
+    max_depth: int = Query(3, ge=1, le=6, description="最大递归深度"),
+    workspace: Workspace = Depends(get_agent_for_request),
+):
+    """反向遍历依赖图，给出受影响的下游表/字段（用于 NumericWorkbench 影响范围侧栏）。
+
+    语义：DependencyEdge(from_table.from_field → to_table.to_field) 表示
+    `from_table` 的某行通过 `from_field` 引用 `to_table.to_field`。
+    因此当目标 `to_table` 的行被修改时，所有 `from_table` 都是潜在下游。
+    本接口对每个被影响节点继续向上递归，输出 BFS 路径。
+    """
+    svc, _ = _get(workspace)
+    committer = getattr(svc, "index_committer", None)
+    if committer is None:
+        raise HTTPException(status_code=412, detail="Index committer not available")
+    try:
+        dep = committer.load_dependency_graph()
+    except Exception:
+        dep = None
+    if dep is None:
+        return {"target": {"table": table, "field": field}, "impacts": [], "tables": [], "total": 0}
+
+    # 索引边：to_table -> [edge]
+    by_to: dict[str, list] = {}
+    for e in getattr(dep, "edges", []) or []:
+        by_to.setdefault(e.to_table, []).append(e)
+
+    seen: set[tuple[str, str]] = set()
+    impacts: list[dict] = []
+    # BFS 队列：(table, field|None, depth, path_str)
+    queue: list[tuple[str, Optional[str], int, list[str]]] = [
+        (table, field, 0, [f"{table}{('.' + field) if field else ''}"])
+    ]
+    while queue:
+        cur_table, cur_field, depth, path = queue.pop(0)
+        if depth >= max_depth:
+            continue
+        for edge in by_to.get(cur_table, []):
+            if cur_field is not None and edge.to_field != cur_field:
+                continue
+            key = (edge.from_table, edge.from_field)
+            if key in seen:
+                continue
+            seen.add(key)
+            conf = getattr(edge.confidence, "value", str(edge.confidence))
+            impacts.append({
+                "from_table": edge.from_table,
+                "from_field": edge.from_field,
+                "to_table": edge.to_table,
+                "to_field": edge.to_field,
+                "confidence": conf,
+                "inferred_by": edge.inferred_by,
+                "depth": depth + 1,
+                "path": path + [f"{edge.from_table}.{edge.from_field}"],
+            })
+            queue.append((edge.from_table, None, depth + 1, path + [f"{edge.from_table}.{edge.from_field}"]))
+
+    affected_tables = sorted({i["from_table"] for i in impacts})
+    return {
+        "target": {"table": table, "field": field},
+        "max_depth": max_depth,
+        "tables": affected_tables,
+        "impacts": impacts,
+        "total": len(impacts),
+    }
