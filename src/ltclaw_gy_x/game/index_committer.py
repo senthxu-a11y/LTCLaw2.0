@@ -61,9 +61,10 @@ class IndexCommitter:
             logger.warning(f"setup paths failed: {e}")
 
     def _serialize_table_indexes(self, tables: List[TableIndex]) -> str:
+        # 注意: 此处不写入 datetime.now() — 输出必须确定性可复算 SHA。
+        # registry.json 自己在顶层维护 generated_at, 这里不需要。
         data = {
             "version": "1.0",
-            "generated_at": datetime.now().isoformat(),
             "tables": [t.model_dump(mode="json") for t in tables],
         }
         return json.dumps(data, indent=2, ensure_ascii=False)

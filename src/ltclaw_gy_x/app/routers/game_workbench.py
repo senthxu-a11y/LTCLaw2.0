@@ -236,20 +236,47 @@ def _strip_json_fences(text: str) -> str:
     return s.strip()
 
 
+def _to_plain(obj: Any) -> Any:
+    """递归把 BaseModel / Enum / SimpleNamespace / 含 __dict__ 对象转为纯 dict/list/标量。
+
+    用途: 让 _table_to_dict / _field_to_dict 在生产 (pydantic) 与测试 (SimpleNamespace)
+    fixture 下统一行为。Enum / 类 enum (单 value 属性) 对象转为其字符串值。
+    """
+    import enum as _enum
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    if isinstance(obj, _enum.Enum):
+        return obj.value
+    if hasattr(obj, "model_dump"):
+        try:
+            return obj.model_dump(mode="json")
+        except Exception:  # noqa: BLE001
+            pass
+    if isinstance(obj, dict):
+        return {k: _to_plain(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_to_plain(x) for x in obj]
+    if hasattr(obj, "__dict__"):
+        d = {k: v for k, v in vars(obj).items() if not k.startswith("_")}
+        # enum-like 对象 (仅一个 value 属性) → 返回其 value
+        if list(d.keys()) == ["value"]:
+            return _to_plain(d["value"])
+        return {k: _to_plain(v) for k, v in d.items()}
+    return obj
+
+
 def _table_to_dict(tinfo: Any) -> dict[str, Any]:
-    if hasattr(tinfo, "model_dump"):
-        return tinfo.model_dump()
-    if isinstance(tinfo, dict):
-        return tinfo
+    out = _to_plain(tinfo)
+    if isinstance(out, dict):
+        return out
     return {}
 
 
 def _field_to_dict(f: Any) -> dict[str, Any] | None:
-    if hasattr(f, "model_dump"):
-        f = f.model_dump()
-    if not isinstance(f, dict):
-        return None
-    return f
+    out = _to_plain(f)
+    if isinstance(out, dict):
+        return out
+    return None
 
 
 # 名称类列识别启发：用于行索引瘦身，避免向 LLM 发整张表
