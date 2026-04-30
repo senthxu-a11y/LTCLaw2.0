@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Avatar,
   Button,
   Card,
   Drawer,
   Empty,
   Input,
+  InputNumber,
   Modal,
   Select,
   Space,
@@ -17,14 +17,11 @@ import {
   Typography,
 } from "antd";
 import {
-  CheckCircleTwoTone,
-  CloseCircleTwoTone,
-  DeleteOutlined,
-  PlusOutlined,
+  PushpinFilled,
+  PushpinOutlined,
   ReloadOutlined,
   RobotOutlined,
-  SaveOutlined,
-  SendOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
@@ -37,39 +34,48 @@ import { gameWorkbenchApi } from "../../api/modules/gameWorkbench";
 import type {
   AiSuggestPanelResponse,
   DamageChainResponse,
-  FieldChange,
   PreviewItem,
   ReverseImpact,
   SuggestChange,
 } from "../../api/modules/gameWorkbench";
 import type { TableIndex } from "../../api/types/game";
 import { pushWorkbenchCard } from "../Chat/workbenchCardChannel";
-import { DamageChain } from "./components/DamageChain";
+import { DirtyList } from "./components/DirtyList";
+import { ImpactPanel } from "./components/ImpactPanel";
+import { WorkbenchChat, type ChatMessage } from "./components/WorkbenchChat";
+import {
+  coerceCellValue,
+  dirtyKeyOf,
+  useDirtyCells,
+} from "./hooks/useDirtyCells";
 import styles from "./NumericWorkbench.module.less";
 
 const { Text } = Typography;
 
-interface PendingRow {
-  key: string;
-  table: string;
-  row_id: string;
-  field: string;
-  new_value: string;
+interface RowsData {
+  headers: string[];
+  rows: (string | number | boolean)[][];
+  total: number;
 }
 
-const formatValue = (value: unknown): string => {
-  if (value === null || value === undefined) return "—";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
+interface CellEditState {
+  table: string;
+  rowKey: string;
+  field: string;
+  value: string;      // 用户输入中的字符串
+  origin: unknown;    // 原始值（取消时还原）
+}
+
+const formatVal = (v: unknown): string => {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
 };
 
-const newRow = (table: string): PendingRow => ({
-  key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-  table,
-  row_id: "",
-  field: "",
-  new_value: "",
-});
+const isNumericType = (t?: string): boolean => {
+  const s = (t || "").toLowerCase();
+  return s.includes("int") || s.includes("float") || s === "number" || s === "double";
+};
 
 export default function NumericWorkbench() {
   const { t } = useTranslation();
@@ -77,13 +83,23 @@ export default function NumericWorkbench() {
   const { selectedAgent } = useAgentStore();
   const [searchParams] = useSearchParams();
 
-  // Deep-link 参数 (从 Chat / 联动卡片跳转携带)
-  // 兼容 spec 风格 (tableId/fieldKey/rowId) 与简短风格 (table/field/row)
-  const dlTable =
-    searchParams.get("table") || searchParams.get("tableId") || "";
+  // Deep-link
+  const dlTable = searchParams.get("table") || searchParams.get("tableId") || "";
   const dlRow = searchParams.get("row") || searchParams.get("rowId") || "";
-  const dlField =
-    searchParams.get("field") || searchParams.get("fieldKey") || "";
+  const dlField = searchParams.get("field") || searchParams.get("fieldKey") || "";
+
+  const [tableNames, setTableNames] = useState<string[]>([]);
+  const [tablesLoading, setTablesLoading] = useState(false);
+  const [openTables, setOpenTables] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
+  /** Tab 钉选：当存在 pinnedTab 时，上区横向分屏（左 activeTab / 右 pinnedTab） */
+  const [pinnedTab, setPinnedTab] = useState<string | null>(null);
+  const [detailsByTable, setDetailsByTable] = useState<Record<string, TableIndex>>({});
+  const [rowsByTable, setRowsByTable] = useState<Record<string, RowsData>>({});
+  const [rowsLoading, setRowsLoading] = useState(false);
+  const [searchByTable, setSearchByTable] = useState<Record<string, string>>({});
+
+  // 高亮（来自 deep-link 或「定位」按钮）
   const [highlight, setHighlight] = useState<{
     table?: string;
     field?: string;
@@ -91,55 +107,42 @@ export default function NumericWorkbench() {
     ts: number;
   }>({ ts: 0 });
 
-  const [tableNames, setTableNames] = useState<string[]>([]);
-  const [tablesLoading, setTablesLoading] = useState(false);
-  const [openTables, setOpenTables] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<string | null>(null);
-  const activeTable = activeTab;
-  const [detailsByTable, setDetailsByTable] = useState<Record<string, TableIndex>>({});
-  const [detailLoading, setDetailLoading] = useState(false);
+  // 单元格编辑态（同时只允许一个）
+  const [editing, setEditing] = useState<CellEditState | null>(null);
 
-
-  const [rowsByTable, setRowsByTable] = useState<
-    Record<string, { headers: string[]; rows: (string | number | boolean)[][]; total: number }>
-  >({});
-  const [rowsLoading, setRowsLoading] = useState(false);
-  const [searchByTable, setSearchByTable] = useState<Record<string, string>>({});
-
-  // 右侧抽屉 + 下边聊天
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // 工作台 Chat（独立会话）
   const [chatInput, setChatInput] = useState("");
-  const [chatMessages, setChatMessages] = useState<
-    { role: "user" | "assistant"; content: string; ts: number }[]
-  >([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatSending, setChatSending] = useState(false);
-  // AI 建议结果
-  const [aiSuggestions, setAiSuggestions] = useState<SuggestChange[]>([]);
-  const [aiMessage, setAiMessage] = useState<string>("");
 
-  // 结构化面板 (规则化, /ai-suggest)
-  const [aiPanel, setAiPanel] = useState<AiSuggestPanelResponse | null>(null);
-  const [aiPanelLoading, setAiPanelLoading] = useState(false);
-  const [aiPanelField, setAiPanelField] = useState<string | undefined>(undefined);
-  // 影响范围 (反向依赖, /game/index/impact)
-  const [impact, setImpact] = useState<Awaited<ReturnType<typeof gameApi.reverseImpact>> | null>(null);
+  // dirty 状态 hook
+  const dirty = useDirtyCells();
 
-  // 左右分割比例（左侧占比）
-  const [topRatio, setTopRatio] = useState(0.6);
-  const splitContainerRef = useRef<HTMLDivElement>(null);
-  const draggingRef = useRef(false);
-
-  const [pending, setPending] = useState<PendingRow[]>([]);
+  // 影响 / 反向依赖（基于当前 dirty）
   const [preview, setPreview] = useState<PreviewItem[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [damageChain, setDamageChain] = useState<DamageChainResponse | null>(null);
+  const [damageChainLoading, setDamageChainLoading] = useState(false);
+  const [affectedTables, setAffectedTables] = useState<string[]>([]);
+  const [impacts, setImpacts] = useState<ReverseImpact[]>([]);
 
+  // 当前活跃表的字段统计（用于范围/类型校验）
+  const [aiPanel, setAiPanel] = useState<AiSuggestPanelResponse | null>(null);
+
+  // 草稿提交
   const [draftOpen, setDraftOpen] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDesc, setDraftDesc] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  // 上下分割（上区高度比例）
+  const [topRatio, setTopRatio] = useState(0.55);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
 
   const debounceRef = useRef<number | null>(null);
 
+  // ── 加载表 ─────────────────────────────────────────────
   const loadTables = useCallback(async () => {
     if (!selectedAgent) {
       setTableNames([]);
@@ -148,9 +151,7 @@ export default function NumericWorkbench() {
     setTablesLoading(true);
     try {
       const resp = await gameApi.listTables(selectedAgent, { page: 1, size: 200 });
-      const names = resp.items.map((it) => it.table_name);
-      setTableNames(names);
-      // 不再默认选中任何表，避免误把第一张表当成用户选择
+      setTableNames(resp.items.map((it) => it.table_name));
     } catch {
       message.error(t("gameWorkbench.loadTablesFailed", { defaultValue: "加载表列表失败" }));
     } finally {
@@ -158,98 +159,25 @@ export default function NumericWorkbench() {
     }
   }, [selectedAgent, message, t]);
 
-  const loadTableDetail = useCallback(async (name: string) => {
-    if (!selectedAgent) return;
-    setDetailLoading(true);
-    try {
-      const detail = await gameApi.getTable(selectedAgent, name);
-      setDetailsByTable((prev) => ({ ...prev, [name]: detail }));
-    } catch {
-      message.error(t("gameWorkbench.loadDetailFailed", { defaultValue: "加载表详情失败" }));
-    } finally {
-      setDetailLoading(false);
-    }
-  }, [selectedAgent, message, t]);
+  const loadTableDetail = useCallback(
+    async (name: string) => {
+      if (!selectedAgent) return;
+      try {
+        const detail = await gameApi.getTable(selectedAgent, name);
+        setDetailsByTable((prev) => ({ ...prev, [name]: detail }));
+      } catch {
+        /* ignore */
+      }
+    },
+    [selectedAgent],
+  );
 
-  useEffect(() => { loadTables(); }, [loadTables]);
-
-  // Deep-link: 从 Chat 卡片 / 跨页跳转携带 ?table=...&row=...&field=... 时
-  // 自动打开目标表、切 tab、预填全表搜索过滤到目标行、高亮目标列约 1.8s
-  useEffect(() => {
-    if (!dlTable) return;
-    if (tableNames.length === 0) return;
-    if (!tableNames.includes(dlTable)) return;
-    setOpenTables((prev) =>
-      prev.includes(dlTable) ? prev : [...prev, dlTable],
-    );
-    setActiveTab(dlTable);
-    if (dlRow) {
-      setSearchByTable((prev) => ({ ...prev, [dlTable]: dlRow }));
-    }
-    setHighlight({
-      table: dlTable,
-      field: dlField || undefined,
-      row: dlRow || undefined,
-      ts: Date.now(),
-    });
-    const tid = window.setTimeout(
-      () => setHighlight((h) => ({ ...h, ts: 0 })),
-      1800,
-    );
-    return () => window.clearTimeout(tid);
-  }, [dlTable, dlRow, dlField, tableNames]);
-
-  // Deep-link 携带 field 时, 默认聚焦到 ai-suggest 面板
-  useEffect(() => {
-    if (dlField) setAiPanelField(dlField);
-  }, [dlField]);
-
-  // activeTable / aiPanelField / drawerOpen 变化 → 拉结构化面板
-  useEffect(() => {
-    if (!drawerOpen || !selectedAgent || !activeTable) {
-      setAiPanel(null);
-      setImpact(null);
-      return;
-    }
-    let cancelled = false;
-    setAiPanelLoading(true);
-    Promise.all([
-      gameWorkbenchApi.aiSuggestPanel(selectedAgent, activeTable, aiPanelField),
-      gameApi.reverseImpact(selectedAgent, activeTable, aiPanelField, 3).catch(() => null),
-    ])
-      .then(([panel, imp]) => {
-        if (cancelled) return;
-        setAiPanel(panel);
-        setImpact(imp);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setAiPanel(null);
-          setImpact(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setAiPanelLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [drawerOpen, selectedAgent, activeTable, aiPanelField]);
-
-  // 为新打开但还没加载详情/行的表自动加载
-  useEffect(() => {
-    openTables.forEach((name) => {
-      if (!detailsByTable[name]) loadTableDetail(name);
-    });
-  }, [openTables, detailsByTable, loadTableDetail]);
-
-  // \u8868\u5b9e\u9645\u5185\u5bb9\u52a0\u8f7d
   const loadRowsForTable = useCallback(
     async (name: string) => {
       if (!selectedAgent) return;
       setRowsLoading(true);
       try {
-        const resp = await gameApi.getTableRows(selectedAgent, name, 0, 200);
+        const resp = await gameApi.getTableRows(selectedAgent, name, 0, 500);
         setRowsByTable((prev) => ({
           ...prev,
           [name]: { headers: resp.headers, rows: resp.rows, total: resp.total },
@@ -263,188 +191,58 @@ export default function NumericWorkbench() {
     [selectedAgent],
   );
 
-  // 为打开的表自动加载行数据；activeTab 不在 openTables 时同步
+  useEffect(() => { loadTables(); }, [loadTables]);
+
   useEffect(() => {
     openTables.forEach((name) => {
+      if (!detailsByTable[name]) loadTableDetail(name);
       if (!rowsByTable[name]) loadRowsForTable(name);
     });
     if (openTables.length === 0) {
       setActiveTab(null);
+      setPinnedTab(null);
     } else if (!activeTab || !openTables.includes(activeTab)) {
       setActiveTab(openTables[0]);
     }
-  }, [openTables, activeTab, rowsByTable, loadRowsForTable]);
-
-  // 分割拖拽（水平）
-  const onSplitterMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    draggingRef.current = true;
-    const onMove = (ev: MouseEvent) => {
-      if (!draggingRef.current || !splitContainerRef.current) return;
-      const rect = splitContainerRef.current.getBoundingClientRect();
-      const ratio = (ev.clientX - rect.left) / rect.width;
-      setTopRatio(Math.max(0.2, Math.min(0.8, ratio)));
-    };
-    const onUp = () => {
-      draggingRef.current = false;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  };
-
-  const validChanges: FieldChange[] = useMemo(() => {
-    return pending
-      .filter((p) => p.row_id !== "" && p.field !== "")
-      .map((p) => {
-        let value: unknown = p.new_value;
-        if (p.new_value !== "" && !Number.isNaN(Number(p.new_value))) {
-          value = Number(p.new_value);
-        }
-        const rowIdNum = Number(p.row_id);
-        const rowId = Number.isFinite(rowIdNum) && String(rowIdNum) === p.row_id
-          ? rowIdNum
-          : p.row_id;
-        return {
-          table: p.table,
-          row_id: rowId,
-          field: p.field,
-          new_value: value,
-        };
-      });
-  }, [pending]);
-
-  // 聊天发送：调后端 /suggest，将建议填充到 Drawer
-  const sendChat = useCallback(async () => {
-    const text = chatInput.trim();
-    if (!text) return;
-    if (!selectedAgent) return;
-    setChatMessages((prev) => [...prev, { role: "user", content: text, ts: Date.now() }]);
-    setChatInput("");
-    setChatSending(true);
-    try {
-      const history = chatMessages
-        .slice(-6)
-        .map((m) => ({ role: m.role, content: m.content }));
-      const resp = await gameWorkbenchApi.suggest(
-        selectedAgent,
-        text,
-        openTables,
-        validChanges,
-        history,
-      );
-      const assistantMsg =
-        resp.message ||
-        (resp.changes?.length
-          ? t("gameWorkbench.aiGotN", {
-              count: resp.changes.length,
-              defaultValue: `已生成 ${resp.changes.length} 条建议，请在右侧面板查看并采纳。`,
-            })
-          : t("gameWorkbench.aiNoChange", { defaultValue: "AI 未返回可采纳的字段改动。" }));
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: assistantMsg, ts: Date.now() },
-      ]);
-      setAiSuggestions(resp.changes || []);
-      setAiMessage(resp.message || "");
-      if ((resp.changes || []).length > 0) {
-        setDrawerOpen(true);
-      }
-      // 联动 Chat 右栏：推一张数值卡片
-      try {
-        const tablesUsed = resp.context_summary?.main_tables ?? openTables;
-        pushWorkbenchCard({
-          id: `numeric-${Date.now()}`,
-          agentId: selectedAgent,
-          kind: "numeric_table",
-          title:
-            t("gameWorkbench.cardNumericTitle", {
-              defaultValue: `数值查询：${text.slice(0, 30)}`,
-            }) + (text.length > 30 ? "…" : ""),
-          summary: [
-            tablesUsed.length ? `表：${tablesUsed.join(", ")}` : "",
-            (resp.changes ?? []).length
-              ? `建议：${(resp.changes ?? []).length} 条`
-              : "",
-            resp.message ? resp.message.slice(0, 120) : "",
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          href: tablesUsed[0]
-            ? `/numeric-workbench?table=${encodeURIComponent(tablesUsed[0])}`
-            : "/numeric-workbench",
-          payload: {
-            tables: tablesUsed,
-            changes: resp.changes,
-            query_terms: resp.context_summary?.query_terms,
-          },
-        });
-      } catch {
-        /* ignore card push errors */
-      }
-    } catch (err: any) {
-      const msg = err?.message || String(err);
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: t("gameWorkbench.aiFailed", {
-            defaultValue: "AI 调用失败: ",
-          }) + msg,
-          ts: Date.now(),
-        },
-      ]);
-    } finally {
-      setChatSending(false);
+    if (pinnedTab && !openTables.includes(pinnedTab)) {
+      setPinnedTab(null);
     }
-  }, [chatInput, selectedAgent, openTables, validChanges, t]);
+  }, [openTables, activeTab, pinnedTab, detailsByTable, rowsByTable, loadTableDetail, loadRowsForTable]);
 
-  const adoptSuggestion = useCallback((sug: SuggestChange) => {
-    setPending((prev) => [
-      ...prev,
-      {
-        key: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        table: sug.table,
-        row_id: String(sug.row_id),
-        field: sug.field,
-        new_value:
-          sug.new_value === null || sug.new_value === undefined
-            ? ""
-            : String(sug.new_value),
-      },
-    ]);
-    message.success(t("gameWorkbench.adoptedOne", { defaultValue: "已加入待编辑" }));
-  }, [message, t]);
+  // Deep-link
+  useEffect(() => {
+    if (!dlTable) return;
+    if (tableNames.length === 0) return;
+    if (!tableNames.includes(dlTable)) return;
+    setOpenTables((prev) => (prev.includes(dlTable) ? prev : [...prev, dlTable]));
+    setActiveTab(dlTable);
+    if (dlRow) setSearchByTable((prev) => ({ ...prev, [dlTable]: dlRow }));
+    setHighlight({
+      table: dlTable,
+      field: dlField || undefined,
+      row: dlRow || undefined,
+      ts: Date.now(),
+    });
+    const tid = window.setTimeout(() => setHighlight((h) => ({ ...h, ts: 0 })), 1800);
+    return () => window.clearTimeout(tid);
+  }, [dlTable, dlRow, dlField, tableNames]);
 
-  const adoptAllSuggestions = useCallback(() => {
-    if (aiSuggestions.length === 0) return;
-    setPending((prev) => [
-      ...prev,
-      ...aiSuggestions.map((sug, i) => ({
-        key: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
-        table: sug.table,
-        row_id: String(sug.row_id),
-        field: sug.field,
-        new_value:
-          sug.new_value === null || sug.new_value === undefined
-            ? ""
-            : String(sug.new_value),
-      })),
-    ]);
-    message.success(
-      t("gameWorkbench.adoptedAll", {
-        count: aiSuggestions.length,
-        defaultValue: `已采纳 ${aiSuggestions.length} 条建议加入待编辑`,
-      }),
-    );
-  }, [aiSuggestions, message, t]);
+  // 切换 activeTab → 拉一次结构化面板（用于范围校验）
+  useEffect(() => {
+    if (!selectedAgent || !activeTab) {
+      setAiPanel(null);
+      return;
+    }
+    let cancelled = false;
+    gameWorkbenchApi
+      .aiSuggestPanel(selectedAgent, activeTab, undefined)
+      .then((p) => { if (!cancelled) setAiPanel(p); })
+      .catch(() => { if (!cancelled) setAiPanel(null); });
+    return () => { cancelled = true; };
+  }, [selectedAgent, activeTab]);
 
-  const [damageChain, setDamageChain] = useState<DamageChainResponse | null>(null);
-  const [damageChainLoading, setDamageChainLoading] = useState(false);
-  const [affectedTables, setAffectedTables] = useState<string[]>([]);
-  const [impacts, setImpacts] = useState<ReverseImpact[]>([]);
-
+  // dirty → debounced preview + reverse-impact
+  const validChanges = dirty.validChanges;
   const runPreview = useCallback(async () => {
     if (!selectedAgent) return;
     if (validChanges.length === 0) {
@@ -457,16 +255,16 @@ export default function NumericWorkbench() {
     setPreviewLoading(true);
     setDamageChainLoading(true);
     try {
-      const [previewResp, damageResp] = await Promise.all([
+      const [p, d] = await Promise.all([
         gameWorkbenchApi.preview(selectedAgent, validChanges),
-        gameWorkbenchApi.damageChain(selectedAgent, { changes: validChanges }).catch(
-          () => null,
-        ),
+        gameWorkbenchApi
+          .damageChain(selectedAgent, { changes: validChanges })
+          .catch(() => null),
       ]);
-      setPreview(previewResp.items);
-      setAffectedTables(previewResp.affected_tables ?? []);
-      setImpacts(previewResp.impacts ?? []);
-      setDamageChain(damageResp);
+      setPreview(p.items);
+      setAffectedTables(p.affected_tables ?? []);
+      setImpacts(p.impacts ?? []);
+      setDamageChain(d);
     } catch {
       message.error(t("gameWorkbench.previewFailed", { defaultValue: "预览失败" }));
     } finally {
@@ -477,100 +275,533 @@ export default function NumericWorkbench() {
 
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => {
-      runPreview();
-    }, 300);
+    debounceRef.current = window.setTimeout(runPreview, 350);
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
   }, [runPreview]);
 
-  const updateRow = (key: string, patch: Partial<PendingRow>) => {
-    setPending((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  // ── 上下 splitter 拖拽 ─────────────────────────────────
+  const onSplitterMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingRef.current || !splitContainerRef.current) return;
+      const rect = splitContainerRef.current.getBoundingClientRect();
+      const ratio = (ev.clientY - rect.top) / rect.height;
+      setTopRatio(Math.max(0.25, Math.min(0.85, ratio)));
+    };
+    const onUp = () => {
+      draggingRef.current = false;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   };
 
-  const addRow = () => {
-    if (!activeTable) return;
-    setPending((prev) => [...prev, newRow(activeTable)]);
+  // ── 编辑：开始 / 提交 / 取消 ──────────────────────────
+  const beginEdit = (
+    table: string,
+    rowKey: string,
+    field: string,
+    origin: unknown,
+  ) => {
+    const existing = dirty.dirty[dirtyKeyOf(table, rowKey, field)];
+    setEditing({
+      table,
+      rowKey,
+      field,
+      value:
+        existing && existing.newValue !== undefined && existing.newValue !== null
+          ? String(existing.newValue)
+          : origin === null || origin === undefined
+            ? ""
+            : String(origin),
+      origin,
+    });
   };
 
-  const removeRow = (key: string) => {
-    setPending((prev) => prev.filter((r) => r.key !== key));
-  };
+  const cancelEdit = () => setEditing(null);
 
-  const resetAll = () => {
-    setPending([]);
-    setPreview([]);
-    setDamageChain(null);
-    setAffectedTables([]);
-    setImpacts([]);
-  };
-
-  const [rebuilding, setRebuilding] = useState(false);
-  const rebuildIndex = useCallback(async () => {
-    if (!selectedAgent) return;
-    setRebuilding(true);
-    try {
-      const resp = await gameApi.rebuildIndex(selectedAgent);
-      message.success(
-        t("gameWorkbench.rebuildOk", {
-          count: resp.indexed,
-          scanned: resp.scanned_files.length,
-          defaultValue: `重建完成: 扫描 ${resp.scanned_files.length} 个文件，索引 ${resp.indexed} 张表`,
+  const commitEdit = useCallback(() => {
+    if (!editing) return;
+    const detail = detailsByTable[editing.table];
+    const fieldType = detail?.fields.find((f) => f.name === editing.field)?.type;
+    const { value, typeOk } = coerceCellValue(editing.value, fieldType);
+    if (!typeOk) {
+      message.error(
+        t("gameWorkbench.typeError", {
+          defaultValue: `字段 ${editing.field} 期望数值类型，输入无效`,
         }),
       );
-      await loadTables();
-      // \u5237\u65b0\u5f53\u524d\u8868\u5185\u5bb9
-      if (activeTable) {
-        setRowsByTable((prev) => {
-          const next = { ...prev };
-          delete next[activeTable];
-          return next;
-        });
-        await loadRowsForTable(activeTable);
-      }
-    } catch (err: any) {
-      message.error(
-        t("gameWorkbench.rebuildFailed", {
-          defaultValue: "重建失败",
-        }) + (err?.message ? `: ${err.message}` : ""),
-      );
-    } finally {
-      setRebuilding(false);
+      return;
     }
-  }, [selectedAgent, message, t, loadTables, activeTable, loadRowsForTable]);
+    // 与原值相同 → 视为撤销
+    const sameAsOrigin =
+      String(value) === String(editing.origin ?? "") ||
+      (value === "" && (editing.origin === null || editing.origin === undefined));
+    if (sameAsOrigin) {
+      dirty.clearCell(editing.table, editing.rowKey, editing.field);
+    } else {
+      dirty.setCell({
+        table: editing.table,
+        rowKey: editing.rowKey,
+        field: editing.field,
+        oldValue: editing.origin,
+        newValue: value,
+        source: "manual",
+      });
+    }
+    setEditing(null);
+  }, [editing, detailsByTable, dirty, message, t]);
 
+  // ── 单元格渲染（双击进入编辑 / dirty 高亮 / 范围警告） ─
+  const renderCell = useCallback(
+    (
+      tname: string,
+      rowKey: string,
+      field: string,
+      origVal: unknown,
+      _rIdx: number,
+    ) => {
+      const k = dirtyKeyOf(tname, rowKey, field);
+      const dItem = dirty.dirty[k];
+      const isEditing =
+        editing &&
+        editing.table === tname &&
+        editing.rowKey === rowKey &&
+        editing.field === field;
+
+      const detail = detailsByTable[tname];
+      const fieldType = detail?.fields.find((f) => f.name === field)?.type;
+      const numeric = isNumericType(fieldType);
+
+      // 范围警告（仅当 dirty 且 activeTab=tname 时使用 aiPanel.numeric_stats）
+      let rangeWarn: string | null = null;
+      if (
+        dItem &&
+        numeric &&
+        tname === activeTab &&
+        aiPanel?.numeric_stats &&
+        typeof dItem.newValue === "number"
+      ) {
+        const { min, max } = aiPanel.numeric_stats;
+        if (typeof min === "number" && typeof max === "number") {
+          if (dItem.newValue < min || dItem.newValue > max) {
+            rangeWarn = `参考区间 [${min} ~ ${max}]`;
+          }
+        }
+      }
+
+      if (isEditing) {
+        return numeric ? (
+          <InputNumber
+            autoFocus
+            size="small"
+            value={editing!.value === "" ? null : Number(editing!.value)}
+            onChange={(v) =>
+              setEditing((e) => (e ? { ...e, value: v === null || v === undefined ? "" : String(v) } : e))
+            }
+            onBlur={commitEdit}
+            onPressEnter={commitEdit}
+            onKeyDown={(e) => { if (e.key === "Escape") cancelEdit(); }}
+            style={{ width: "100%" }}
+          />
+        ) : (
+          <Input
+            autoFocus
+            size="small"
+            value={editing!.value}
+            onChange={(e) => setEditing((s) => (s ? { ...s, value: e.target.value } : s))}
+            onBlur={commitEdit}
+            onPressEnter={commitEdit}
+            onKeyDown={(e) => { if (e.key === "Escape") cancelEdit(); }}
+          />
+        );
+      }
+
+      const display = dItem ? formatVal(dItem.newValue) : formatVal(origVal);
+      const cls = dItem
+        ? `${styles.editableCellWrap} ${styles.dirty} ${
+            dItem.source === "ai" ? styles.dirtyAi : ""
+          }`
+        : styles.editableCellWrap;
+
+      return (
+        <span
+          className={cls}
+          title={t("gameWorkbench.dblClickToEdit", {
+            defaultValue: "双击编辑（Enter 保存 / Esc 取消）",
+          })}
+          onDoubleClick={() => beginEdit(tname, rowKey, field, origVal)}
+        >
+          {dItem && (
+            <span
+              className={`${styles.dirtyDot} ${dItem.source === "ai" ? styles.ai : ""}`}
+            />
+          )}
+          {display}
+          {rangeWarn && (
+            <Tooltip title={rangeWarn}>
+              <WarningOutlined className={styles.rangeWarn} />
+            </Tooltip>
+          )}
+        </span>
+      );
+    },
+    [dirty.dirty, editing, detailsByTable, aiPanel, activeTab, t, commitEdit],
+  );
+
+  // ── 渲染单张表的内容（含搜索 + Table） ────────────────
+  const renderTablePane = useCallback(
+    (tname: string, isPinnedHalf?: boolean) => {
+      const data = rowsByTable[tname];
+      if (!data) return <Spin style={{ display: "block", margin: "40px auto" }} />;
+      const headers = data.headers;
+      const pkCol = headers[0];
+      const q = (searchByTable[tname] ?? "").trim().toLowerCase();
+      const baseSrc = data.rows.map((r, i) => ({
+        __idx: i,
+        __rowKey: String(r[0] ?? i),
+        ...Object.fromEntries(headers.map((h, ci) => [h, r[ci]])),
+      }));
+      const dataSource = q
+        ? baseSrc.filter((row) =>
+            headers.some((h) =>
+              String((row as Record<string, unknown>)[h] ?? "").toLowerCase().includes(q),
+            ),
+          )
+        : baseSrc;
+      return (
+        <div className={styles.tableScroll}>
+          <div style={{ padding: "8px 12px", borderBottom: "1px solid #f0f0f0", background: "#fafafa" }}>
+            <Space size={6}>
+              <Input.Search
+                allowClear
+                size="small"
+                placeholder={t("gameWorkbench.searchPlaceholder", {
+                  defaultValue: "全表搜索（按任意单元格内容过滤）",
+                })}
+                value={searchByTable[tname] ?? ""}
+                onChange={(e) =>
+                  setSearchByTable((prev) => ({ ...prev, [tname]: e.target.value }))
+                }
+                style={{ width: 320 }}
+              />
+              {q && (
+                <Tag color={dataSource.length ? "blue" : "default"}>
+                  {t("gameWorkbench.searchHit", {
+                    defaultValue: `命中 ${dataSource.length} / ${data.rows.length} 行`,
+                  })}
+                </Tag>
+              )}
+              {!isPinnedHalf && (
+                <Tooltip
+                  title={
+                    pinnedTab === tname
+                      ? t("gameWorkbench.unpinHint", { defaultValue: "取消钉选" })
+                      : t("gameWorkbench.pinHint", { defaultValue: "钉到右侧分屏（双击 Tab 头同效）" })
+                  }
+                >
+                  <Button
+                    size="small"
+                    type={pinnedTab === tname ? "primary" : "default"}
+                    icon={pinnedTab === tname ? <PushpinFilled /> : <PushpinOutlined />}
+                    onClick={() => {
+                      if (pinnedTab === tname) {
+                        setPinnedTab(null);
+                      } else {
+                        // 钉的必须不是 activeTab
+                        if (activeTab === tname) {
+                          // 找到一个非 tname 的 tab 作为 active
+                          const other = openTables.find((n) => n !== tname);
+                          if (!other) {
+                            message.info(
+                              t("gameWorkbench.pinNeedTwoTabs", {
+                                defaultValue: "需要至少 2 张表才能分屏",
+                              }),
+                            );
+                            return;
+                          }
+                          setActiveTab(other);
+                        }
+                        setPinnedTab(tname);
+                      }
+                    }}
+                  />
+                </Tooltip>
+              )}
+            </Space>
+          </div>
+          <Table
+            size="small"
+            rowKey={(_r, idx) => String(idx ?? 0)}
+            sticky
+            scroll={{ x: "max-content", y: "calc(100% - 60px)" }}
+            pagination={{ pageSize: 50, size: "small", showSizeChanger: false }}
+            rowClassName={(row) => {
+              if (!highlight.ts || highlight.table !== tname || !highlight.row) return "";
+              const pkVal = String((row as Record<string, unknown>)[pkCol] ?? "");
+              return pkVal === highlight.row ? styles.highlightRow : "";
+            }}
+            dataSource={dataSource}
+            columns={[
+              { title: "#", width: 50, fixed: "left" as const, render: (_: unknown, __: unknown, idx: number) => idx + 1 },
+              ...headers.map((h, ci) => {
+                const isHl =
+                  highlight.ts > 0 && highlight.table === tname && highlight.field === h;
+                return {
+                  title: h,
+                  dataIndex: h,
+                  key: `${h}__${ci}`,
+                  ellipsis: true,
+                  width: ci === 0 ? 110 : 140,
+                  className: isHl ? styles.highlightCol : undefined,
+                  onHeaderCell: () => ({ className: isHl ? styles.highlightCol : "" }),
+                  render: (val: unknown, row: unknown, rIdx: number) => {
+                    const rowKey = (row as { __rowKey?: string })?.__rowKey ?? String(rIdx);
+                    if (ci === 0) return formatVal(val);
+                    return renderCell(tname, rowKey, h, val, rIdx);
+                  },
+                };
+              }),
+            ]}
+          />
+        </div>
+      );
+    },
+    [
+      rowsByTable,
+      searchByTable,
+      pinnedTab,
+      activeTab,
+      openTables,
+      highlight,
+      message,
+      t,
+      renderCell,
+    ],
+  );
+
+  // ── Chat 发送 ─────────────────────────────────────────
+  const sendChat = useCallback(async () => {
+    const text = chatInput.trim();
+    if (!text || !selectedAgent) return;
+    const userMsg: ChatMessage = { role: "user", content: text, ts: Date.now() };
+    setChatMessages((prev) => [...prev, userMsg]);
+    setChatInput("");
+    setChatSending(true);
+    try {
+      const history = chatMessages.slice(-6).map((m) => ({ role: m.role, content: m.content }));
+      const resp = await gameWorkbenchApi.suggest(
+        selectedAgent,
+        text,
+        openTables,
+        validChanges,
+        history,
+      );
+      const sugs = resp.changes ?? [];
+      // AI 提到的表自动打开 + 切到第一张作为 activeTab
+      const tablesToOpen = Array.from(new Set(sugs.map((s) => s.table))).filter(
+        (n) => n && !openTables.includes(n),
+      );
+      if (tablesToOpen.length > 0) {
+        setOpenTables((prev) => [...prev, ...tablesToOpen]);
+      }
+      if (sugs.length > 0) {
+        const firstSug = sugs[0];
+        // 切到首条建议涉及的表 + 高亮 cell
+        setActiveTab(firstSug.table);
+        setSearchByTable((prev) => ({ ...prev, [firstSug.table]: String(firstSug.row_id) }));
+        setHighlight({
+          table: firstSug.table,
+          row: String(firstSug.row_id),
+          field: firstSug.field,
+          ts: Date.now(),
+        });
+        window.setTimeout(() => setHighlight((h) => ({ ...h, ts: 0 })), 2000);
+      }
+      const assistantMsg: ChatMessage = {
+        role: "assistant",
+        content:
+          resp.message ||
+          (sugs.length
+            ? t("gameWorkbench.aiGotN", {
+                count: sugs.length,
+                defaultValue: `已生成 ${sugs.length} 条建议，点击「接受写入」即可改进表。`,
+              })
+            : t("gameWorkbench.aiNoChange", {
+                defaultValue: "AI 未返回可采纳的字段改动。",
+              })),
+        ts: Date.now(),
+        suggestions: sugs.length ? sugs : undefined,
+        acceptedKeys: [],
+      };
+      setChatMessages((prev) => [...prev, assistantMsg]);
+
+      // 推 Chat 卡片到全局
+      try {
+        const tablesUsed = resp.context_summary?.main_tables ?? openTables;
+        pushWorkbenchCard({
+          id: `numeric-${Date.now()}`,
+          agentId: selectedAgent,
+          kind: "numeric_table",
+          title:
+            t("gameWorkbench.cardNumericTitle", {
+              defaultValue: `数值查询：${text.slice(0, 30)}`,
+            }) + (text.length > 30 ? "…" : ""),
+          summary: [
+            tablesUsed.length ? `表：${tablesUsed.join(", ")}` : "",
+            sugs.length ? `建议：${sugs.length} 条` : "",
+            resp.message ? resp.message.slice(0, 120) : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          href: tablesUsed[0]
+            ? `/numeric-workbench?table=${encodeURIComponent(tablesUsed[0])}`
+            : "/numeric-workbench",
+          payload: { tables: tablesUsed, changes: sugs, query_terms: resp.context_summary?.query_terms },
+        });
+      } catch {
+        /* ignore */
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: t("gameWorkbench.aiFailed", { defaultValue: "AI 调用失败: " }) + msg,
+          ts: Date.now(),
+        },
+      ]);
+    } finally {
+      setChatSending(false);
+    }
+  }, [chatInput, chatMessages, selectedAgent, openTables, validChanges, t]);
+
+  // ── 接受 AI 建议（写入 dirty） ────────────────────────
+  const jumpToCell = useCallback(
+    (tableName: string, rowId: string | number, field: string) => {
+      if (!openTables.includes(tableName)) {
+        setOpenTables((prev) => [...prev, tableName]);
+      }
+      setActiveTab(tableName);
+      setSearchByTable((prev) => ({ ...prev, [tableName]: String(rowId) }));
+      setHighlight({
+        table: tableName,
+        row: String(rowId),
+        field,
+        ts: Date.now(),
+      });
+      window.setTimeout(() => setHighlight((h) => ({ ...h, ts: 0 })), 1800);
+    },
+    [openTables],
+  );
+
+  const findOriginValue = useCallback(
+    (tableName: string, rowKey: string, field: string): unknown => {
+      const data = rowsByTable[tableName];
+      if (!data) return null;
+      const fieldIdx = data.headers.indexOf(field);
+      if (fieldIdx < 0) return null;
+      const row = data.rows.find((r) => String(r[0]) === rowKey);
+      if (!row) return null;
+      return row[fieldIdx];
+    },
+    [rowsByTable],
+  );
+
+  const acceptSuggestion = useCallback(
+    (msgIdx: number, sug: SuggestChange) => {
+      const rowKey = String(sug.row_id);
+      const detail = detailsByTable[sug.table];
+      const fieldType = detail?.fields.find((f) => f.name === sug.field)?.type;
+      const numeric = isNumericType(fieldType);
+      const newValue: unknown =
+        numeric && sug.new_value !== null && sug.new_value !== undefined
+          ? Number(sug.new_value as number | string)
+          : sug.new_value;
+      const origin = findOriginValue(sug.table, rowKey, sug.field);
+      dirty.setCell({
+        table: sug.table,
+        rowKey,
+        field: sug.field,
+        oldValue: origin,
+        newValue: Number.isNaN(newValue as number) ? sug.new_value : newValue,
+        source: "ai",
+        reason: sug.reason,
+      });
+      const k = dirtyKeyOf(sug.table, rowKey, sug.field);
+      setChatMessages((prev) =>
+        prev.map((m, i) =>
+          i === msgIdx
+            ? { ...m, acceptedKeys: [...(m.acceptedKeys || []), k] }
+            : m,
+        ),
+      );
+      jumpToCell(sug.table, sug.row_id, sug.field);
+      message.success(
+        t("gameWorkbench.acceptedToCell", { defaultValue: "已写入单元格（AI 来源）" }),
+      );
+    },
+    [detailsByTable, dirty, findOriginValue, jumpToCell, message, t],
+  );
+
+  const acceptAllSuggestions = useCallback(
+    (msgIdx: number, sugs: SuggestChange[]) => {
+      const acceptedKeys: string[] = [];
+      sugs.forEach((sug) => {
+        const rowKey = String(sug.row_id);
+        const detail = detailsByTable[sug.table];
+        const fieldType = detail?.fields.find((f) => f.name === sug.field)?.type;
+        const numeric = isNumericType(fieldType);
+        const nv: unknown =
+          numeric && sug.new_value !== null && sug.new_value !== undefined
+            ? Number(sug.new_value as number | string)
+            : sug.new_value;
+        const origin = findOriginValue(sug.table, rowKey, sug.field);
+        dirty.setCell({
+          table: sug.table,
+          rowKey,
+          field: sug.field,
+          oldValue: origin,
+          newValue: Number.isNaN(nv as number) ? sug.new_value : nv,
+          source: "ai",
+          reason: sug.reason,
+        });
+        acceptedKeys.push(dirtyKeyOf(sug.table, rowKey, sug.field));
+      });
+      setChatMessages((prev) =>
+        prev.map((m, i) => (i === msgIdx ? { ...m, acceptedKeys } : m)),
+      );
+      message.success(
+        t("gameWorkbench.acceptedAllToCell", {
+          count: sugs.length,
+          defaultValue: `已批量写入 ${sugs.length} 个单元格`,
+        }),
+      );
+    },
+    [detailsByTable, dirty, findOriginValue, message, t],
+  );
+
+  // ── 提交草稿 ─────────────────────────────────────────
   const openDraft = () => {
     if (validChanges.length === 0) {
       message.warning(t("gameWorkbench.noChangesToSubmit", { defaultValue: "没有可提交的修改" }));
       return;
     }
     const tables = Array.from(new Set(validChanges.map((c) => c.table))).join(",");
-    setDraftTitle(t("gameWorkbench.defaultTitle", {
-      tables,
-      count: validChanges.length,
-      defaultValue: `数值改动: ${tables} (${validChanges.length} 项)`,
-    }));
+    setDraftTitle(
+      t("gameWorkbench.defaultTitle", {
+        tables,
+        count: validChanges.length,
+        defaultValue: `数值改动: ${tables} (${validChanges.length} 项)`,
+      }),
+    );
     setDraftDesc("");
     setDraftOpen(true);
-    try {
-      pushWorkbenchCard({
-        id: `draft-${Date.now()}`,
-        agentId: selectedAgent || "default",
-        kind: "draft_doc",
-        title: t("gameWorkbench.cardDraftTitle", {
-          defaultValue: `变更草稿：${tables}`,
-        }),
-        summary: validChanges
-          .slice(0, 6)
-          .map((c) => `· ${c.table}/${c.row_id}/${c.field} → ${c.new_value}`)
-          .join("\n") + (validChanges.length > 6 ? `\n…(共 ${validChanges.length} 条)` : ""),
-        href: "/numeric-workbench",
-        payload: { tables: tables.split(","), changes: validChanges },
-      });
-    } catch {
-      /* ignore */
-    }
   };
 
   const submitDraft = async () => {
@@ -591,7 +822,7 @@ export default function NumericWorkbench() {
       });
       message.success(t("gameWorkbench.draftCreated", { defaultValue: "草案已生成" }));
       setDraftOpen(false);
-      resetAll();
+      dirty.clearAll();
     } catch {
       message.error(t("gameWorkbench.draftCreateFailed", { defaultValue: "草案生成失败" }));
     } finally {
@@ -599,69 +830,42 @@ export default function NumericWorkbench() {
     }
   };
 
-  const editorColumns = [
-    {
-      title: t("gameWorkbench.colTable", { defaultValue: "表" }),
-      dataIndex: "table",
-      width: 140,
-      render: (_: unknown, record: PendingRow) => (
-        <Tag>{record.table}</Tag>
-      ),
-    },
-    {
-      title: t("gameWorkbench.colRowId", { defaultValue: "行 ID" }),
-      dataIndex: "row_id",
-      width: 130,
-      render: (_: unknown, record: PendingRow) => (
-        <Input
-          value={record.row_id}
-          onChange={(e) => updateRow(record.key, { row_id: e.target.value })}
-          placeholder="row_id"
-        />
-      ),
-    },
-    {
-      title: t("gameWorkbench.colField", { defaultValue: "字段" }),
-      dataIndex: "field",
-      width: 200,
-      render: (_: unknown, record: PendingRow) => {
-        const tFields = detailsByTable[record.table]?.fields ?? [];
-        return (
-          <Select
-            value={record.field || undefined}
-            onChange={(v) => updateRow(record.key, { field: v })}
-            options={tFields.map((f) => ({ label: f.name, value: f.name }))}
-            placeholder={t("gameWorkbench.fieldPlaceholder", { defaultValue: "选择字段" })}
-            style={{ width: "100%" }}
-            showSearch
-          />
-        );
-      },
-    },
-    {
-      title: t("gameWorkbench.colNewValue", { defaultValue: "新值" }),
-      dataIndex: "new_value",
-      render: (_: unknown, record: PendingRow) => (
-        <Input
-          value={record.new_value}
-          onChange={(e) => updateRow(record.key, { new_value: e.target.value })}
-          placeholder={t("gameWorkbench.newValuePlaceholder", { defaultValue: "新值（数字会自动识别）" })}
-        />
-      ),
-    },
-    {
-      title: "",
-      width: 60,
-      render: (_: unknown, record: PendingRow) => (
-        <Button
-          type="text"
-          danger
-          icon={<DeleteOutlined />}
-          onClick={() => removeRow(record.key)}
-        />
-      ),
-    },
-  ];
+  // ── Tab items（不分屏时） ─────────────────────────────
+  const tabItems = useMemo(
+    () =>
+      openTables.map((tname) => ({
+        key: tname,
+        label: (
+          <span
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              if (pinnedTab === tname) {
+                setPinnedTab(null);
+              } else {
+                if (activeTab === tname) {
+                  const other = openTables.find((n) => n !== tname);
+                  if (!other) {
+                    message.info(
+                      t("gameWorkbench.pinNeedTwoTabs", {
+                        defaultValue: "需要至少 2 张表才能分屏",
+                      }),
+                    );
+                    return;
+                  }
+                  setActiveTab(other);
+                }
+                setPinnedTab(tname);
+              }
+            }}
+          >
+            {tname}
+            {pinnedTab === tname && <PushpinFilled style={{ marginLeft: 4, color: "#1677ff" }} />}
+          </span>
+        ),
+        children: renderTablePane(tname),
+      })),
+    [openTables, pinnedTab, activeTab, message, t, renderTablePane],
+  );
 
   return (
     <div className={styles.workbench}>
@@ -669,88 +873,100 @@ export default function NumericWorkbench() {
         parent={t("nav.game", { defaultValue: "Game Development" })}
         current={t("nav.gameWorkbench", { defaultValue: "数值工作台" })}
         subRow={
-          <Text type="secondary">
-            {t("gameWorkbench.subtitle", {
-              defaultValue: "批量编辑数值表 → 实时预览 → 一键生成改动草案",
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {t("gameWorkbench.subtitleV2", {
+              defaultValue: "下方 Chat 描述意图 → 上方表内直接改 → 右栏看依赖与影响 → 一键提交",
             })}
           </Text>
         }
       />
 
       <div className={styles.toolbar}>
-        <Text type="secondary">{t("gameWorkbench.tableLabel", { defaultValue: "目标表" })}</Text>
         <Select
           mode="multiple"
-          value={openTables}
-          onChange={(vals: string[]) => {
-            setOpenTables(vals);
-            if (vals.length > 0 && (!activeTab || !vals.includes(activeTab))) {
-              setActiveTab(vals[0]);
-            }
-          }}
-          options={tableNames.map((n) => ({ label: n, value: n }))}
+          placeholder={t("gameWorkbench.tablePlaceholder", {
+            defaultValue: "选择要打开的表（可多选）",
+          })}
           loading={tablesLoading}
-          style={{ minWidth: 320, maxWidth: 560 }}
-          placeholder={t("gameWorkbench.tablePlaceholder", { defaultValue: "选择数据表（可多选）" })}
+          value={openTables}
+          onChange={(v) => setOpenTables(v)}
+          style={{ minWidth: 360 }}
           showSearch
-          maxTagCount="responsive"
           allowClear
+          options={tableNames.map((n) => ({ label: n, value: n }))}
         />
-        <Button icon={<ReloadOutlined />} onClick={loadTables} disabled={tablesLoading}>
+        <Button icon={<ReloadOutlined />} onClick={loadTables} loading={tablesLoading}>
           {t("gameWorkbench.refresh", { defaultValue: "刷新" })}
         </Button>
-        <Tooltip title={t("gameWorkbench.rebuildTip", { defaultValue: "扫描 SVN 工作区目录，重新索引所有表（无需先 svn update）" })}>
-          <Button onClick={rebuildIndex} loading={rebuilding} disabled={!selectedAgent}>
-            {t("gameWorkbench.rebuild", { defaultValue: "重建索引" })}
-          </Button>
-        </Tooltip>
-        <Button
-          icon={<RobotOutlined />}
-          onClick={() => setDrawerOpen(true)}
-          disabled={!selectedAgent}
-        >
-          {t("gameWorkbench.aiPanel", { defaultValue: "AI 补全面板" })}
-        </Button>
-        <div style={{ flex: 1 }} />
+        <Tag color="blue">
+          {t("gameWorkbench.dirtyTotalTag", {
+            count: dirty.dirtyList.length,
+            defaultValue: `当前 ${dirty.dirtyList.length} 项待保存`,
+          })}
+        </Tag>
+        {rowsLoading && <Spin size="small" />}
       </div>
 
       <div className={styles.split} ref={splitContainerRef}>
         <Card
           className={styles.upperPane}
-          style={{ flex: `0 0 calc(${topRatio * 100}% - 4px)` }}
+          style={{ flex: `${topRatio} 1 0` }}
+          styles={{ body: { padding: 0, flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" } }}
           title={
             <Space>
-              <span>{t("gameWorkbench.tablesViewTitle", { defaultValue: "多表并列视图" })}</span>
-              {rowsLoading && <Spin size="small" />}
+              <span>
+                {t("gameWorkbench.tablesViewTitle", { defaultValue: "多表编辑视图" })}
+              </span>
+              {pinnedTab && (
+                <Tag color="purple" icon={<PushpinFilled />}>
+                  {t("gameWorkbench.pinnedTag", {
+                    defaultValue: `分屏中：${activeTab} ↔ ${pinnedTab}`,
+                  })}
+                </Tag>
+              )}
             </Space>
           }
-          extra={
-            activeTable && (
-              <Button
-                size="small"
-                icon={<ReloadOutlined />}
-                onClick={() => {
-                  setRowsByTable((prev) => {
-                    const next = { ...prev };
-                    delete next[activeTable];
-                    return next;
-                  });
-                  loadRowsForTable(activeTable);
-                }}
-              >
-                {t("gameWorkbench.reloadRows", { defaultValue: "重新加载" })}
-              </Button>
-            )
-          }
-          styles={{ body: { padding: 0, flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" } }}
         >
           {openTables.length === 0 ? (
             <Empty
               style={{ padding: 24 }}
               description={t("gameWorkbench.emptyTablesView", {
-                defaultValue: "请在工具栏选择目标表",
+                defaultValue: "请在工具栏选择目标表，或在下方 Chat 描述意图让 AI 自动打开相关表",
               })}
             />
+          ) : pinnedTab && activeTab && pinnedTab !== activeTab ? (
+            <div className={styles.pinnedSplit}>
+              <div className={styles.pinnedHalf}>
+                <div className={styles.pinnedTabHeader}>
+                  <Space>
+                    <Tag>{activeTab}</Tag>
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                      {t("gameWorkbench.mainPaneLabel", { defaultValue: "主表" })}
+                    </Text>
+                  </Space>
+                </div>
+                {renderTablePane(activeTab, true)}
+              </div>
+              <div className={styles.pinnedHalf}>
+                <div className={styles.pinnedTabHeader}>
+                  <Space>
+                    <Tag color="purple" icon={<PushpinFilled />}>{pinnedTab}</Tag>
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                      {t("gameWorkbench.pinnedPaneLabel", { defaultValue: "钉选副表" })}
+                    </Text>
+                  </Space>
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<PushpinFilled />}
+                    onClick={() => setPinnedTab(null)}
+                  >
+                    {t("gameWorkbench.unpin", { defaultValue: "取消钉选" })}
+                  </Button>
+                </div>
+                {renderTablePane(pinnedTab, true)}
+              </div>
+            </div>
           ) : (
             <Tabs
               type="editable-card"
@@ -760,131 +976,11 @@ export default function NumericWorkbench() {
               onEdit={(targetKey, action) => {
                 if (action === "remove" && typeof targetKey === "string") {
                   setOpenTables((prev) => prev.filter((n) => n !== targetKey));
-                  setPending((prev) => prev.filter((p) => p.table !== targetKey));
+                  dirty.clearTable(targetKey);
+                  if (pinnedTab === targetKey) setPinnedTab(null);
                 }
               }}
-              items={openTables.map((tname) => {
-                const data = rowsByTable[tname];
-                return {
-                  key: tname,
-                  label: tname,
-                  children: data ? (
-                    <div className={styles.tableScroll}>
-                      <div style={{ padding: "8px 12px", borderBottom: "1px solid #f0f0f0", background: "#fafafa" }}>
-                        <Input.Search
-                          allowClear
-                          size="small"
-                          placeholder={t("gameWorkbench.searchPlaceholder", {
-                            defaultValue: "全表搜索（按任意单元格内容过滤）",
-                          })}
-                          value={searchByTable[tname] ?? ""}
-                          onChange={(e) =>
-                            setSearchByTable((prev) => ({ ...prev, [tname]: e.target.value }))
-                          }
-                          style={{ maxWidth: 360 }}
-                        />
-                        {(() => {
-                          const q = (searchByTable[tname] ?? "").trim();
-                          if (!q) return null;
-                          const matched = data.rows.filter((r) =>
-                            r.some((c) => String(c ?? "").toLowerCase().includes(q.toLowerCase())),
-                          ).length;
-                          return (
-                            <Tag style={{ marginLeft: 8 }} color={matched ? "blue" : "default"}>
-                              {t("gameWorkbench.searchHit", {
-                                defaultValue: `命中 ${matched} / ${data.rows.length} 行`,
-                              })}
-                            </Tag>
-                          );
-                        })()}
-                      </div>
-                      <Table
-                        size="small"
-                        rowKey={(_, idx) => String(idx ?? 0)}
-                        sticky
-                        scroll={{ x: "max-content", y: "calc(100vh - 460px)" }}
-                        pagination={{ pageSize: 50, size: "small", showSizeChanger: false }}
-                        rowClassName={(row) => {
-                          if (
-                            !highlight.ts ||
-                            highlight.table !== tname ||
-                            !highlight.row
-                          )
-                            return "";
-                          const pkVal = String(
-                            (row as Record<string, unknown>)[data.headers[0]] ?? "",
-                          );
-                          return pkVal === highlight.row ? styles.highlightRow : "";
-                        }}
-                        dataSource={(() => {
-                          const q = (searchByTable[tname] ?? "").trim().toLowerCase();
-                          const base = data.rows.map((r, i) => ({
-                            __idx: i,
-                            ...Object.fromEntries(data.headers.map((h, ci) => [h, r[ci]])),
-                          }));
-                          if (!q) return base;
-                          return base.filter((row) =>
-                            data.headers.some((h) => String((row as Record<string, unknown>)[h] ?? "").toLowerCase().includes(q)),
-                          );
-                        })()}
-                        columns={[
-                          { title: "#", width: 50, fixed: "left", render: (_: unknown, __: unknown, idx: number) => idx + 1 },
-                          ...data.headers.map((h, ci) => {
-                            const isHl =
-                              highlight.ts > 0 &&
-                              highlight.table === tname &&
-                              highlight.field === h;
-                            return {
-                              title: h,
-                              dataIndex: h,
-                              key: `${h}__${ci}`,
-                              ellipsis: true,
-                              width: ci === 0 ? 110 : 140,
-                              className: isHl ? styles.highlightCol : undefined,
-                              onHeaderCell: () => ({
-                                className: isHl ? styles.highlightCol : "",
-                              }),
-                            render: (val: unknown, _row: unknown, rIdx: number) => {
-                              const text = val === null || val === undefined || val === "" ? "—" : String(val);
-                              const origIdx = (_row as { __idx?: number })?.__idx ?? rIdx;
-                              return (
-                                <span
-                                  title={t("gameWorkbench.dblClickHint", { defaultValue: "双击加入待编辑" })}
-                                  style={{ cursor: "pointer" }}
-                                  onDoubleClick={() => {
-                                    const pkVal = String(data.rows[origIdx][0] ?? "");
-                                    if (!pkVal) return;
-                                    setPending((prev) => [
-                                      ...prev,
-                                      {
-                                        key: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                                        table: tname,
-                                        row_id: pkVal,
-                                        field: h,
-                                        new_value: "",
-                                      },
-                                    ]);
-                                    message.info(
-                                      t("gameWorkbench.addedFromRow", {
-                                        defaultValue: `已加入待编辑：${pkVal} / ${h}`,
-                                      }),
-                                    );
-                                  }}
-                                >
-                                  {text}
-                                </span>
-                              );
-                            },
-                            };
-                          }),
-                        ]}
-                      />
-                    </div>
-                  ) : (
-                    <Spin style={{ display: "block", margin: "24px auto" }} />
-                  ),
-                };
-              })}
+              items={tabItems}
               tabBarStyle={{ paddingLeft: 12, marginBottom: 0 }}
               className={styles.tablesTabs}
               style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
@@ -896,479 +992,67 @@ export default function NumericWorkbench() {
 
         <Card
           className={styles.lowerPane}
-          style={{ flex: 1 }}
-          title={
-            <Space>
-              <span>{t("gameWorkbench.lowerTitle", { defaultValue: "实时影响预览" })}</span>
-              {activeTable && <Tag>{activeTable}</Tag>}
-              <Tag color="blue">
-                {t("gameWorkbench.pendingCount", {
-                  count: pending.length,
-                  defaultValue: `改动 ${pending.length} 项`,
-                })}
-              </Tag>
-              {previewLoading && <Spin size="small" />}
-            </Space>
-          }
-          extra={
-            <Space>
-              <Button
-                icon={<PlusOutlined />}
-                onClick={addRow}
-                disabled={!activeTable || detailLoading}
-                size="small"
-              >
-                {t("gameWorkbench.addRow", { defaultValue: "添加一行" })}
-              </Button>
-              <Button onClick={resetAll} disabled={pending.length === 0} size="small">
-                {t("gameWorkbench.reset", { defaultValue: "重置" })}
-              </Button>
-              <Button
-                type="primary"
-                icon={<SaveOutlined />}
-                onClick={openDraft}
-                disabled={validChanges.length === 0}
-                size="small"
-              >
-                {t("gameWorkbench.generateDraft", { defaultValue: "生成变更草稿" })}
-              </Button>
-            </Space>
-          }
-          styles={{ body: { padding: 12, flex: 1, overflow: "auto" } }}
+          style={{ flex: `${1 - topRatio} 1 0` }}
+          styles={{ body: { padding: 0, flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" } }}
         >
-          <div className={styles.lowerBody}>
-            <div className={styles.summarySection}>
-              <Text strong>{t("gameWorkbench.changeSummary", { defaultValue: "改动摘要" })}</Text>
-              {pending.length === 0 ? (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description={t("gameWorkbench.emptyEditor", {
-                    defaultValue: "在上方表格双击单元格，或点击\"添加一行\"开始",
-                  })}
-                />
-              ) : (
-                <Table
-                  size="small"
-                  rowKey="key"
-                  dataSource={pending}
-                  columns={editorColumns}
-                  pagination={false}
-                />
-              )}
-            </div>
-
-            <div className={styles.previewSection}>
-              <Text strong>
-                {t("gameWorkbench.previewTitle", { defaultValue: "效果 / 计算链路" })}
-                {"  "}
-                <Tag color={preview.every((p) => p.ok) && preview.length > 0 ? "green" : "default"}>
-                  {t("gameWorkbench.previewCount", {
-                    count: preview.length,
-                    defaultValue: `${preview.length} 条`,
-                  })}
-                </Tag>
-              </Text>
-              {preview.length === 0 ? (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description={t("gameWorkbench.emptyPreview", { defaultValue: "无可预览内容" })}
-                />
-              ) : (
-                <div className={styles.previewList}>
-                  {preview.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className={`${styles.previewItem} ${item.ok ? styles.ok : styles.fail}`}
-                    >
-                      <Space>
-                        {item.ok ? (
-                          <CheckCircleTwoTone twoToneColor="#52c41a" />
-                        ) : (
-                          <Tooltip title={item.error ?? ""}>
-                            <CloseCircleTwoTone twoToneColor="#ff4d4f" />
-                          </Tooltip>
-                        )}
-                        <Text strong>
-                          {item.table}.{item.field}[{String(item.row_id)}]
-                        </Text>
-                      </Space>
-                      <div className={styles.delta}>
-                        <Text type="secondary">{formatValue(item.old_value)}</Text>
-                        <span className={styles.deltaArrow}>→</span>
-                        <Text>{formatValue(item.new_value)}</Text>
-                      </div>
-                      {!item.ok && item.error && (
-                        <Text type="danger" style={{ fontSize: 12 }}>
-                          {item.error}
-                        </Text>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {(damageChain || damageChainLoading) && (
-              <div className={styles.previewSection}>
-                <DamageChain data={damageChain} loading={damageChainLoading} />
-              </div>
-            )}
-
-            {affectedTables.length > 0 && (
-              <div className={styles.previewSection}>
-                <Text strong>
-                  {t("gameWorkbench.impactTitle", {
-                    defaultValue: "影响范围",
-                  })}
-                  {"  "}
-                  <Tag color="orange">
-                    {t("gameWorkbench.impactCount", {
-                      count: affectedTables.length,
-                      defaultValue: `${affectedTables.length} 张表受影响`,
-                    })}
-                  </Tag>
-                </Text>
-                <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {affectedTables.map((tbl) => {
-                    const refCount = impacts.filter((i) => i.from_table === tbl).length;
-                    return (
-                      <Tooltip
-                        key={tbl}
-                        title={impacts
-                          .filter((i) => i.from_table === tbl)
-                          .map((i) => `${i.from_table}.${i.from_field} ← ${i.to_table}.${i.to_field} (${i.confidence}, depth ${i.depth})`)
-                          .join("\n") || tbl}
-                      >
-                        <Tag color="gold" style={{ cursor: "help" }}>
-                          {tbl} · {refCount}
-                        </Tag>
-                      </Tooltip>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        </Card>
-      </div>
-
-      <div className={styles.chatBar}>
-        {chatMessages.length > 0 && (
-          <div className={styles.chatHistory}>
-            {chatMessages.map((m, i) => (
-              <div key={i} className={`${styles.chatMsg} ${styles[m.role]}`}>
-                <Avatar
-                  size="small"
-                  icon={m.role === "user" ? undefined : <RobotOutlined />}
-                  style={{ background: m.role === "user" ? "#1677ff" : "#52c41a" }}
-                >
-                  {m.role === "user" ? "U" : null}
-                </Avatar>
-                <span className={styles.chatBubble}>{m.content}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className={styles.chatInputRow}>
-          <Input.TextArea
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            placeholder={t("gameWorkbench.chatPlaceholder", {
-              defaultValue: "向 AI 描述你的需求，例如：把所有 Sword 类装备的 SellPrice 提升 20%",
-            })}
-            autoSize={{ minRows: 1, maxRows: 4 }}
-            onPressEnter={(e) => {
-              if (!e.shiftKey) {
-                e.preventDefault();
-                sendChat();
-              }
+          <WorkbenchChat
+            messages={chatMessages}
+            input={chatInput}
+            sending={chatSending}
+            onInputChange={setChatInput}
+            onSend={sendChat}
+            onAcceptSuggestion={(sug) => {
+              const idx = chatMessages.findIndex((m) => m.suggestions?.includes(sug));
+              if (idx >= 0) acceptSuggestion(idx, sug);
             }}
-            disabled={chatSending}
+            onAcceptAll={(sugs) => {
+              const idx = chatMessages.findIndex((m) => m.suggestions === sugs);
+              if (idx >= 0) acceptAllSuggestions(idx, sugs);
+            }}
+            onJumpToCell={jumpToCell}
+            onClear={() => setChatMessages([])}
           />
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={sendChat}
-            loading={chatSending}
-            disabled={!chatInput.trim()}
-          >
-            {t("gameWorkbench.send", { defaultValue: "确认发送" })}
-          </Button>
-        </div>
+        </Card>
       </div>
 
       <Drawer
         title={
           <Space>
             <RobotOutlined />
-            <span>{t("gameWorkbench.aiPanelTitle", { defaultValue: "AI 补全面板" })}</span>
-            {activeTable && <Tag>{activeTable}</Tag>}
+            <span>
+              {t("gameWorkbench.rightPanelTitle", { defaultValue: "依赖 / 影响 / 修改条目" })}
+            </span>
+            {activeTab && <Tag>{activeTab}</Tag>}
           </Space>
         }
         placement="right"
         width={460}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        open
+        closable={false}
         mask={false}
+        getContainer={false}
+        rootStyle={{ position: "absolute" }}
+        styles={{ wrapper: { boxShadow: "-2px 0 8px rgba(0,0,0,0.06)" } }}
       >
         <div className={styles.aiDrawerBody}>
-          {/* ─── 结构化面板 (规则化, 来自 /ai-suggest) ─── */}
-          {activeTable && (
-            <div className={styles.structuredPanel}>
-              <Space style={{ justifyContent: "space-between", width: "100%" }}>
-                <Text strong>
-                  {t("gameWorkbench.structuredPanelTitle", {
-                    defaultValue: "结构化建议",
-                  })}
-                </Text>
-                <Select
-                  size="small"
-                  style={{ minWidth: 140 }}
-                  value={aiPanelField}
-                  placeholder={t("gameWorkbench.fieldPlaceholder", {
-                    defaultValue: "选择字段",
-                  })}
-                  allowClear
-                  showSearch
-                  options={(detailsByTable[activeTable]?.fields ?? []).map(
-                    (f) => ({ label: f.name, value: f.name }),
-                  )}
-                  onChange={(v) => setAiPanelField(v || undefined)}
-                />
-              </Space>
-              {aiPanelLoading && <Spin size="small" />}
-              {aiPanel && !aiPanelLoading && (
-                <>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    {aiPanel.summary}
-                  </Text>
-
-                  {aiPanel.available_ids.length > 0 && (
-                    <div className={styles.panelSection}>
-                      <Text strong>
-                        {t("gameWorkbench.availableIds", {
-                          defaultValue: "可用 ID",
-                        })}
-                      </Text>
-                      <div className={styles.idGrid}>
-                        {aiPanel.available_ids.map((r) => (
-                          <Tooltip
-                            key={`${r.type}-${r.start}`}
-                            title={`${r.start}~${r.end} · 已用 ${r.used_count} · 剩 ${r.remaining}`}
-                          >
-                            <Tag
-                              color={r.next_available !== null ? "blue" : "default"}
-                              style={{ cursor: "default" }}
-                            >
-                              <span style={{ fontSize: 11 }}>{r.type}</span>
-                              {" · "}
-                              <Text code style={{ fontWeight: 600 }}>
-                                {r.next_available ?? "—"}
-                              </Text>
-                            </Tag>
-                          </Tooltip>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {aiPanel.numeric_stats && (
-                    <div className={styles.panelSection}>
-                      <Text strong>
-                        {t("gameWorkbench.numericStatsTitle", {
-                          defaultValue: "数值参考",
-                        })}
-                        {aiPanelField && <Tag style={{ marginLeft: 6 }}>{aiPanelField}</Tag>}
-                      </Text>
-                      <div className={styles.statsGrid}>
-                        <div><Text type="secondary">min</Text> <Text code>{aiPanel.numeric_stats.min}</Text></div>
-                        <div><Text type="secondary">p25</Text> <Text code>{aiPanel.numeric_stats.p25}</Text></div>
-                        <div><Text type="secondary">p50</Text> <Text code>{aiPanel.numeric_stats.p50}</Text></div>
-                        <div><Text type="secondary">p75</Text> <Text code>{aiPanel.numeric_stats.p75}</Text></div>
-                        <div><Text type="secondary">max</Text> <Text code>{aiPanel.numeric_stats.max}</Text></div>
-                        <div><Text type="secondary">avg</Text> <Text code>{aiPanel.numeric_stats.avg}</Text></div>
-                      </div>
-                      {aiPanel.suggested_range && (
-                        <div style={{ marginTop: 4 }}>
-                          <Tag color="green">
-                            {t("gameWorkbench.suggestedRange", {
-                              defaultValue: "建议区间",
-                            })}
-                            : {aiPanel.suggested_range[0]} ~ {aiPanel.suggested_range[1]}
-                          </Tag>
-                        </div>
-                      )}
-                      {aiPanel.samples.length > 0 && (
-                        <div className={styles.samplesList}>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            {t("gameWorkbench.referenceSamples", {
-                              defaultValue: "同类参考值",
-                            })}
-                            :
-                          </Text>
-                          {aiPanel.samples.map((s, i) => (
-                            <div key={i} className={styles.sampleItem}>
-                              <Text code style={{ fontSize: 11 }}>
-                                {String(s.id ?? "—")}
-                              </Text>
-                              {s.name !== undefined && s.name !== null && (
-                                <Text style={{ fontSize: 12 }}>
-                                  {String(s.name)}
-                                </Text>
-                              )}
-                              <Text strong>{s.value}</Text>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {aiPanel.reusable_resources.length > 0 && (
-                    <div className={styles.panelSection}>
-                      <Text strong>
-                        {t("gameWorkbench.reusableResources", {
-                          count: aiPanel.reusable_resources.length,
-                          defaultValue: `被引用 (${aiPanel.reusable_resources.length})`,
-                        })}
-                      </Text>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        {aiPanel.reusable_resources.slice(0, 10).map((r, i) => (
-                          <div key={i} style={{ fontSize: 12 }}>
-                            <Tag color="purple">{r.from_table}</Tag>
-                            <Text code>{r.from_field}</Text>
-                            <Text type="secondary"> → {r.to_field}</Text>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {aiPanel.pending_confirms.length > 0 && (
-                    <div className={styles.panelSection}>
-                      <Text strong>
-                        {t("gameWorkbench.pendingConfirms", {
-                          count: aiPanel.pending_confirms.length,
-                          defaultValue: `待确认 (${aiPanel.pending_confirms.length})`,
-                        })}
-                      </Text>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        {aiPanel.pending_confirms.slice(0, 10).map((p, i) => (
-                          <div key={i} style={{ fontSize: 12 }}>
-                            <Tag color={p.confidence === "low_ai" ? "orange" : "geekblue"}>
-                              {p.confidence}
-                            </Tag>
-                            <Text code>{p.name}</Text>
-                            {p.description && (
-                              <Text type="secondary"> · {p.description.slice(0, 32)}</Text>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {impact && impact.total > 0 && (
-                <div className={styles.panelSection}>
-                  <Text strong>
-                    {t("gameWorkbench.impactScope", {
-                      count: impact.total,
-                      defaultValue: `影响范围 (${impact.total})`,
-                    })}
-                    <Tag style={{ marginLeft: 6 }} color="volcano">
-                      {impact.tables.length} 张下游表
-                    </Tag>
-                  </Text>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    {impact.impacts.slice(0, 15).map((it, i) => (
-                      <Tooltip
-                        key={i}
-                        title={it.path.join(" → ")}
-                      >
-                        <div style={{ fontSize: 12 }}>
-                          <Tag color={it.depth === 1 ? "red" : "orange"}>
-                            d{it.depth}
-                          </Tag>
-                          <Text code>{it.from_table}</Text>
-                          <Text type="secondary"> .{it.from_field}</Text>
-                          <Text type="secondary"> ← {it.to_field}</Text>
-                        </div>
-                      </Tooltip>
-                    ))}
-                    {impact.total > 15 && (
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        … {impact.total - 15} more
-                      </Text>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {aiMessage && (
-            <div style={{ padding: "0 4px" }}>
-              <Text type="secondary">{aiMessage}</Text>
-            </div>
-          )}
-          {aiSuggestions.length === 0 ? (
-            <Empty
-              description={t("gameWorkbench.aiPanelPlaceholder", {
-                defaultValue: "在下方聊天框描述需求，例如：把所有 Sword 类装备的 SellPrice 提升 20%",
-              })}
-            />
-          ) : (
-            <>
-              <Space style={{ justifyContent: "space-between", width: "100%" }}>
-                <Text strong>
-                  {t("gameWorkbench.aiSuggestionsTitle", {
-                    count: aiSuggestions.length,
-                    defaultValue: `AI 建议 (${aiSuggestions.length} 条)`,
-                  })}
-                </Text>
-                <Space>
-                  <Button size="small" onClick={() => setAiSuggestions([])}>
-                    {t("gameWorkbench.clear", { defaultValue: "清空" })}
-                  </Button>
-                  <Button size="small" type="primary" onClick={adoptAllSuggestions}>
-                    {t("gameWorkbench.adoptAll", { defaultValue: "全部采纳" })}
-                  </Button>
-                </Space>
-              </Space>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-                {aiSuggestions.map((sug, i) => (
-                  <div
-                    key={i}
-                    className={styles.aiSuggestionCard}
-                  >
-                    <Space wrap>
-                      <Tag color="gold">{sug.table}</Tag>
-                      <Text code>{String(sug.row_id)}</Text>
-                      <Text strong style={{ color: "var(--ant-color-warning-text)" }}>
-                        {sug.field}
-                      </Text>
-                      <Text>=</Text>
-                      <Text code style={{ color: "var(--ant-color-warning-text)", fontWeight: 600 }}>
-                        {formatValue(sug.new_value)}
-                      </Text>
-                    </Space>
-                    {sug.reason && (
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {sug.reason}
-                      </Text>
-                    )}
-                    <Space>
-                      <Button size="small" type="link" onClick={() => adoptSuggestion(sug)}>
-                        {t("gameWorkbench.adopt", { defaultValue: "采纳" })}
-                      </Button>
-                    </Space>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+          <DirtyList
+            items={dirty.dirtyList}
+            onJump={(table, rowKey, field) => jumpToCell(table, rowKey, field)}
+            onRevert={(table, rowKey, field) => dirty.clearCell(table, rowKey, field)}
+            onClearAll={dirty.clearAll}
+            onSave={openDraft}
+            saving={submitting}
+            saveDisabled={validChanges.length === 0}
+          />
+          <ImpactPanel
+            preview={preview}
+            previewLoading={previewLoading}
+            damageChain={damageChain}
+            damageChainLoading={damageChainLoading}
+            affectedTables={affectedTables}
+            impacts={impacts}
+            reverseImpact={null}
+          />
         </div>
       </Drawer>
 
