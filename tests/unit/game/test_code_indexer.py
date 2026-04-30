@@ -147,3 +147,75 @@ async def test_relative_path_uses_forward_slash(tmp_path):
     src.write_text("// empty", encoding="utf-8")
     idx = await CodeIndexer().index_one(src, tmp_path)
     assert idx.source_path == "sub/nested/X.cs"
+
+
+# ─────────── CodeIndexStore + index_cs_batch ───────────
+
+
+@pytest.mark.asyncio
+async def test_code_index_store_save_load_delete(tmp_path):
+    from ltclaw_gy_x.game.code_indexer import CodeIndexStore
+
+    store = CodeIndexStore(tmp_path / "code_index")
+    src = _write(tmp_path, "A.cs", "public class A {}")
+    entry = await CodeIndexer().index_one(src, tmp_path)
+    saved_path = store.save(entry)
+    assert saved_path.exists()
+
+    loaded = store.load(entry.source_path)
+    assert loaded is not None
+    assert loaded.source_path == entry.source_path
+
+    all_entries = store.load_all()
+    assert len(all_entries) == 1
+
+    assert store.delete(entry.source_path) is True
+    assert store.load(entry.source_path) is None
+    assert store.delete(entry.source_path) is False  # 已删除
+
+
+@pytest.mark.asyncio
+async def test_index_cs_batch_filters_non_cs(tmp_path):
+    from ltclaw_gy_x.game.code_indexer import CodeIndexStore, index_cs_batch
+
+    store = CodeIndexStore(tmp_path / "code_index")
+    cs_file = _write(tmp_path, "A.cs", "public class A {}")
+    other = _write(tmp_path, "data.csv", "id,name\n1,a")
+    indexer = CodeIndexer()
+    results = await index_cs_batch(
+        indexer, store,
+        files=[cs_file, other],
+        svn_root=tmp_path,
+        svn_revision=42,
+    )
+    assert len(results) == 1
+    assert results[0].source_path == "A.cs"
+    assert results[0].svn_revision == 42
+    # 落盘验证
+    assert store.load("A.cs") is not None
+    assert store.load("data.csv") is None
+
+
+@pytest.mark.asyncio
+async def test_index_cs_batch_propagates_known_tables(tmp_path):
+    from ltclaw_gy_x.game.code_indexer import CodeIndexStore, index_cs_batch
+
+    store = CodeIndexStore(tmp_path / "code_index")
+    src = _write(tmp_path, "Use.cs", """\
+public class Use {
+    void Run() {
+        var hp = HeroTable.HP;
+    }
+}
+""")
+    indexer = CodeIndexer()
+    results = await index_cs_batch(
+        indexer, store,
+        files=[src],
+        svn_root=tmp_path,
+        known_tables={"HeroTable"},
+        known_fields={"HeroTable": {"HP"}},
+    )
+    assert len(results) == 1
+    refs = results[0].references
+    assert any(r.target_table == "HeroTable" and r.target_field == "HP" for r in refs)

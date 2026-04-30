@@ -61,3 +61,8 @@ def get_svn_cache_dir(workspace_dir: Path) -> Path:
 def get_proposals_dir(workspace_dir: Path) -> Path:
     """获取变更草案目录: <ws>/game_index/proposals"""
     return get_workspace_game_dir(workspace_dir) / "proposals"
+
+
+def get_code_index_dir(workspace_dir: Path) -> Path:
+    """获取 .cs 代码索引目录: <ws>/game_index/code_index"""
+    return get_workspace_game_dir(workspace_dir) / "code_index"

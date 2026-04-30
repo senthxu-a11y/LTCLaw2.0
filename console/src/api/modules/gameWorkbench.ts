@@ -17,8 +17,22 @@ export interface PreviewItem {
   error?: string | null;
 }
 
+export interface ReverseImpact {
+  source_table: string;
+  source_field: string | null;
+  from_table: string;
+  from_field: string;
+  to_table: string;
+  to_field: string;
+  confidence: string;
+  inferred_by: string;
+  depth: number;
+}
+
 export interface PreviewResponse {
   items: PreviewItem[];
+  impacts?: ReverseImpact[];
+  affected_tables?: string[];
 }
 
 export interface SuggestChange {

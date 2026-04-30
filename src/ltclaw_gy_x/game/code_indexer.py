@@ -9,7 +9,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import json
 import logging
 import re
 from pathlib import Path
@@ -367,3 +369,87 @@ class CodeIndexer:
                 if s.kind in ("method", "property", "field"):
                     candidate = s
         return candidate
+
+
+# ─────────────────────────── Persistent store ────────────────────────────
+
+
+class CodeIndexStore:
+    """JSON 文件存储, 一文件 -> 一 CodeFileIndex.json (用 sha1(rel) 作文件名)。
+
+    存储位置由 paths.get_code_index_dir(workspace_dir) 决定。
+    """
+
+    def __init__(self, root: Path) -> None:
+        self.root = Path(root)
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _file_key(rel_path: str) -> str:
+        return hashlib.sha1(rel_path.encode("utf-8")).hexdigest()[:16] + ".json"
+
+    def _path_for(self, rel_path: str) -> Path:
+        return self.root / self._file_key(rel_path)
+
+    def save(self, entry: CodeFileIndex) -> Path:
+        path = self._path_for(entry.source_path)
+        text = entry.model_dump_json(exclude_none=False)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def delete(self, rel_path: str) -> bool:
+        p = self._path_for(rel_path)
+        if p.exists():
+            try:
+                p.unlink()
+                return True
+            except OSError:
+                return False
+        return False
+
+    def load(self, rel_path: str) -> Optional[CodeFileIndex]:
+        p = self._path_for(rel_path)
+        if not p.exists():
+            return None
+        try:
+            return CodeFileIndex.model_validate_json(p.read_text(encoding="utf-8"))
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"加载 code index 失败 {p}: {e}")
+            return None
+
+    def load_all(self) -> list[CodeFileIndex]:
+        out: list[CodeFileIndex] = []
+        for f in self.root.glob("*.json"):
+            try:
+                out.append(CodeFileIndex.model_validate_json(f.read_text(encoding="utf-8")))
+            except Exception:  # noqa: BLE001
+                continue
+        return out
+
+
+async def index_cs_batch(
+    indexer: CodeIndexer,
+    store: CodeIndexStore,
+    files: Iterable[Path],
+    svn_root: Path,
+    svn_revision: int = 0,
+    known_tables: Optional[Iterable[str]] = None,
+    known_fields: Optional[Mapping[str, set[str]]] = None,
+) -> list[CodeFileIndex]:
+    """批量索引 .cs 文件并落盘。仅处理后缀为 .cs 的文件。"""
+    cs_files = [f for f in files if Path(f).suffix.lower() == ".cs"]
+    if not cs_files:
+        return []
+    results: list[CodeFileIndex] = []
+    for f in cs_files:
+        try:
+            entry = await indexer.index_one(
+                Path(f), svn_root, svn_revision=svn_revision,
+                known_tables=known_tables, known_fields=known_fields,
+            )
+            await asyncio.to_thread(store.save, entry)
+            results.append(entry)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"index_one 失败 {f}: {e}")
+            continue
+    return results

@@ -39,6 +39,7 @@ import type {
   DamageChainResponse,
   FieldChange,
   PreviewItem,
+  ReverseImpact,
   SuggestChange,
 } from "../../api/modules/gameWorkbench";
 import type { TableIndex } from "../../api/types/game";
@@ -441,12 +442,16 @@ export default function NumericWorkbench() {
 
   const [damageChain, setDamageChain] = useState<DamageChainResponse | null>(null);
   const [damageChainLoading, setDamageChainLoading] = useState(false);
+  const [affectedTables, setAffectedTables] = useState<string[]>([]);
+  const [impacts, setImpacts] = useState<ReverseImpact[]>([]);
 
   const runPreview = useCallback(async () => {
     if (!selectedAgent) return;
     if (validChanges.length === 0) {
       setPreview([]);
       setDamageChain(null);
+      setAffectedTables([]);
+      setImpacts([]);
       return;
     }
     setPreviewLoading(true);
@@ -459,6 +464,8 @@ export default function NumericWorkbench() {
         ),
       ]);
       setPreview(previewResp.items);
+      setAffectedTables(previewResp.affected_tables ?? []);
+      setImpacts(previewResp.impacts ?? []);
       setDamageChain(damageResp);
     } catch {
       message.error(t("gameWorkbench.previewFailed", { defaultValue: "预览失败" }));
@@ -495,6 +502,8 @@ export default function NumericWorkbench() {
     setPending([]);
     setPreview([]);
     setDamageChain(null);
+    setAffectedTables([]);
+    setImpacts([]);
   };
 
   const [rebuilding, setRebuilding] = useState(false);
@@ -1002,6 +1011,41 @@ export default function NumericWorkbench() {
             {(damageChain || damageChainLoading) && (
               <div className={styles.previewSection}>
                 <DamageChain data={damageChain} loading={damageChainLoading} />
+              </div>
+            )}
+
+            {affectedTables.length > 0 && (
+              <div className={styles.previewSection}>
+                <Text strong>
+                  {t("gameWorkbench.impactTitle", {
+                    defaultValue: "影响范围",
+                  })}
+                  {"  "}
+                  <Tag color="orange">
+                    {t("gameWorkbench.impactCount", {
+                      count: affectedTables.length,
+                      defaultValue: `${affectedTables.length} 张表受影响`,
+                    })}
+                  </Tag>
+                </Text>
+                <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {affectedTables.map((tbl) => {
+                    const refCount = impacts.filter((i) => i.from_table === tbl).length;
+                    return (
+                      <Tooltip
+                        key={tbl}
+                        title={impacts
+                          .filter((i) => i.from_table === tbl)
+                          .map((i) => `${i.from_table}.${i.from_field} ← ${i.to_table}.${i.to_field} (${i.confidence}, depth ${i.depth})`)
+                          .join("\n") || tbl}
+                      >
+                        <Tag color="gold" style={{ cursor: "help" }}>
+                          {tbl} · {refCount}
+                        </Tag>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

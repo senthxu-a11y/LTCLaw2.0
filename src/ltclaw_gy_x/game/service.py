@@ -22,12 +22,14 @@ from .paths import (
     get_chroma_dir,
     get_llm_cache_dir,
     get_svn_cache_dir,
+    get_code_index_dir,
 )
 from .table_indexer import TableIndexer
 from .dependency_resolver import DependencyResolver
 from .index_committer import IndexCommitter
 from .svn_watcher import SvnWatcher
 from .query_router import QueryRouter
+from .code_indexer import CodeIndexer, CodeIndexStore, index_cs_batch
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +119,8 @@ class GameService:
         self._proposal_store: Union[ProposalStore, None] = None
         self._change_applier: Union[ChangeApplier, None] = None
         self._svn_committer: Union[SvnCommitter, None] = None
+        self._code_indexer: Union[CodeIndexer, None] = None
+        self._code_index_store: Union[CodeIndexStore, None] = None
         self._recent_changes_buffer: List[dict] = []
         self._started = False
         get_workspace_game_dir(workspace_dir).mkdir(parents=True, exist_ok=True)
@@ -170,6 +174,14 @@ class GameService:
         return self._svn_committer
 
     @property
+    def code_indexer(self):
+        return self._code_indexer
+
+    @property
+    def code_index_store(self):
+        return self._code_index_store
+
+    @property
     def recent_changes(self) -> List[dict]:
         return list(self._recent_changes_buffer)
 
@@ -193,6 +205,8 @@ class GameService:
         self._dependency_resolver = None
         self._index_committer = None
         self._svn_watcher = None
+        self._code_indexer = None
+        self._code_index_store = None
         if self._project_config:
             svn_root = Path(self._project_config.svn.root)
             self._table_indexer = TableIndexer(
@@ -209,6 +223,15 @@ class GameService:
                 svn_root,
                 self._table_indexer,
             )
+            try:
+                code_dir = get_code_index_dir(self.workspace_dir)
+                code_dir.mkdir(parents=True, exist_ok=True)
+                self._code_indexer = CodeIndexer()
+                self._code_index_store = CodeIndexStore(code_dir)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"初始化 code indexer 失败: {e}")
+                self._code_indexer = None
+                self._code_index_store = None
         if self._project_config and self._svn_client:
             self._index_committer = IndexCommitter(
                 project=self._project_config,
@@ -298,6 +321,8 @@ class GameService:
             self._proposal_store = None
             self._change_applier = None
             self._svn_committer = None
+            self._code_indexer = None
+            self._code_index_store = None
             if old:
                 await old.stop()
             self._user_config = load_user_config()
@@ -427,6 +452,46 @@ class GameService:
                 if key:
                     merged[key] = t
             all_tables = list(merged.values())
+
+            # ── .cs 代码索引 (P2 #5) ──
+            if self._code_indexer and self._code_index_store and self._project_config:
+                svn_root = Path(self._project_config.svn.root)
+                cs_added_modified = [
+                    svn_root / p for p in (added + modified)
+                    if p.lower().endswith(".cs")
+                ]
+                cs_deleted = [p for p in deleted if p.lower().endswith(".cs")]
+                if cs_added_modified or cs_deleted:
+                    known_tables_set = {
+                        getattr(t, "table_name", "") for t in all_tables
+                        if getattr(t, "table_name", None)
+                    }
+                    known_fields_map: dict[str, set[str]] = {}
+                    for t in all_tables:
+                        tname = getattr(t, "table_name", None)
+                        fields = getattr(t, "fields", None) or []
+                        if tname:
+                            known_fields_map[tname] = {
+                                getattr(f, "name", "") for f in fields
+                                if getattr(f, "name", None)
+                            }
+                    try:
+                        await index_cs_batch(
+                            self._code_indexer,
+                            self._code_index_store,
+                            cs_added_modified,
+                            svn_root,
+                            svn_revision=getattr(changeset, "to_rev", 0),
+                            known_tables=known_tables_set,
+                            known_fields=known_fields_map,
+                        )
+                    except Exception as e:
+                        logger.warning(f"index_cs_batch 失败: {e}")
+                    for rel in cs_deleted:
+                        try:
+                            self._code_index_store.delete(rel)
+                        except Exception:  # noqa: BLE001
+                            continue
 
             graph = None
             if self._dependency_resolver:

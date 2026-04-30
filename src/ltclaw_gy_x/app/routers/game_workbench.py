@@ -67,6 +67,62 @@ def _preview_key(preview: dict[str, Any]) -> tuple[str, str, str]:
     )
 
 
+def _compute_reverse_impacts(
+    svc: Any,
+    targets: list[tuple[str, str | None]],
+    max_depth: int = 3,
+) -> list[dict[str, Any]]:
+    """对一组 (table, field) 目标做反向影响 BFS, 返回扁平 impacts 列表。
+
+    与 /game/index/impact 同语义: DependencyEdge(from→to) 表示 from 引用 to,
+    所以 to 被改动时, from 是潜在下游。
+    """
+    committer = getattr(svc, "index_committer", None)
+    if committer is None:
+        return []
+    try:
+        dep = committer.load_dependency_graph()
+    except Exception:  # noqa: BLE001
+        dep = None
+    if dep is None:
+        return []
+
+    by_to: dict[str, list[Any]] = {}
+    for e in getattr(dep, "edges", []) or []:
+        by_to.setdefault(e.to_table, []).append(e)
+
+    seen: set[tuple[str, str, str, str]] = set()
+    impacts: list[dict[str, Any]] = []
+
+    for target_table, target_field in targets:
+        queue: list[tuple[str, str | None, int]] = [(target_table, target_field, 0)]
+        while queue:
+            cur_table, cur_field, depth = queue.pop(0)
+            if depth >= max_depth:
+                continue
+            for edge in by_to.get(cur_table, []):
+                if cur_field is not None and edge.to_field != cur_field:
+                    continue
+                key = (target_table, str(target_field), edge.from_table, edge.from_field)
+                if key in seen:
+                    continue
+                seen.add(key)
+                conf = getattr(edge.confidence, "value", str(edge.confidence))
+                impacts.append({
+                    "source_table": target_table,
+                    "source_field": target_field,
+                    "from_table": edge.from_table,
+                    "from_field": edge.from_field,
+                    "to_table": edge.to_table,
+                    "to_field": edge.to_field,
+                    "confidence": conf,
+                    "inferred_by": edge.inferred_by,
+                    "depth": depth + 1,
+                })
+                queue.append((edge.from_table, None, depth + 1))
+    return impacts
+
+
 @router.post("/preview")
 async def preview_workbench_changes(
     body: PreviewRequest,
@@ -76,7 +132,7 @@ async def preview_workbench_changes(
     applier = _change_applier(svc)
 
     if not body.changes:
-        return {"items": []}
+        return {"items": [], "impacts": [], "affected_tables": []}
 
     proposal = ChangeProposal(
         title="__workbench_preview__",
@@ -110,7 +166,9 @@ async def preview_workbench_changes(
                     "error": message,
                 }
                 for c in body.changes
-            ]
+            ],
+            "impacts": [],
+            "affected_tables": [],
         }
 
     buckets: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
@@ -147,7 +205,26 @@ async def preview_workbench_changes(
                 "error": preview.get("reason"),
             }
         )
-    return {"items": items}
+
+    # 反向影响: 仅对 ok 项的去重 (table, field) 目标做 BFS
+    targets_seen: set[tuple[str, str]] = set()
+    targets: list[tuple[str, str | None]] = []
+    for it in items:
+        if not it["ok"]:
+            continue
+        k = (it["table"], it["field"])
+        if k in targets_seen:
+            continue
+        targets_seen.add(k)
+        targets.append((it["table"], it["field"]))
+    impacts = _compute_reverse_impacts(svc, targets) if targets else []
+    affected_tables = sorted({i["from_table"] for i in impacts})
+
+    return {
+        "items": items,
+        "impacts": impacts,
+        "affected_tables": affected_tables,
+    }
 
 
 def _strip_json_fences(text: str) -> str:

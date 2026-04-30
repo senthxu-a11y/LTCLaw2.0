@@ -102,7 +102,7 @@ def test_preview_empty_changes_returns_empty_items():
     with TestClient(_build_app(workspace)) as client:
         resp = client.post("/api/game/workbench/preview", json={"changes": []})
     assert resp.status_code == 200
-    assert resp.json() == {"items": []}
+    assert resp.json() == {"items": [], "impacts": [], "affected_tables": []}
 
 
 def test_preview_per_op_failure_marks_ok_false():
@@ -126,3 +126,112 @@ def test_preview_per_op_failure_marks_ok_false():
     item = resp.json()["items"][0]
     assert item["ok"] is False
     assert item["error"] == "row_id not found"
+
+
+def test_preview_includes_reverse_impacts():
+    """preview 在 ok 项基础上 BFS 反向依赖图, 给出 affected_tables / impacts。"""
+
+    async def _dry_run(_proposal):
+        return [
+            {
+                "op": {"op": "update_cell", "table": "Hero", "row_id": 1, "field": "HP", "new_value": 120},
+                "before": 100,
+                "after": 120,
+                "ok": True,
+                "reason": None,
+            }
+        ]
+
+    edge = SimpleNamespace(
+        from_table="Skill",
+        from_field="OwnerHero",
+        to_table="Hero",
+        to_field="HP",
+        confidence=SimpleNamespace(value="high"),
+        inferred_by="convention",
+    )
+    dep = SimpleNamespace(edges=[edge])
+    committer = SimpleNamespace(load_dependency_graph=lambda: dep)
+    service = SimpleNamespace(
+        change_applier=SimpleNamespace(dry_run=_dry_run),
+        index_committer=committer,
+    )
+    workspace = _ws(service)
+    with TestClient(_build_app(workspace)) as client:
+        resp = client.post(
+            "/api/game/workbench/preview",
+            json={"changes": [{"table": "Hero", "row_id": 1, "field": "HP", "new_value": 120}]},
+        )
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body["affected_tables"] == ["Skill"]
+    assert len(body["impacts"]) == 1
+    imp = body["impacts"][0]
+    assert imp["from_table"] == "Skill"
+    assert imp["from_field"] == "OwnerHero"
+    assert imp["source_table"] == "Hero"
+    assert imp["depth"] == 1
+
+
+def test_preview_failed_items_have_no_impacts():
+    """ok=False 的改动不参与反向影响 BFS。"""
+
+    async def _dry_run(_proposal):
+        return [
+            {
+                "op": {"op": "update_cell", "table": "Hero", "row_id": 1, "field": "HP", "new_value": 120},
+                "before": None,
+                "after": None,
+                "ok": False,
+                "reason": "row_id not found",
+            }
+        ]
+
+    edge = SimpleNamespace(
+        from_table="Skill", from_field="OwnerHero",
+        to_table="Hero", to_field="HP",
+        confidence=SimpleNamespace(value="high"),
+        inferred_by="convention",
+    )
+    committer = SimpleNamespace(
+        load_dependency_graph=lambda: SimpleNamespace(edges=[edge])
+    )
+    service = SimpleNamespace(
+        change_applier=SimpleNamespace(dry_run=_dry_run),
+        index_committer=committer,
+    )
+    workspace = _ws(service)
+    with TestClient(_build_app(workspace)) as client:
+        resp = client.post(
+            "/api/game/workbench/preview",
+            json={"changes": [{"table": "Hero", "row_id": 1, "field": "HP", "new_value": 120}]},
+        )
+    body = resp.json()
+    assert body["affected_tables"] == []
+    assert body["impacts"] == []
+
+
+def test_preview_no_committer_no_impacts():
+    """index_committer 缺失时 impacts 为空, 不抛错。"""
+
+    async def _dry_run(_proposal):
+        return [
+            {
+                "op": {"op": "update_cell", "table": "Hero", "row_id": 1, "field": "HP", "new_value": 120},
+                "before": 100,
+                "after": 120,
+                "ok": True,
+                "reason": None,
+            }
+        ]
+
+    workspace = _ws(SimpleNamespace(change_applier=SimpleNamespace(dry_run=_dry_run)))
+    with TestClient(_build_app(workspace)) as client:
+        resp = client.post(
+            "/api/game/workbench/preview",
+            json={"changes": [{"table": "Hero", "row_id": 1, "field": "HP", "new_value": 120}]},
+        )
+    body = resp.json()
+    assert body["items"][0]["ok"] is True
+    assert body["impacts"] == []
+    assert body["affected_tables"] == []
