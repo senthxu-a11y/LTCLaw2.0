@@ -111,6 +111,57 @@ export interface AiSuggestPanelResponse {
   summary: string;
 }
 
+// ---- Workbench Context (多表打包上下文) -------------------------------
+
+export interface WorkbenchContextField {
+  key: string;
+  label: string;
+  type?: string;
+  description?: string;
+}
+
+export interface WorkbenchContextRecord {
+  id: string | number;
+  fields: { key: string; value: unknown }[];
+}
+
+export interface WorkbenchContextTable {
+  tableId: string;
+  tableName: string;
+  system: string | null;
+  primaryKey: string;
+  fields: WorkbenchContextField[];
+  records: WorkbenchContextRecord[];
+  rowCount: number;
+}
+
+export interface WorkbenchContextResponse {
+  tables: WorkbenchContextTable[];
+  focusField: { table: string; field: string } | null;
+}
+
+// ---- DamageChain (伤害链路 Phase-1 stub) ------------------------------
+
+export interface DamageVariable {
+  name: string;
+  value: number;
+  sourceTable: string;
+  isChanged: boolean;
+}
+
+export interface DamageChainResponse {
+  formula: string;
+  variables: DamageVariable[];
+  resultBefore: number;
+  resultAfter: number;
+  deltaPercent: number;
+}
+
+export interface DamageChainRequest {
+  formulaKey?: string;
+  changes: FieldChange[];
+}
+
 export const gameWorkbenchApi = {
   preview(agentId: string, changes: FieldChange[]) {
     return request<PreviewResponse>(
@@ -147,6 +198,38 @@ export const gameWorkbenchApi = {
     return request<AiSuggestPanelResponse>(
       `/agents/${agentId}/game/workbench/ai-suggest?${qs.toString()}`,
       { method: "GET" },
+    );
+  },
+  context(
+    agentId: string,
+    opts: {
+      tableIds: string[];
+      focusTable?: string;
+      focusField?: string;
+      limitPerTable?: number;
+    },
+  ) {
+    const qs = new URLSearchParams();
+    for (const t of opts.tableIds) qs.append("tableIds", t);
+    if (opts.focusTable) qs.set("focusTable", opts.focusTable);
+    if (opts.focusField) qs.set("focusField", opts.focusField);
+    if (opts.limitPerTable != null)
+      qs.set("limitPerTable", String(opts.limitPerTable));
+    return request<WorkbenchContextResponse>(
+      `/agents/${agentId}/game/workbench/context?${qs.toString()}`,
+      { method: "GET" },
+    );
+  },
+  damageChain(agentId: string, body: DamageChainRequest) {
+    return request<DamageChainResponse>(
+      `/agents/${agentId}/game/workbench/damage-chain`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          formulaKey: body.formulaKey ?? "default",
+          changes: body.changes,
+        }),
+      },
     );
   },
 };

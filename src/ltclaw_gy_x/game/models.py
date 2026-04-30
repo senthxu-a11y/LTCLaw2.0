@@ -4,9 +4,9 @@
 定义所有跨模块流转的数据结构，包括表索引、文档索引、依赖关系等核心业务对象。
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Literal, Union
+from typing import Literal, Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -69,7 +69,7 @@ class DependencyEdge(BaseModel):
     to_table: str = Field(description="目标表名")
     to_field: str = Field(description="目标字段名")
     confidence: FieldConfidence = Field(description="置信度")
-    inferred_by: Literal["rule", "llm", "manual"] = Field(description="推断方式")
+    inferred_by: Literal["rule", "llm", "manual", "code_regex"] = Field(description="推断方式")
 
 
 class DependencyGraph(BaseModel):
@@ -132,3 +132,42 @@ class DependencySnapshot(BaseModel):
     """依赖快照"""
     upstream: list[DependencyEdge] = Field(default_factory=list, description="上游依赖")
     downstream: list[DependencyEdge] = Field(default_factory=list, description="下游依赖")
+
+
+# ============ 代码索引模型 (.cs regex.v1) ============
+
+class CodeSymbolReference(BaseModel):
+    """代码中对表/字段或其他符号的引用"""
+    target_kind: Literal["table", "field", "symbol"] = Field(description="引用类型")
+    target_table: Optional[str] = Field(default=None, description="目标表名")
+    target_field: Optional[str] = Field(default=None, description="目标字段名")
+    target_symbol: Optional[str] = Field(default=None, description="目标代码符号名")
+    line: int = Field(description="行号(0-based)")
+    snippet: str = Field(default="", description="代码片段(≤80字)")
+    confidence: Literal["confirmed", "inferred"] = Field(default="inferred", description="置信度")
+
+
+class CodeSymbol(BaseModel):
+    """代码符号(类/方法/字段等)"""
+    name: str = Field(description="符号名")
+    kind: Literal["class", "interface", "struct", "enum", "method", "field", "property"] = Field(description="符号类型")
+    parent: Optional[str] = Field(default=None, description="父类名(嵌套)")
+    signature: str = Field(default="", description="方法签名/声明行")
+    line_start: int = Field(default=0, description="起始行(0-based)")
+    line_end: int = Field(default=0, description="结束行(0-based)")
+    references: list[CodeSymbolReference] = Field(default_factory=list, description="符号内部引用")
+    summary: str = Field(default="", description="单行摘要(取自上方注释)")
+
+
+class CodeFileIndex(BaseModel):
+    """单个 .cs 文件的索引描述符"""
+    schema_version: Literal["code-index.v1"] = Field(default="code-index.v1")
+    source_path: str = Field(description="源文件路径(相对svn_root)")
+    source_hash: str = Field(description="源文件hash(sha256:xxx)")
+    svn_revision: int = Field(default=0, description="SVN版本号")
+    namespace: Optional[str] = Field(default=None, description="C# 命名空间")
+    using: list[str] = Field(default_factory=list, description="using 语句")
+    symbols: list[CodeSymbol] = Field(default_factory=list, description="符号列表")
+    references: list[CodeSymbolReference] = Field(default_factory=list, description="文件级引用")
+    last_indexed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="最后索引时间")
+    indexer_version: str = Field(default="regex.v1", description="索引器版本")

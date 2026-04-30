@@ -6,8 +6,8 @@ import asyncio
 import re
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from ...app.agent_context import get_agent_for_request
 from ...app.workspace.workspace import Workspace
@@ -938,3 +938,212 @@ def _build_panel_summary(
     if pending_count:
         parts.append(f"{pending_count} 字段待确认")
     return " · ".join(parts)
+
+
+# ──────────────────────── /context endpoint ─────────────────────────
+
+
+class WorkbenchContextField(BaseModel):
+    key: str
+    label: str
+    type: str = ""
+    description: str = ""
+
+
+class WorkbenchContextRecord(BaseModel):
+    id: Any
+    fields: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class WorkbenchContextTable(BaseModel):
+    tableId: str
+    tableName: str
+    system: str | None = None
+    primaryKey: str = "ID"
+    fields: list[WorkbenchContextField] = Field(default_factory=list)
+    records: list[WorkbenchContextRecord] = Field(default_factory=list)
+    rowCount: int = 0
+
+
+class WorkbenchContextResponse(BaseModel):
+    tables: list[WorkbenchContextTable] = Field(default_factory=list)
+    focusField: dict[str, str] | None = None
+
+
+@router.get("/context", response_model=WorkbenchContextResponse)
+async def get_workbench_context(
+    table_ids: list[str] = Query(default_factory=list, alias="tableIds"),
+    focus_table: str | None = Query(default=None, alias="focusTable"),
+    focus_field: str | None = Query(default=None, alias="focusField"),
+    limit_per_table: int = Query(default=50, ge=1, le=500, alias="limitPerTable"),
+    workspace: Workspace = Depends(get_agent_for_request),
+) -> WorkbenchContextResponse:
+    """Multi-table workbench context bundle: schema + first N records per table."""
+    svc = _service(workspace)
+    qr = getattr(svc, "query_router", None)
+    applier = getattr(svc, "change_applier", None)
+    if qr is None or applier is None:
+        raise HTTPException(
+            status_code=412,
+            detail="Query router or change applier not available",
+        )
+
+    tables_out: list[WorkbenchContextTable] = []
+    for tid in table_ids:
+        try:
+            tinfo = await qr.get_table(tid)
+        except Exception:  # noqa: BLE001
+            tinfo = None
+        if tinfo is None:
+            continue
+
+        fields_meta = getattr(tinfo, "fields", []) or []
+        fields_out = [
+            WorkbenchContextField(
+                key=getattr(f, "name", ""),
+                label=getattr(f, "name", ""),
+                type=getattr(f, "type", "") or "",
+                description=getattr(f, "description", "") or "",
+            )
+            for f in fields_meta
+            if getattr(f, "name", None)
+        ]
+        primary_key = getattr(tinfo, "primary_key", "ID") or "ID"
+
+        # 读取行（read_rows 是同步,需 to_thread）
+        try:
+            data = await asyncio.to_thread(
+                applier.read_rows, tid, 0, limit_per_table,
+            )
+        except Exception:  # noqa: BLE001
+            data = {"headers": [], "rows": [], "total": 0}
+        headers: list[str] = data.get("headers", []) or []
+        raw_rows: list[list[Any]] = data.get("rows", []) or []
+
+        records_out: list[WorkbenchContextRecord] = []
+        pk_idx = headers.index(primary_key) if primary_key in headers else None
+        for i, row in enumerate(raw_rows):
+            row_id: Any
+            if pk_idx is not None and pk_idx < len(row):
+                row_id = row[pk_idx]
+            else:
+                row_id = i + 1
+            field_values = [
+                {"key": headers[j] if j < len(headers) else f"col_{j}", "value": v}
+                for j, v in enumerate(row)
+            ]
+            records_out.append(WorkbenchContextRecord(id=row_id, fields=field_values))
+
+        tables_out.append(WorkbenchContextTable(
+            tableId=tid,
+            tableName=getattr(tinfo, "table_name", tid),
+            system=getattr(tinfo, "system", None),
+            primaryKey=primary_key,
+            fields=fields_out,
+            records=records_out,
+            rowCount=int(getattr(tinfo, "row_count", len(raw_rows)) or len(raw_rows)),
+        ))
+
+    focus_payload: dict[str, str] | None = None
+    if focus_table and focus_field:
+        focus_payload = {"table": focus_table, "field": focus_field}
+
+    return WorkbenchContextResponse(tables=tables_out, focusField=focus_payload)
+
+
+# ─────────────────── /damage-chain endpoint (Phase-1 stub) ───────────────────
+
+
+class DamageVariable(BaseModel):
+    name: str
+    value: float
+    sourceTable: str = ""
+    isChanged: bool = False
+
+
+class DamageChainModel(BaseModel):
+    formula: str
+    variables: list[DamageVariable] = Field(default_factory=list)
+    resultBefore: float = 0.0
+    resultAfter: float = 0.0
+    deltaPercent: float = 0.0
+
+
+class DamageChainRequest(BaseModel):
+    formulaKey: str = "default"
+    changes: list[PreviewChange] = Field(default_factory=list)
+
+
+@router.post("/damage-chain", response_model=DamageChainModel)
+async def compute_damage_chain(
+    body: DamageChainRequest,
+    workspace: Workspace = Depends(get_agent_for_request),
+) -> DamageChainModel:
+    """Phase-1 stub: deterministic damage-chain projection.
+
+    替换为真正的公式引擎之前, 暂用固定模板:
+    `Result = ATK * DamageCoeff * (1 - DefenseRatio)`
+    其中 ATK/DamageCoeff/DefenseRatio 可被 changes[] 中同名 field 覆盖。
+    """
+    if body.formulaKey != "default":
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported formulaKey: {body.formulaKey}",
+        )
+
+    # 默认变量
+    defaults: dict[str, dict[str, Any]] = {
+        "ATK": {"value": 100.0, "sourceTable": "HeroTable"},
+        "DamageCoeff": {"value": 1.0, "sourceTable": "SkillTable"},
+        "DefenseRatio": {"value": 0.3, "sourceTable": "EnemyTable"},
+    }
+
+    # 用 changes 覆盖
+    overrides: dict[str, tuple[float, str]] = {}
+    for ch in body.changes:
+        if ch.field in defaults:
+            try:
+                v = float(ch.new_value) if ch.new_value is not None else None
+            except (TypeError, ValueError):
+                v = None
+            if v is not None:
+                overrides[ch.field] = (v, ch.table or defaults[ch.field]["sourceTable"])
+
+    variables: list[DamageVariable] = []
+    after_vals: dict[str, float] = {}
+    before_vals: dict[str, float] = {}
+    for name, meta in defaults.items():
+        before_v = float(meta["value"])
+        if name in overrides:
+            after_v, src = overrides[name]
+            variables.append(DamageVariable(
+                name=name, value=after_v, sourceTable=src, isChanged=True,
+            ))
+        else:
+            after_v = before_v
+            variables.append(DamageVariable(
+                name=name, value=before_v, sourceTable=meta["sourceTable"],
+                isChanged=False,
+            ))
+        before_vals[name] = before_v
+        after_vals[name] = after_v
+
+    formula = "ATK * DamageCoeff * (1 - DefenseRatio)"
+    result_before = before_vals["ATK"] * before_vals["DamageCoeff"] * (
+        1 - before_vals["DefenseRatio"]
+    )
+    result_after = after_vals["ATK"] * after_vals["DamageCoeff"] * (
+        1 - after_vals["DefenseRatio"]
+    )
+    delta_pct = (
+        (result_after - result_before) / result_before * 100.0
+        if result_before != 0 else 0.0
+    )
+
+    return DamageChainModel(
+        formula=formula,
+        variables=variables,
+        resultBefore=round(result_before, 4),
+        resultAfter=round(result_after, 4),
+        deltaPercent=round(delta_pct, 2),
+    )

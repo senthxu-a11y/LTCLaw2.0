@@ -36,12 +36,14 @@ import { gameChangeApi } from "../../api/modules/gameChange";
 import { gameWorkbenchApi } from "../../api/modules/gameWorkbench";
 import type {
   AiSuggestPanelResponse,
+  DamageChainResponse,
   FieldChange,
   PreviewItem,
   SuggestChange,
 } from "../../api/modules/gameWorkbench";
 import type { TableIndex } from "../../api/types/game";
 import { pushWorkbenchCard } from "../Chat/workbenchCardChannel";
+import { DamageChain } from "./components/DamageChain";
 import styles from "./NumericWorkbench.module.less";
 
 const { Text } = Typography;
@@ -437,20 +439,32 @@ export default function NumericWorkbench() {
     );
   }, [aiSuggestions, message, t]);
 
+  const [damageChain, setDamageChain] = useState<DamageChainResponse | null>(null);
+  const [damageChainLoading, setDamageChainLoading] = useState(false);
+
   const runPreview = useCallback(async () => {
     if (!selectedAgent) return;
     if (validChanges.length === 0) {
       setPreview([]);
+      setDamageChain(null);
       return;
     }
     setPreviewLoading(true);
+    setDamageChainLoading(true);
     try {
-      const resp = await gameWorkbenchApi.preview(selectedAgent, validChanges);
-      setPreview(resp.items);
+      const [previewResp, damageResp] = await Promise.all([
+        gameWorkbenchApi.preview(selectedAgent, validChanges),
+        gameWorkbenchApi.damageChain(selectedAgent, { changes: validChanges }).catch(
+          () => null,
+        ),
+      ]);
+      setPreview(previewResp.items);
+      setDamageChain(damageResp);
     } catch {
       message.error(t("gameWorkbench.previewFailed", { defaultValue: "预览失败" }));
     } finally {
       setPreviewLoading(false);
+      setDamageChainLoading(false);
     }
   }, [selectedAgent, validChanges, message, t]);
 
@@ -480,6 +494,7 @@ export default function NumericWorkbench() {
   const resetAll = () => {
     setPending([]);
     setPreview([]);
+    setDamageChain(null);
   };
 
   const [rebuilding, setRebuilding] = useState(false);
@@ -983,6 +998,12 @@ export default function NumericWorkbench() {
                 </div>
               )}
             </div>
+
+            {(damageChain || damageChainLoading) && (
+              <div className={styles.previewSection}>
+                <DamageChain data={damageChain} loading={damageChainLoading} />
+              </div>
+            )}
           </div>
         </Card>
       </div>
