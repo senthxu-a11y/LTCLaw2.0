@@ -589,20 +589,39 @@ class SessionApi implements IAgentScopeRuntimeWebUISessionAPI {
         return session;
       }
 
-      // Pure local session (not yet sent to backend): wait until updateSession
-      // resolves the realId, then fetch history with the real UUID.
+      // Pure local session (not yet sent to backend): wait briefly for
+      // updateSession to resolve a realId. If it does not arrive within the
+      // bounded window, fall through to returning an empty local session so
+      // the UI never hangs (the realId will be resolved later on first send).
+      const REAL_ID_WAIT_MS = 3000;
+      const REAL_ID_POLL_MS = 100;
       await new Promise<void>((resolve) => {
+        const start = Date.now();
         const check = () => {
           const s = this.sessionList.find((x) => x.id === sessionId) as
             | ExtendedSession
             | undefined;
           if (s?.realId) {
             resolve();
-          } else {
-            setTimeout(check, 100);
+            return;
           }
+          if (Date.now() - start >= REAL_ID_WAIT_MS) {
+            resolve();
+            return;
+          }
+          setTimeout(check, REAL_ID_POLL_MS);
         };
-        setTimeout(check, 100);
+        // For a freshly-created local session that has no chat history yet,
+        // skip the wait entirely and return an empty session immediately.
+        const existing = this.sessionList.find((x) => x.id === sessionId) as
+          | ExtendedSession
+          | undefined;
+        if (existing && !existing.realId) {
+          // Fresh local session created via createSession: short-circuit.
+          resolve();
+          return;
+        }
+        setTimeout(check, REAL_ID_POLL_MS);
       });
 
       const refreshed = this.sessionList.find((s) => s.id === sessionId) as
@@ -697,15 +716,27 @@ class SessionApi implements IAgentScopeRuntimeWebUISessionAPI {
 
     const extended: ExtendedSession = {
       ...session,
+      id: session.id,
       sessionId: session.id,
+      name: session.name || DEFAULT_SESSION_NAME,
       userId: DEFAULT_USER_ID,
       channel: DEFAULT_CHANNEL,
+      messages: [],
+      meta: {},
+      createdAt: new Date().toISOString(),
     } as ExtendedSession;
 
     this.updateWindowVariables(extended);
-    // this.sessionList.unshift(extended);
+    // Add the freshly created local session to the front of the list so the
+    // library's setSessions(list) reflects it immediately. realId will be
+    // filled in once the user sends the first message and the backend creates
+    // the underlying chat (resolved via updateSession -> resolveRealId).
+    this.sessionList = [
+      extended,
+      ...this.sessionList.filter((s) => s.id !== extended.id),
+    ];
     this.onSessionCreated?.(session.id);
-    return this.sessionList;
+    return [...this.sessionList];
   }
 
   async removeSession(session: Partial<IAgentScopeRuntimeWebUISession>) {
