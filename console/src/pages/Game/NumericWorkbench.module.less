@@ -240,3 +240,52 @@
   0%   { background: rgba(82, 196, 26, 0.30) !important; }
   100% { background: rgba(82, 196, 26, 0.08) !important; }
 }
+
+.structuredPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: rgba(22, 119, 255, 0.04);
+  border: 1px solid rgba(22, 119, 255, 0.18);
+  border-radius: 6px;
+}
+
+.panelSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.08);
+}
+
+.idGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px 12px;
+  font-size: 12px;
+}
+
+.samplesList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 4px;
+}
+
+.sampleItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}

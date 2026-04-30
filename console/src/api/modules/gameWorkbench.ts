@@ -48,6 +48,69 @@ export interface SuggestResponse {
   context_summary?: SuggestContextSummary;
 }
 
+// ---- AI Suggestion Panel (规则化结构化建议) ---------------------------
+
+export interface AvailableIdRange {
+  type: string;
+  start: number;
+  end: number;
+  actual_min: number | null;
+  actual_max: number | null;
+  used_count: number;
+  next_available: number | null;
+  remaining: number;
+}
+
+export interface NumericStats {
+  count: number;
+  min: number;
+  max: number;
+  avg: number;
+  p25: number;
+  p50: number;
+  p75: number;
+}
+
+export interface ReferenceSample {
+  id: string | number | null;
+  name?: string | number | null;
+  value: number;
+}
+
+export interface ReusableResource {
+  from_table: string;
+  from_field: string;
+  to_field: string;
+  confidence: string;
+  inferred_by: string;
+}
+
+export interface PendingConfirmField {
+  name: string;
+  type: string;
+  confidence: string;
+  description: string;
+}
+
+export interface AiSuggestPanelResponse {
+  table: string;
+  field: string | null;
+  field_meta: {
+    name: string;
+    type: string;
+    confidence: string;
+    description: string;
+  } | null;
+  primary_key: string;
+  available_ids: AvailableIdRange[];
+  numeric_stats: NumericStats | null;
+  suggested_range: [number, number] | null;
+  samples: ReferenceSample[];
+  reusable_resources: ReusableResource[];
+  pending_confirms: PendingConfirmField[];
+  summary: string;
+}
+
 export const gameWorkbenchApi = {
   preview(agentId: string, changes: FieldChange[]) {
     return request<PreviewResponse>(
@@ -76,6 +139,14 @@ export const gameWorkbenchApi = {
           chat_history,
         }),
       },
+    );
+  },
+  aiSuggestPanel(agentId: string, table: string, field?: string) {
+    const qs = new URLSearchParams({ table });
+    if (field) qs.set("field", field);
+    return request<AiSuggestPanelResponse>(
+      `/agents/${agentId}/game/workbench/ai-suggest?${qs.toString()}`,
+      { method: "GET" },
     );
   },
 };

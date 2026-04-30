@@ -34,7 +34,12 @@ import { useAgentStore } from "../../stores/agentStore";
 import { gameApi } from "../../api/modules/game";
 import { gameChangeApi } from "../../api/modules/gameChange";
 import { gameWorkbenchApi } from "../../api/modules/gameWorkbench";
-import type { FieldChange, PreviewItem, SuggestChange } from "../../api/modules/gameWorkbench";
+import type {
+  AiSuggestPanelResponse,
+  FieldChange,
+  PreviewItem,
+  SuggestChange,
+} from "../../api/modules/gameWorkbench";
 import type { TableIndex } from "../../api/types/game";
 import { pushWorkbenchCard } from "../Chat/workbenchCardChannel";
 import styles from "./NumericWorkbench.module.less";
@@ -108,6 +113,11 @@ export default function NumericWorkbench() {
   // AI 建议结果
   const [aiSuggestions, setAiSuggestions] = useState<SuggestChange[]>([]);
   const [aiMessage, setAiMessage] = useState<string>("");
+
+  // 结构化面板 (规则化, /ai-suggest)
+  const [aiPanel, setAiPanel] = useState<AiSuggestPanelResponse | null>(null);
+  const [aiPanelLoading, setAiPanelLoading] = useState(false);
+  const [aiPanelField, setAiPanelField] = useState<string | undefined>(undefined);
 
   // 左右分割比例（左侧占比）
   const [topRatio, setTopRatio] = useState(0.6);
@@ -183,6 +193,35 @@ export default function NumericWorkbench() {
     );
     return () => window.clearTimeout(tid);
   }, [dlTable, dlRow, dlField, tableNames]);
+
+  // Deep-link 携带 field 时, 默认聚焦到 ai-suggest 面板
+  useEffect(() => {
+    if (dlField) setAiPanelField(dlField);
+  }, [dlField]);
+
+  // activeTable / aiPanelField / drawerOpen 变化 → 拉结构化面板
+  useEffect(() => {
+    if (!drawerOpen || !selectedAgent || !activeTable) {
+      setAiPanel(null);
+      return;
+    }
+    let cancelled = false;
+    setAiPanelLoading(true);
+    gameWorkbenchApi
+      .aiSuggestPanel(selectedAgent, activeTable, aiPanelField)
+      .then((resp) => {
+        if (!cancelled) setAiPanel(resp);
+      })
+      .catch(() => {
+        if (!cancelled) setAiPanel(null);
+      })
+      .finally(() => {
+        if (!cancelled) setAiPanelLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [drawerOpen, selectedAgent, activeTable, aiPanelField]);
 
   // 为新打开但还没加载详情/行的表自动加载
   useEffect(() => {
@@ -992,12 +1031,172 @@ export default function NumericWorkbench() {
           </Space>
         }
         placement="right"
-        width={420}
+        width={460}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         mask={false}
       >
         <div className={styles.aiDrawerBody}>
+          {/* ─── 结构化面板 (规则化, 来自 /ai-suggest) ─── */}
+          {activeTable && (
+            <div className={styles.structuredPanel}>
+              <Space style={{ justifyContent: "space-between", width: "100%" }}>
+                <Text strong>
+                  {t("gameWorkbench.structuredPanelTitle", {
+                    defaultValue: "结构化建议",
+                  })}
+                </Text>
+                <Select
+                  size="small"
+                  style={{ minWidth: 140 }}
+                  value={aiPanelField}
+                  placeholder={t("gameWorkbench.fieldPlaceholder", {
+                    defaultValue: "选择字段",
+                  })}
+                  allowClear
+                  showSearch
+                  options={(detailsByTable[activeTable]?.fields ?? []).map(
+                    (f) => ({ label: f.name, value: f.name }),
+                  )}
+                  onChange={(v) => setAiPanelField(v || undefined)}
+                />
+              </Space>
+              {aiPanelLoading && <Spin size="small" />}
+              {aiPanel && !aiPanelLoading && (
+                <>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {aiPanel.summary}
+                  </Text>
+
+                  {aiPanel.available_ids.length > 0 && (
+                    <div className={styles.panelSection}>
+                      <Text strong>
+                        {t("gameWorkbench.availableIds", {
+                          defaultValue: "可用 ID",
+                        })}
+                      </Text>
+                      <div className={styles.idGrid}>
+                        {aiPanel.available_ids.map((r) => (
+                          <Tooltip
+                            key={`${r.type}-${r.start}`}
+                            title={`${r.start}~${r.end} · 已用 ${r.used_count} · 剩 ${r.remaining}`}
+                          >
+                            <Tag
+                              color={r.next_available !== null ? "blue" : "default"}
+                              style={{ cursor: "default" }}
+                            >
+                              <span style={{ fontSize: 11 }}>{r.type}</span>
+                              {" · "}
+                              <Text code style={{ fontWeight: 600 }}>
+                                {r.next_available ?? "—"}
+                              </Text>
+                            </Tag>
+                          </Tooltip>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {aiPanel.numeric_stats && (
+                    <div className={styles.panelSection}>
+                      <Text strong>
+                        {t("gameWorkbench.numericStatsTitle", {
+                          defaultValue: "数值参考",
+                        })}
+                        {aiPanelField && <Tag style={{ marginLeft: 6 }}>{aiPanelField}</Tag>}
+                      </Text>
+                      <div className={styles.statsGrid}>
+                        <div><Text type="secondary">min</Text> <Text code>{aiPanel.numeric_stats.min}</Text></div>
+                        <div><Text type="secondary">p25</Text> <Text code>{aiPanel.numeric_stats.p25}</Text></div>
+                        <div><Text type="secondary">p50</Text> <Text code>{aiPanel.numeric_stats.p50}</Text></div>
+                        <div><Text type="secondary">p75</Text> <Text code>{aiPanel.numeric_stats.p75}</Text></div>
+                        <div><Text type="secondary">max</Text> <Text code>{aiPanel.numeric_stats.max}</Text></div>
+                        <div><Text type="secondary">avg</Text> <Text code>{aiPanel.numeric_stats.avg}</Text></div>
+                      </div>
+                      {aiPanel.suggested_range && (
+                        <div style={{ marginTop: 4 }}>
+                          <Tag color="green">
+                            {t("gameWorkbench.suggestedRange", {
+                              defaultValue: "建议区间",
+                            })}
+                            : {aiPanel.suggested_range[0]} ~ {aiPanel.suggested_range[1]}
+                          </Tag>
+                        </div>
+                      )}
+                      {aiPanel.samples.length > 0 && (
+                        <div className={styles.samplesList}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {t("gameWorkbench.referenceSamples", {
+                              defaultValue: "同类参考值",
+                            })}
+                            :
+                          </Text>
+                          {aiPanel.samples.map((s, i) => (
+                            <div key={i} className={styles.sampleItem}>
+                              <Text code style={{ fontSize: 11 }}>
+                                {String(s.id ?? "—")}
+                              </Text>
+                              {s.name !== undefined && s.name !== null && (
+                                <Text style={{ fontSize: 12 }}>
+                                  {String(s.name)}
+                                </Text>
+                              )}
+                              <Text strong>{s.value}</Text>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {aiPanel.reusable_resources.length > 0 && (
+                    <div className={styles.panelSection}>
+                      <Text strong>
+                        {t("gameWorkbench.reusableResources", {
+                          count: aiPanel.reusable_resources.length,
+                          defaultValue: `被引用 (${aiPanel.reusable_resources.length})`,
+                        })}
+                      </Text>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {aiPanel.reusable_resources.slice(0, 10).map((r, i) => (
+                          <div key={i} style={{ fontSize: 12 }}>
+                            <Tag color="purple">{r.from_table}</Tag>
+                            <Text code>{r.from_field}</Text>
+                            <Text type="secondary"> → {r.to_field}</Text>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {aiPanel.pending_confirms.length > 0 && (
+                    <div className={styles.panelSection}>
+                      <Text strong>
+                        {t("gameWorkbench.pendingConfirms", {
+                          count: aiPanel.pending_confirms.length,
+                          defaultValue: `待确认 (${aiPanel.pending_confirms.length})`,
+                        })}
+                      </Text>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {aiPanel.pending_confirms.slice(0, 10).map((p, i) => (
+                          <div key={i} style={{ fontSize: 12 }}>
+                            <Tag color={p.confidence === "low_ai" ? "orange" : "geekblue"}>
+                              {p.confidence}
+                            </Tag>
+                            <Text code>{p.name}</Text>
+                            {p.description && (
+                              <Text type="secondary"> · {p.description.slice(0, 32)}</Text>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {aiMessage && (
             <div style={{ padding: "0 4px" }}>
               <Text type="secondary">{aiMessage}</Text>

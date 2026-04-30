@@ -650,3 +650,291 @@ async def suggest_workbench_changes(
             "query_terms": query_terms,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# AI Suggestion Panel (rule-based, no LLM)
+# ---------------------------------------------------------------------------
+
+def _quantile(sorted_vals: list[float], q: float) -> float:
+    if not sorted_vals:
+        return 0.0
+    if len(sorted_vals) == 1:
+        return float(sorted_vals[0])
+    pos = q * (len(sorted_vals) - 1)
+    lo = int(pos)
+    hi = min(lo + 1, len(sorted_vals) - 1)
+    frac = pos - lo
+    return float(sorted_vals[lo]) * (1 - frac) + float(sorted_vals[hi]) * frac
+
+
+def _coerce_float(v: Any) -> float | None:
+    if v is None or v == "":
+        return None
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return None
+        try:
+            return float(s)
+        except ValueError:
+            return None
+    return None
+
+
+def _pk_int(v: Any) -> int | None:
+    if isinstance(v, int) and not isinstance(v, bool):
+        return v
+    if isinstance(v, float):
+        return int(v) if v.is_integer() else None
+    if isinstance(v, str):
+        s = v.strip()
+        if s.isdigit():
+            return int(s)
+    return None
+
+
+@router.get("/ai-suggest")
+async def ai_suggest_panel(
+    table: str,
+    field: str | None = None,
+    workspace: Workspace = Depends(get_agent_for_request),
+) -> dict[str, Any]:
+    """Return rule-based structured AI hints for a target table/field.
+
+    Frontend AISuggestionPanel uses this to render:
+      - available_id / id_ranges       (from TableIndex.id_ranges + actual rows)
+      - reference_values (numeric)     (min/p25/p50/p75/max/avg + samples)
+      - suggested_range                (p25..p75 if numeric)
+      - reusable_resources             (foreign-key candidates from dep graph)
+      - pending_confirms               (fields with confidence != confirmed)
+
+    No LLM call is performed. Designed to be cheap (<50ms) and deterministic.
+    """
+    svc = _service(workspace)
+    committer = getattr(svc, "index_committer", None)
+    if committer is None:
+        raise HTTPException(status_code=412, detail="Index committer not available")
+
+    tables = committer.load_table_indexes() or []
+    target = next(
+        (t for t in tables if (getattr(t, "table_name", None) or "") == table),
+        None,
+    )
+    if target is None:
+        raise HTTPException(status_code=404, detail=f"Table '{table}' not found")
+
+    target_dict = _table_to_dict(target)
+    fields_meta = [_field_to_dict(f) for f in target_dict.get("fields", []) or []]
+    fields_meta = [f for f in fields_meta if f]
+
+    # ---- 1. id_ranges + 下一个可用 ID -----------------------------------
+    available_ids: list[dict[str, Any]] = []
+    used_ids: set[int] = set()
+    applier = getattr(svc, "change_applier", None)
+    primary_key = target_dict.get("primary_key") or "ID"
+    if applier is not None:
+        try:
+            data = await asyncio.to_thread(applier.read_rows, table, 0, 5000)
+        except Exception:
+            data = {"headers": [], "rows": []}
+        headers = data.get("headers", []) or []
+        rows = data.get("rows", []) or []
+        pk_idx = 0
+        for i, h in enumerate(headers):
+            if h and str(h).lower() == str(primary_key).lower():
+                pk_idx = i
+                break
+        for r in rows:
+            if pk_idx < len(r):
+                pk_int = _pk_int(r[pk_idx])
+                if pk_int is not None:
+                    used_ids.add(pk_int)
+
+    for rng in target_dict.get("id_ranges", []) or []:
+        try:
+            start = int(rng.get("start"))
+            end = int(rng.get("end"))
+        except (TypeError, ValueError):
+            continue
+        # 找该段内第一个未占用的 id（从 actual_max+1 起，回退到 start）
+        actual_max = rng.get("actual_max")
+        next_id: int | None = None
+        if isinstance(actual_max, int) and start <= actual_max < end:
+            cand = actual_max + 1
+            while cand <= end:
+                if cand not in used_ids:
+                    next_id = cand
+                    break
+                cand += 1
+        if next_id is None:
+            for cand in range(start, end + 1):
+                if cand not in used_ids:
+                    next_id = cand
+                    break
+        available_ids.append({
+            "type": rng.get("type"),
+            "start": start,
+            "end": end,
+            "actual_min": rng.get("actual_min"),
+            "actual_max": actual_max,
+            "used_count": rng.get("count", 0),
+            "next_available": next_id,
+            "remaining": (end - start + 1) - int(rng.get("count") or 0),
+        })
+
+    # ---- 2. 数值字段：分位数 + 建议区间 + 抽样 --------------------------
+    numeric_stats: dict[str, Any] | None = None
+    suggested_range: list[float] | None = None
+    samples: list[dict[str, Any]] = []
+    if field and applier is not None:
+        try:
+            data = await asyncio.to_thread(applier.read_rows, table, 0, 5000)
+        except Exception:
+            data = {"headers": [], "rows": []}
+        headers = data.get("headers", []) or []
+        rows = data.get("rows", []) or []
+        col_idx = -1
+        for i, h in enumerate(headers):
+            if h and str(h) == field:
+                col_idx = i
+                break
+        if col_idx >= 0:
+            vals: list[float] = []
+            pk_idx = 0
+            name_idx = -1
+            for i, h in enumerate(headers):
+                if h and str(h).lower() == str(primary_key).lower():
+                    pk_idx = i
+                if name_idx < 0 and _is_name_like_header(str(h or "")):
+                    name_idx = i
+            for r in rows:
+                if col_idx < len(r):
+                    fv = _coerce_float(r[col_idx])
+                    if fv is not None:
+                        vals.append(fv)
+            if vals:
+                vs = sorted(vals)
+                p25 = _quantile(vs, 0.25)
+                p50 = _quantile(vs, 0.50)
+                p75 = _quantile(vs, 0.75)
+                avg = sum(vs) / len(vs)
+                numeric_stats = {
+                    "count": len(vs),
+                    "min": vs[0],
+                    "max": vs[-1],
+                    "avg": round(avg, 4),
+                    "p25": p25,
+                    "p50": p50,
+                    "p75": p75,
+                }
+                suggested_range = [p25, p75]
+                # 取靠近 p50 的若干样本（最多 5 条）
+                with_dist = sorted(
+                    enumerate(vals),
+                    key=lambda kv: abs(kv[1] - p50),
+                )[:5]
+                for idx, v in with_dist:
+                    if idx < len(rows):
+                        row = rows[idx]
+                        rec: dict[str, Any] = {
+                            "id": row[pk_idx] if pk_idx < len(row) else None,
+                            "value": v,
+                        }
+                        if name_idx >= 0 and name_idx < len(row):
+                            rec["name"] = row[name_idx]
+                        samples.append(rec)
+
+    # ---- 3. 反向依赖：哪些表/字段引用本表 -------------------------------
+    reusable_resources: list[dict[str, Any]] = []
+    try:
+        dep = committer.load_dependency_graph()
+    except Exception:
+        dep = None
+    if dep is not None:
+        for edge in getattr(dep, "edges", []) or []:
+            try:
+                if edge.to_table == table:
+                    reusable_resources.append({
+                        "from_table": edge.from_table,
+                        "from_field": edge.from_field,
+                        "to_field": edge.to_field,
+                        "confidence": getattr(edge.confidence, "value", str(edge.confidence)),
+                        "inferred_by": edge.inferred_by,
+                    })
+            except Exception:
+                continue
+
+    # ---- 4. 待确认 Checklist -------------------------------------------
+    pending_confirms: list[dict[str, Any]] = []
+    for f in fields_meta:
+        conf = (f.get("confidence") or "").lower()
+        if conf and conf != "confirmed":
+            pending_confirms.append({
+                "name": f.get("name"),
+                "type": f.get("type"),
+                "confidence": conf,
+                "description": f.get("description") or "",
+            })
+
+    # ---- 5. 当前 field 元信息 ------------------------------------------
+    field_meta: dict[str, Any] | None = None
+    if field:
+        for f in fields_meta:
+            if f.get("name") == field:
+                field_meta = {
+                    "name": f.get("name"),
+                    "type": f.get("type"),
+                    "confidence": f.get("confidence"),
+                    "description": f.get("description") or "",
+                }
+                break
+
+    return {
+        "table": table,
+        "field": field,
+        "field_meta": field_meta,
+        "primary_key": primary_key,
+        "available_ids": available_ids,
+        "numeric_stats": numeric_stats,
+        "suggested_range": suggested_range,
+        "samples": samples,
+        "reusable_resources": reusable_resources[:20],
+        "pending_confirms": pending_confirms,
+        "summary": _build_panel_summary(
+            target_dict, available_ids, numeric_stats, len(reusable_resources),
+            len(pending_confirms),
+        ),
+    }
+
+
+def _build_panel_summary(
+    target: dict[str, Any],
+    avail: list[dict[str, Any]],
+    stats: dict[str, Any] | None,
+    ref_count: int,
+    pending_count: int,
+) -> str:
+    parts: list[str] = []
+    parts.append(f"表 {target.get('table_name')}: {target.get('row_count', 0)} 行")
+    if avail:
+        free = [a for a in avail if a.get("next_available") is not None]
+        if free:
+            parts.append(
+                f"可分配 ID: " + ", ".join(
+                    f"{a['type']}:{a['next_available']}" for a in free[:3]
+                )
+            )
+    if stats:
+        parts.append(
+            f"建议区间 {stats['p25']:g}~{stats['p75']:g} (中位 {stats['p50']:g})"
+        )
+    if ref_count:
+        parts.append(f"被 {ref_count} 处引用")
+    if pending_count:
+        parts.append(f"{pending_count} 字段待确认")
+    return " · ".join(parts)
