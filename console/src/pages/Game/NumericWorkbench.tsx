@@ -43,6 +43,9 @@ import { pushWorkbenchCard } from "../Chat/workbenchCardChannel";
 import { DirtyList } from "./components/DirtyList";
 import { ImpactPanel } from "./components/ImpactPanel";
 import { WorkbenchChat, type ChatMessage } from "./components/WorkbenchChat";
+import { WorkbenchChatSessionToolbar } from "./components/WorkbenchChatSessionToolbar";
+import { useWorkbenchChatSessions } from "./hooks/useWorkbenchChatSessions";
+import ModelSelector from "../Chat/ModelSelector";
 import {
   coerceCellValue,
   dirtyKeyOf,
@@ -110,10 +113,38 @@ export default function NumericWorkbench() {
   // 单元格编辑态（同时只允许一个）
   const [editing, setEditing] = useState<CellEditState | null>(null);
 
-  // 工作台 Chat（独立会话）
+  // 工作台 Chat（属于工作台本地会话，持久化到 localStorage）
   const [chatInput, setChatInput] = useState("");
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const chatStore = useWorkbenchChatSessions();
+  const chatMessages = chatStore.messages;
+  const setChatMessages = chatStore.setMessages;
   const [chatSending, setChatSending] = useState(false);
+
+  // 工作台专属 Agent / 模型覆盖（默认 "" 表示使用全局 selectedAgent）
+  const WORKBENCH_AGENT_KEY = "ltclaw.workbench.agentOverride.v1";
+  const [workbenchAgentOverride, setWorkbenchAgentOverride] = useState<string>(
+    () => {
+      try {
+        return localStorage.getItem(WORKBENCH_AGENT_KEY) || "";
+      } catch {
+        return "";
+      }
+    },
+  );
+  useEffect(() => {
+    try {
+      if (workbenchAgentOverride) {
+        localStorage.setItem(WORKBENCH_AGENT_KEY, workbenchAgentOverride);
+      } else {
+        localStorage.removeItem(WORKBENCH_AGENT_KEY);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [workbenchAgentOverride]);
+  const agents = useAgentStore((s) => s.agents);
+  /** 发送 AI 请求使用的 agent id（能定制主模型） */
+  const aiAgentId = workbenchAgentOverride || selectedAgent;
 
   // dirty 状态 hook
   const dirty = useDirtyCells();
@@ -587,7 +618,7 @@ export default function NumericWorkbench() {
   // ── Chat 发送 ─────────────────────────────────────────
   const sendChat = useCallback(async () => {
     const text = chatInput.trim();
-    if (!text || !selectedAgent) return;
+    if (!text || !aiAgentId) return;
     const userMsg: ChatMessage = { role: "user", content: text, ts: Date.now() };
     setChatMessages((prev) => [...prev, userMsg]);
     setChatInput("");
@@ -595,7 +626,7 @@ export default function NumericWorkbench() {
     try {
       const history = chatMessages.slice(-6).map((m) => ({ role: m.role, content: m.content }));
       const resp = await gameWorkbenchApi.suggest(
-        selectedAgent,
+        aiAgentId,
         text,
         openTables,
         validChanges,
@@ -679,7 +710,7 @@ export default function NumericWorkbench() {
     } finally {
       setChatSending(false);
     }
-  }, [chatInput, chatMessages, selectedAgent, openTables, validChanges, t]);
+  }, [chatInput, chatMessages, aiAgentId, openTables, validChanges, setChatMessages, t]);
 
   // ── 接受 AI 建议（写入 dirty） ────────────────────────
   const jumpToCell = useCallback(
@@ -1010,7 +1041,39 @@ export default function NumericWorkbench() {
               if (idx >= 0) acceptAllSuggestions(idx, sugs);
             }}
             onJumpToCell={jumpToCell}
-            onClear={() => setChatMessages([])}
+            onClear={chatStore.clearCurrentMessages}
+            headerExtra={
+              <Space size={4}>
+                <Tooltip title={t("gameWorkbench.workbenchAgent", { defaultValue: "工作台专属 Agent（决定 AI 主模型）" })}>
+                  <Select
+                    size="small"
+                    value={workbenchAgentOverride || ""}
+                    style={{ minWidth: 140 }}
+                    onChange={(v) => setWorkbenchAgentOverride(v)}
+                    options={[
+                      {
+                        value: "",
+                        label: t("gameWorkbench.followGlobalAgent", {
+                          defaultValue: "跟随全局 Agent",
+                        }),
+                      },
+                      ...agents.map((a) => ({ value: a.id, label: a.name || a.id })),
+                    ]}
+                  />
+                </Tooltip>
+                <ModelSelector agentId={aiAgentId} disableRouteSync />
+              </Space>
+            }
+            subHeader={
+              <WorkbenchChatSessionToolbar
+                sessions={chatStore.sessions}
+                currentId={chatStore.currentId}
+                onSwitch={chatStore.switchSession}
+                onNew={() => chatStore.createSession()}
+                onRename={chatStore.renameSession}
+                onRemove={chatStore.removeSession}
+              />
+            }
           />
         </Card>
       </div>

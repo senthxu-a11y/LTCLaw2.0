@@ -1,3 +1,4 @@
+import type React from "react";
 import { Avatar, Button, Empty, Input, Space, Tag, Tooltip, Typography } from "antd";
 import { CheckOutlined, RobotOutlined, SendOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
@@ -28,6 +29,10 @@ export interface WorkbenchChatProps {
   onAcceptAll: (sugs: SuggestChange[]) => void;
   onJumpToCell: (table: string, rowId: string | number, field: string) => void;
   onClear?: () => void;
+  /** Optional toolbar slot (session picker / model selector) rendered in the header right side. */
+  headerExtra?: React.ReactNode;
+  /** Optional second header row (e.g. session toolbar). */
+  subHeader?: React.ReactNode;
 }
 
 const formatVal = (v: unknown): string => {
@@ -57,6 +62,8 @@ export function WorkbenchChat(props: WorkbenchChatProps) {
     onAcceptAll,
     onJumpToCell,
     onClear,
+    headerExtra,
+    subHeader,
   } = props;
 
   return (
@@ -73,12 +80,16 @@ export function WorkbenchChat(props: WorkbenchChatProps) {
             })}
           </Tag>
         </Space>
-        {onClear && messages.length > 0 && (
-          <Button size="small" type="text" onClick={onClear}>
-            {t("gameWorkbench.chatClear", { defaultValue: "清空对话" })}
-          </Button>
-        )}
+        <Space size={4}>
+          {headerExtra}
+          {onClear && messages.length > 0 && (
+            <Button size="small" type="text" onClick={onClear}>
+              {t("gameWorkbench.chatClear", { defaultValue: "清空对话" })}
+            </Button>
+          )}
+        </Space>
       </div>
+      {subHeader && <div className={styles.chatSubHeader}>{subHeader}</div>}
 
       <div className={styles.chatHistory}>
         {messages.length === 0 ? (

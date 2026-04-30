@@ -22,7 +22,15 @@ interface EligibleProvider {
   models: Array<{ id: string; name: string; is_free?: boolean }>;
 }
 
-export default function ModelSelector() {
+interface ModelSelectorProps {
+  /** Override the agent id whose model is read/written. Defaults to global selectedAgent. */
+  agentId?: string;
+  /** When true, skip the on-mount /chat-route re-sync effect (for non-/chat hosts). */
+  disableRouteSync?: boolean;
+}
+
+export default function ModelSelector(props: ModelSelectorProps = {}) {
+  const { agentId: agentIdProp, disableRouteSync } = props;
   const { t } = useTranslation();
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [activeModels, setActiveModels] = useState<ActiveModelsInfo | null>(
@@ -33,7 +41,8 @@ export default function ModelSelector() {
   const [open, setOpen] = useState(false);
   const savingRef = useRef(false);
   const location = useLocation();
-  const { selectedAgent } = useAgentStore();
+  const { selectedAgent: globalSelectedAgent } = useAgentStore();
+  const selectedAgent = agentIdProp ?? globalSelectedAgent;
   const { message } = useAppMessage();
 
   const fetchData = useCallback(async () => {
@@ -62,6 +71,7 @@ export default function ModelSelector() {
   // Re-sync active model whenever the route switches back to /chat
   const prevPathRef = useRef(location.pathname);
   useEffect(() => {
+    if (disableRouteSync) return;
     const prev = prevPathRef.current;
     const curr = location.pathname;
     prevPathRef.current = curr;
@@ -77,7 +87,7 @@ export default function ModelSelector() {
         })
         .catch(() => {});
     }
-  }, [location.pathname, selectedAgent]);
+  }, [location.pathname, selectedAgent, disableRouteSync]);
 
   // Eligible providers: configured + has models
   const eligibleProviders: EligibleProvider[] = providers
