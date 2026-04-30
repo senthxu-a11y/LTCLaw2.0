@@ -69,7 +69,7 @@ class SimpleModelRouter:
                 client = provider._client(timeout=60)
                 resp = await client.messages.create(
                     model=model_id,
-                    max_tokens=2048,
+                    max_tokens=16384,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 parts = []

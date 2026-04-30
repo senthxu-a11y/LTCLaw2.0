@@ -23,6 +23,7 @@ const SvnSyncPage = lazyImportWithRetry("../../pages/Game/SvnSync");
 const IndexMapPage = lazyImportWithRetry("../../pages/Game/IndexMap");
 const DocLibraryPage = lazyImportWithRetry("../../pages/Game/DocLibrary");
 const KnowledgeBasePage = lazyImportWithRetry("../../pages/Game/KnowledgeBase");
+const NumericWorkbenchPage = lazyImportWithRetry("../../pages/Game/NumericWorkbench");
 const SkillsPage = lazyImportWithRetry("../../pages/Agent/Skills");
 const SkillPoolPage = lazyImportWithRetry("../../pages/Settings/SkillPool");
 const ToolsPage = lazyImportWithRetry("../../pages/Agent/Tools");
@@ -72,6 +73,7 @@ const pathToKey: Record<string, string> = {
   "/index-map": "index-map",
   "/doc-library": "doc-library",
   "/knowledge-base": "knowledge-base",
+  "/numeric-workbench": "numeric-workbench",
 };
 
 export default function MainLayout() {
@@ -144,6 +146,7 @@ export default function MainLayout() {
                   <Route path="/index-map" element={<IndexMapPage />} />
                   <Route path="/doc-library" element={<DocLibraryPage />} />
                   <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
+                  <Route path="/numeric-workbench" element={<NumericWorkbenchPage />} />
 
                   {/* Plugin routes — dynamically injected at runtime */}
                   {pluginRoutes.map((route) => (

@@ -122,7 +122,37 @@ async def game_propose_change(
     description: str,
     ops: list[dict],
 ) -> Dict[str, Any]:
-    """Create a draft change proposal."""
+    """Create a draft change proposal for game data tables.
+
+    Each op in ``ops`` MUST follow the ChangeOp schema below.
+
+    Required fields:
+        op (str): One of ``"update_cell"``, ``"insert_row"``, ``"delete_row"``.
+                  (Note: lowercase with underscore. NOT "UPDATE" / "update".)
+        table (str): Target table name (case-sensitive, matches indexed table).
+        row_id (str | int): Primary key value of the target row.
+
+    Optional fields (depend on op):
+        field (str): Column name. Required for ``update_cell``.
+        new_value (Any): New cell value. Required for ``update_cell`` and
+                         ``insert_row``. Use a dict {col: val} for insert_row.
+        old_value (Any): Optional, for audit / safe-update.
+
+    DO NOT use ``updates`` (dict), ``filter`` (dict), or ``where``. Each cell
+    change is one ``update_cell`` op. To change two columns on the same row,
+    emit two ops.
+
+    Example:
+        ops = [
+            {"op": "update_cell", "table": "Hero", "row_id": 1,
+             "field": "HP", "new_value": 100},
+            {"op": "update_cell", "table": "Hero", "row_id": 1,
+             "field": "ATK", "new_value": 25},
+        ]
+
+    Returns:
+        {"id": <proposal_id>, "status": "draft", "ops_count": <int>}
+    """
     service, err = await _get_game_service()
     if err:
         return err

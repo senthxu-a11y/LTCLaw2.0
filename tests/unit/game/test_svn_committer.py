@@ -11,7 +11,10 @@ class _StubSvnClient:
     def __init__(self):
         self.add = AsyncMock()
         self.commit = AsyncMock(return_value=123)
+        self.commit_with_retry = AsyncMock(return_value=123)
         self.revert = AsyncMock()
+        self.info = AsyncMock(return_value={"revision": 0})
+        self.update = AsyncMock(return_value=0)
 
 
 @pytest.fixture
@@ -43,16 +46,16 @@ async def test_commit_proposal_calls_add_before_commit(committer, svn_client, pr
 
     assert revision == 123
     assert svn_client.add.await_count == 1
-    assert svn_client.commit.await_count == 1
+    assert svn_client.commit_with_retry.await_count == 1
     assert svn_client.add.await_args_list[0].args[0] == [committer.svn_root / "tables/Hero.csv"]
-    assert svn_client.commit.await_args_list[0].args[0] == [committer.svn_root / "tables/Hero.csv"]
+    assert svn_client.commit_with_retry.await_args_list[0].args[0] == [committer.svn_root / "tables/Hero.csv"]
 
 
 @pytest.mark.asyncio
 async def test_commit_proposal_formats_default_message(committer, svn_client, proposal):
     await committer.commit_proposal(proposal, ["tables/Hero.csv"])
 
-    message = svn_client.commit.await_args_list[0].args[1]
+    message = svn_client.commit_with_retry.await_args_list[0].args[1]
     assert "[ltclaw][proposal:12345678] Buff hero hp" in message
     assert "Increase hero base hp." in message
 
@@ -69,13 +72,26 @@ async def test_commit_proposal_converts_relative_paths_to_absolute(committer, sv
 
 @pytest.mark.asyncio
 async def test_commit_proposal_wraps_commit_error(committer, svn_client, proposal):
-    svn_client.commit.side_effect = RuntimeError("svn boom")
+    svn_client.commit_with_retry.side_effect = RuntimeError("svn boom")
 
     with pytest.raises(CommitError) as exc_info:
         await committer.commit_proposal(proposal, ["tables/Hero.csv"])
 
     assert "svn boom" in str(exc_info.value)
     assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
+@pytest.mark.asyncio
+async def test_commit_proposal_revision_guard(committer, svn_client, proposal):
+    svn_client.info.return_value = {"revision": 100}
+
+    with pytest.raises(CommitError) as exc_info:
+        await committer.commit_proposal(
+            proposal, ["tables/Hero.csv"], expected_revision=50
+        )
+
+    assert "ahead of expected" in str(exc_info.value)
+    assert svn_client.commit_with_retry.await_count == 0
 
 
 @pytest.mark.asyncio

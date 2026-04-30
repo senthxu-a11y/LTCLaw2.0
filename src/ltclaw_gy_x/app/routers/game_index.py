@@ -94,3 +94,33 @@ async def find_field(
 async def query(request: QueryRequest, workspace: Workspace = Depends(get_agent_for_request)):
     _, qr = _get(workspace)
     return await qr.query(request.q, request.mode)
+
+@router.get("/tables/{name}/rows")
+async def get_table_rows(
+    name: str,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    workspace: Workspace = Depends(get_agent_for_request),
+):
+    """Return paginated raw rows of a table for the workbench grid view."""
+    svc, _ = _get(workspace)
+    applier = getattr(svc, "change_applier", None)
+    if applier is None:
+        raise HTTPException(status_code=412, detail="Project config not loaded")
+    try:
+        return await __import__("asyncio").to_thread(applier.read_rows, name, offset, limit)
+    except Exception as exc:  # ApplyError or file errors
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/rebuild")
+async def rebuild_index(workspace: Workspace = Depends(get_agent_for_request)):
+    svc, _ = _get(workspace)
+    if svc.user_config.my_role != "maintainer":
+        raise HTTPException(status_code=403, detail="Only maintainers can rebuild index")
+    if svc.project_config is None:
+        raise HTTPException(status_code=412, detail="Project config not loaded")
+    try:
+        return await svc.force_full_rescan()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

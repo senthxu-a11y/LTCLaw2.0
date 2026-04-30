@@ -79,6 +79,8 @@ def create_agent_scoped_router() -> APIRouter:
     from .game_knowledge_base import router as game_knowledge_base_router
     from .game_change import router as game_change_router
     from .game_svn import router as game_svn_router
+    from .game_workbench import router as game_workbench_router
+    from .game_workbench_cards import router as game_workbench_cards_router
 
     router = APIRouter(prefix="/agents/{agentId}", tags=["agent-scoped"])
 
@@ -98,5 +100,7 @@ def create_agent_scoped_router() -> APIRouter:
     router.include_router(game_knowledge_base_router)
     router.include_router(game_change_router)
     router.include_router(game_svn_router)
+    router.include_router(game_workbench_router)
+    router.include_router(game_workbench_cards_router)
 
     return router

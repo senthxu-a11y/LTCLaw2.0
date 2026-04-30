@@ -122,3 +122,5 @@ _wrapped_py.txt
 # Accidental nested duplicate of repo root
 LTclaw2.0/
 
+
+tmp/

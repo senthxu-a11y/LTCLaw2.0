@@ -228,6 +228,58 @@ class TableIndexer:
                 })
         return ranges
 
+    def _read_txt_file(self, source: Path) -> tuple[list[list[Any]], dict[str, str]]:
+        """Read a TAB-separated game-config txt file with ┇-encoded headers.
+
+        Row 1: ``<FieldName>┇Type=...;...;Doc=<desc>`` (TAB separated).
+        Row 2: human-readable comment/label row.
+        Row 3+: data rows.
+
+        Returns (rows_with_normalized_header, field_doc_map).
+        """
+        raw_bytes = source.read_bytes()
+        if raw_bytes.startswith(b"\xef\xbb\xbf"):
+            raw_bytes = raw_bytes[3:]
+        text: Optional[str] = None
+        for enc in ("utf-8", "gbk", "gb2312"):
+            try:
+                text = raw_bytes.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        if text is None:
+            raise ValueError(f"unable to decode txt file: {source}")
+        sep = "\r\n" if "\r\n" in text else "\n"
+        lines = text.split(sep)
+        if lines and lines[-1] == "":
+            lines = lines[:-1]
+        rows: list[list[Any]] = [line.split("\t") for line in lines]
+        docs: dict[str, str] = {}
+        if rows:
+            header_cells = rows[0]
+            norm: list[str] = []
+            for i, cell in enumerate(header_cells):
+                cell_s = (cell or "").strip()
+                name = ""
+                doc = ""
+                if "┇" in cell_s:
+                    name, _, meta = cell_s.partition("┇")
+                    name = name.strip()
+                    for seg in meta.split(";"):
+                        seg = seg.strip()
+                        if seg.startswith("Doc="):
+                            doc = seg[4:].strip()
+                            break
+                else:
+                    name = cell_s
+                if not name:
+                    name = f"Column_{i}"
+                norm.append(name)
+                if doc:
+                    docs[name] = doc
+            rows[0] = norm
+        return rows, docs
+
     def _determine_system_from_path(self, source_path: Path) -> Optional[str]:
         path_str = str(source_path).replace("\\", "/")
         for rule in self.project.paths:
@@ -250,10 +302,13 @@ class TableIndexer:
             prev.svn_revision = svn_revision
             return prev
         suffix = source.suffix.lower()
+        txt_docs: dict[str, str] = {}
         if suffix in [".xlsx", ".xls"]:
             raw_data, _ = self._read_excel_file(source)
         elif suffix == ".csv":
             raw_data, _ = self._read_csv_file(source)
+        elif suffix == ".txt":
+            raw_data, txt_docs = self._read_txt_file(source)
         else:
             raise ValueError(f"不支持的文件格式: {suffix}")
         if not raw_data:
@@ -265,16 +320,23 @@ class TableIndexer:
             str(c).strip() if c is not None else f"Column_{i}"
             for i, c in enumerate(raw_data[header_row_idx])
         ]
-        valid_count = 0
-        for h in headers:
-            if h and h != "None":
-                valid_count += 1
-            else:
-                break
-        headers = headers[:valid_count]
+        if suffix == ".txt":
+            headers = [h if h else f"Column_{i}" for i, h in enumerate(headers)]
+        else:
+            valid_count = 0
+            for h in headers:
+                if h and h != "None":
+                    valid_count += 1
+                else:
+                    break
+            headers = headers[:valid_count]
         if not headers:
             raise ValueError(f"未找到有效表头: {source}")
-        data_rows = raw_data[header_row_idx + 1 :]
+        data_start = header_row_idx + 1
+        comment_row = self.project.table_convention.comment_row
+        if comment_row is not None and comment_row > self.project.table_convention.header_row:
+            data_start = comment_row
+        data_rows = raw_data[data_start:]
         data_rows = [row[: len(headers)] for row in data_rows]
         data_rows = [row for row in data_rows if any(c is not None and str(c).strip() for c in row)]
         row_count = len(data_rows)
@@ -288,7 +350,20 @@ class TableIndexer:
                     samples.append(str(v).strip())
             fields_data.append({"name": header, "type": ftype, "sample_values": samples})
         table_name = source.stem
-        descs = await self._describe_fields_with_llm(table_name, fields_data)
+        if txt_docs:
+            missing = [fd for fd in fields_data if fd["name"] not in txt_docs]
+            llm_descs = (
+                await self._describe_fields_with_llm(table_name, missing) if missing else {}
+            )
+            descs = {}
+            for fd in fields_data:
+                name = fd["name"]
+                if name in txt_docs:
+                    descs[name] = {"description": txt_docs[name], "confidence": 0.9}
+                elif name in llm_descs:
+                    descs[name] = llm_descs[name]
+        else:
+            descs = await self._describe_fields_with_llm(table_name, fields_data)
         fields = []
         for fd in fields_data:
             name = fd["name"]

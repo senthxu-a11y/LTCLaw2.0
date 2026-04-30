@@ -241,6 +241,12 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
       label: t("nav.knowledgeBase"),
     },
     {
+      key: "numeric-workbench",
+      icon: <SparkModifyLine size={18} />,
+      path: "/numeric-workbench",
+      label: t("nav.gameWorkbench"),
+    },
+    {
       key: "agents",
       icon: <SparkAgentLine size={18} />,
       path: "/agents",
@@ -397,6 +403,11 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
           key: "knowledge-base",
           label: collapsed ? null : t("nav.knowledgeBase"),
           icon: <SparkSearchUserLine size={16} />,
+        },
+        {
+          key: "numeric-workbench",
+          label: collapsed ? null : t("nav.gameWorkbench"),
+          icon: <SparkModifyLine size={16} />,
         },
       ],
     },

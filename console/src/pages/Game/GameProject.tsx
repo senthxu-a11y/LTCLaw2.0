@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Form, Input, Switch, Button, Card } from "@agentscope-ai/design";
-import { Space } from "antd";
+import { Modal, Space } from "antd";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
 import { gameApi } from "../../api/modules/game";
+import { agentsApi } from "../../api/modules/agents";
 import type { ProjectConfig, ValidationIssue } from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
 import styles from "./GameProject.module.less";
@@ -32,11 +33,14 @@ interface GameProjectFormData {
 export default function GameProject() {
   const { t } = useTranslation();
   const { message } = useAppMessage();
-  const { selectedAgent } = useAgentStore();
+  const { selectedAgent, addAgent, setSelectedAgent } = useAgentStore();
   const [form] = Form.useForm<GameProjectFormData>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardSaving, setWizardSaving] = useState(false);
+  const [wizardForm] = Form.useForm<{ id?: string; name: string }>();
 
   const fetchConfig = async () => {
     if (!selectedAgent) {
@@ -102,69 +106,119 @@ export default function GameProject() {
     try {
       const values = await form.validateFields();
       setSaving(true);
-
-      const splitLines = (s: string | undefined) =>
-        (s || "")
-          .split(/\r?\n/)
-          .map((p) => p.trim())
-          .filter((p) => p.length > 0);
-
-      const workingCopyPath = (values.svn_working_copy_path || "").trim();
-      if (!workingCopyPath) {
-        message.error(t("gameProject.svnWorkingCopyPathRequired", { defaultValue: "请填写本地SVN工作副本路径（先 svn checkout 到本地）" }));
-        setSaving(false);
-        return;
-      }
-
-      // 1) 用户级配置（账号密码不入 SVN）
-      const userPayload = {
-        my_role: (values.is_maintainer ? "maintainer" : "consumer") as "maintainer" | "consumer",
-        svn_local_root: workingCopyPath,
-        svn_url: values.svn_url || null,
-        svn_username: values.svn_username || null,
-        svn_password: values.svn_password || null,
-        svn_trust_cert: !!values.svn_trust_cert,
-      };
-      await gameApi.saveUserConfig(selectedAgent!, userPayload as any);
-
-      // 2) 项目级配置（落 .ltclaw_index/project_config.yaml，入 SVN 共享）
-      const paths = splitLines(values.watch_paths).map((p) => ({
-        path: p,
-        semantic: "table" as const,
-      }));
-      const projectPayload: any = {
-        schema_version: "project-config.v1",
-        project: {
-          name: values.name,
-          engine: values.description || "Unity",
-          language: "zh",
-        },
-        svn: {
-          root: workingCopyPath,
-          poll_interval_seconds: 300,
-          jitter_seconds: 30,
-        },
-        paths,
-        filters: {
-          include_ext: splitLines(values.watch_patterns),
-          exclude_glob: splitLines(values.watch_exclude_patterns),
-        },
-        table_convention: {
-          header_row: 1,
-          comment_row: null,
-          primary_key_field: "ID",
-          id_ranges: [],
-        },
-        doc_templates: {},
-        models: {},
-      };
-      const result = await gameApi.saveProjectConfig(selectedAgent!, projectPayload as ProjectConfig);
-      message.success(result.message || t("gameProject.saveSuccess"));
+      await persistFormToAgent(values, selectedAgent!);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : t("gameProject.saveFailed");
       message.error(errMsg);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const persistFormToAgent = async (values: GameProjectFormData, targetAgent: string) => {
+    const splitLines = (s: string | undefined) =>
+      (s || "")
+        .split(/\r?\n/)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+
+    const workingCopyPath = (values.svn_working_copy_path || "").trim();
+    if (!workingCopyPath) {
+      throw new Error(
+        t("gameProject.svnWorkingCopyPathRequired", {
+          defaultValue: "请填写本地SVN工作副本路径（先 svn checkout 到本地）",
+        }),
+      );
+    }
+
+    const userPayload = {
+      my_role: (values.is_maintainer ? "maintainer" : "consumer") as "maintainer" | "consumer",
+      svn_local_root: workingCopyPath,
+      svn_url: values.svn_url || null,
+      svn_username: values.svn_username || null,
+      svn_password: values.svn_password || null,
+      svn_trust_cert: !!values.svn_trust_cert,
+    };
+    await gameApi.saveUserConfig(targetAgent, userPayload as any);
+
+    const paths = splitLines(values.watch_paths).map((p) => ({
+      path: p,
+      semantic: "table" as const,
+    }));
+    const projectPayload: any = {
+      schema_version: "project-config.v1",
+      project: {
+        name: values.name,
+        engine: values.description || "Unity",
+        language: "zh",
+      },
+      svn: {
+        root: workingCopyPath,
+        poll_interval_seconds: 300,
+        jitter_seconds: 30,
+      },
+      paths,
+      filters: {
+        include_ext: splitLines(values.watch_patterns),
+        exclude_glob: splitLines(values.watch_exclude_patterns),
+      },
+      table_convention: {
+        header_row: 1,
+        comment_row: null,
+        primary_key_field: "ID",
+        id_ranges: [],
+      },
+      doc_templates: {},
+      models: {},
+    };
+    const result = await gameApi.saveProjectConfig(targetAgent, projectPayload as ProjectConfig);
+    message.success(result.message || t("gameProject.saveSuccess"));
+  };
+
+  const handleCreateProjectAgent = async () => {
+    try {
+      const values = await form.validateFields();
+      const wizValues = await wizardForm.validateFields();
+      setWizardSaving(true);
+
+      const created = await agentsApi.createAgent({
+        id: wizValues.id?.trim() || undefined,
+        name: wizValues.name.trim(),
+        description: (values.description || "").slice(0, 200),
+      });
+
+      addAgent({
+        id: created.id,
+        name: wizValues.name.trim(),
+        description: (values.description || "").slice(0, 200),
+        workspace_dir: created.workspace_dir,
+        enabled: true,
+      });
+      setSelectedAgent(created.id);
+
+      try {
+        await persistFormToAgent(values, created.id);
+      } catch (err) {
+        const m = err instanceof Error ? err.message : String(err);
+        message.warning(
+          t("gameProject.wizardCreatedButSaveFailed", {
+            defaultValue: `Agent 已创建 (${created.id})，但配置保存失败：${m}`,
+          }),
+        );
+      }
+
+      message.success(
+        t("gameProject.wizardSuccess", {
+          defaultValue: `已创建项目 Agent: ${created.id}，已切换至该 Agent`,
+        }),
+      );
+      setWizardOpen(false);
+      wizardForm.resetFields();
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : t("agent.createFailed");
+      message.error(errMsg);
+    } finally {
+      setWizardSaving(false);
     }
   };
 
@@ -346,10 +400,61 @@ export default function GameProject() {
         <Button onClick={handleValidate} disabled={saving} style={{ marginRight: 8 }}>
           {t("gameProject.validate")}
         </Button>
+        <Button
+          onClick={() => {
+            const cur = form.getFieldValue("name") || "";
+            wizardForm.setFieldsValue({ name: cur || "新项目", id: "" });
+            setWizardOpen(true);
+          }}
+          disabled={saving}
+          style={{ marginRight: 8 }}
+        >
+          {t("gameProject.createAsAgent", { defaultValue: "另存为新项目 Agent" })}
+        </Button>
         <Button type="primary" onClick={handleSave} loading={saving}>
           {t("common.save")}
         </Button>
       </div>
+
+      <Modal
+        title={t("gameProject.createAgentTitle", { defaultValue: "为该项目创建独立 Agent" })}
+        open={wizardOpen}
+        onOk={handleCreateProjectAgent}
+        onCancel={() => setWizardOpen(false)}
+        okText={t("common.create", { defaultValue: "创建并切换" })}
+        cancelText={t("common.cancel")}
+        confirmLoading={wizardSaving}
+        destroyOnHidden
+      >
+        <p style={{ marginTop: 0, color: "#666", fontSize: 12 }}>
+          {t("gameProject.createAgentHint", {
+            defaultValue:
+              "将基于当前表单内容创建一个新的 Agent（拥有独立 workspace），并把当前项目配置保存到该 Agent，然后自动切换至新 Agent。",
+          })}
+        </p>
+        <Form form={wizardForm} layout="vertical" autoComplete="off">
+          <Form.Item
+            name="name"
+            label={t("agent.name", { defaultValue: "Agent 名称" })}
+            rules={[{ required: true, message: t("agent.nameRequired", { defaultValue: "请输入名称" }) }]}
+          >
+            <Input placeholder={t("agent.namePlaceholder", { defaultValue: "如：公会战项目" })} />
+          </Form.Item>
+          <Form.Item
+            name="id"
+            label={t("agent.idLabel", { defaultValue: "Agent ID（可选）" })}
+            help={t("agent.idHelp", { defaultValue: "留空将自动生成。允许字母数字-_，2-64 字符" })}
+            rules={[
+              {
+                pattern: /^[a-zA-Z0-9][a-zA-Z0-9_-]*[a-zA-Z0-9]$/,
+                message: t("agent.idPattern", { defaultValue: "ID 格式不合法" }),
+              },
+            ]}
+          >
+            <Input placeholder="guildwar_proj" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

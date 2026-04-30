@@ -1,0 +1,652 @@
+# -*- coding: utf-8 -*-
+"""Game numeric workbench preview HTTP API endpoints."""
+from __future__ import annotations
+
+import asyncio
+import re
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+
+from ...app.agent_context import get_agent_for_request
+from ...app.workspace.workspace import Workspace
+from ...game.change_proposal import ChangeOp, ChangeProposal
+
+
+class PreviewChange(BaseModel):
+    table: str
+    row_id: str | int
+    field: str
+    new_value: Any = None
+
+
+class PreviewRequest(BaseModel):
+    changes: list[PreviewChange] = []
+
+
+class ChatTurn(BaseModel):
+    role: str
+    content: str
+
+
+class SuggestRequest(BaseModel):
+    user_intent: str
+    context_tables: list[str] = []
+    current_pending: list[PreviewChange] = []
+    chat_history: list[ChatTurn] = []
+
+
+router = APIRouter(prefix="/game/workbench", tags=["game-workbench"])
+
+
+def _service(workspace: Workspace):
+    svc = workspace.service_manager.services.get("game_service")
+    if svc is None:
+        raise HTTPException(status_code=404, detail="Game service not available")
+    return svc
+
+
+def _change_applier(svc):
+    applier = getattr(svc, "change_applier", None)
+    if applier is None:
+        raise HTTPException(status_code=412, detail="Change applier not available")
+    return applier
+
+
+def _make_key(change: PreviewChange) -> tuple[str, str, str]:
+    return (change.table, str(change.row_id), change.field)
+
+
+def _preview_key(preview: dict[str, Any]) -> tuple[str, str, str]:
+    op = preview.get("op", {}) or {}
+    return (
+        str(op.get("table", "")),
+        str(op.get("row_id", "")),
+        str(op.get("field", "")),
+    )
+
+
+@router.post("/preview")
+async def preview_workbench_changes(
+    body: PreviewRequest,
+    workspace: Workspace = Depends(get_agent_for_request),
+) -> dict[str, Any]:
+    svc = _service(workspace)
+    applier = _change_applier(svc)
+
+    if not body.changes:
+        return {"items": []}
+
+    proposal = ChangeProposal(
+        title="__workbench_preview__",
+        description="",
+        ops=[
+            ChangeOp(
+                op="update_cell",
+                table=c.table,
+                row_id=c.row_id,
+                field=c.field,
+                new_value=c.new_value,
+            )
+            for c in body.changes
+        ],
+        status="approved",
+    )
+
+    try:
+        previews = await applier.dry_run(proposal)
+    except Exception as exc:
+        message = str(exc) or exc.__class__.__name__
+        return {
+            "items": [
+                {
+                    "table": c.table,
+                    "row_id": c.row_id,
+                    "field": c.field,
+                    "old_value": None,
+                    "new_value": c.new_value,
+                    "ok": False,
+                    "error": message,
+                }
+                for c in body.changes
+            ]
+        }
+
+    buckets: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for preview in previews:
+        buckets.setdefault(_preview_key(preview), []).append(preview)
+
+    items: list[dict[str, Any]] = []
+    for index, change in enumerate(body.changes):
+        bucket = buckets.get(_make_key(change))
+        preview = bucket.pop(0) if bucket else (
+            previews[index] if index < len(previews) else None
+        )
+        if preview is None:
+            items.append(
+                {
+                    "table": change.table,
+                    "row_id": change.row_id,
+                    "field": change.field,
+                    "old_value": None,
+                    "new_value": change.new_value,
+                    "ok": False,
+                    "error": "missing dry-run result",
+                }
+            )
+            continue
+        items.append(
+            {
+                "table": change.table,
+                "row_id": change.row_id,
+                "field": change.field,
+                "old_value": preview.get("before"),
+                "new_value": change.new_value,
+                "ok": bool(preview.get("ok")),
+                "error": preview.get("reason"),
+            }
+        )
+    return {"items": items}
+
+
+def _strip_json_fences(text: str) -> str:
+    s = text.strip()
+    if s.startswith("```"):
+        s = s.split("\n", 1)[1] if "\n" in s else s[3:]
+        if s.endswith("```"):
+            s = s[:-3]
+    return s.strip()
+
+
+def _table_to_dict(tinfo: Any) -> dict[str, Any]:
+    if hasattr(tinfo, "model_dump"):
+        return tinfo.model_dump()
+    if isinstance(tinfo, dict):
+        return tinfo
+    return {}
+
+
+def _field_to_dict(f: Any) -> dict[str, Any] | None:
+    if hasattr(f, "model_dump"):
+        f = f.model_dump()
+    if not isinstance(f, dict):
+        return None
+    return f
+
+
+# 名称类列识别启发：用于行索引瘦身，避免向 LLM 发整张表
+_NAME_KEYWORDS = (
+    "name", "title", "label", "desc", "description",
+    "名", "称", "标题", "描述",
+)
+
+
+def _is_name_like_header(header: str) -> bool:
+    if not header:
+        return False
+    h = header.lower()
+    return any(kw in h for kw in _NAME_KEYWORDS)
+
+
+def _has_cjk(text: str) -> bool:
+    for ch in text:
+        c = ord(ch)
+        if 0x4E00 <= c <= 0x9FFF or 0x3400 <= c <= 0x4DBF or 0x3040 <= c <= 0x30FF:
+            return True
+    return False
+
+
+def _column_looks_like_name(rows: list[list[Any]], col: int, sample: int = 30) -> bool:
+    """抽样判断该列是否像"名称类"列：含 CJK 或短英文标识。"""
+    seen_non_empty = 0
+    for row in rows:
+        if col >= len(row):
+            continue
+        v = row[col]
+        if v is None:
+            continue
+        s = str(v).strip()
+        if not s:
+            continue
+        seen_non_empty += 1
+        if seen_non_empty > sample:
+            break
+        # 纯数字列跳过
+        try:
+            float(s)
+            continue
+        except (TypeError, ValueError):
+            pass
+        if _has_cjk(s):
+            return True
+    return False
+
+
+def _extract_query_terms(text: str) -> list[str]:
+    """从用户问题里抽列匹配用的关键词：英文单词(3+) + 中文连续段(2+ 含 2-gram)。"""
+    if not text:
+        return []
+    s = text.lower()
+    out: list[str] = []
+    for m in re.finditer(r"[a-z][a-z0-9_]{2,}", s):
+        out.append(m.group(0))
+    for m in re.finditer(r"[\u4e00-\u9fff\u3400-\u4dbf]{2,}", s):
+        run = m.group(0)
+        out.append(run)
+        if len(run) >= 3:
+            for i in range(len(run) - 1):
+                out.append(run[i : i + 2])
+    seen: set[str] = set()
+    res: list[str] = []
+    for t in out:
+        if t and t not in seen:
+            seen.add(t)
+            res.append(t)
+    return res
+
+
+def _match_relevant_columns(
+    headers: list[str],
+    fields_meta: list[dict[str, Any]],
+    terms: list[str],
+    limit: int = 6,
+) -> list[str]:
+    """根据问题关键词命中表头名 / 字段描述, 返回相关列名(保持表头顺序)。"""
+    if not terms or not headers:
+        return []
+    desc_by_name: dict[str, str] = {}
+    for f in fields_meta:
+        n = (f.get("name") or "").strip().lower()
+        if n:
+            desc_by_name[n] = str(f.get("desc") or "").lower()
+    matched: list[str] = []
+    for h in headers:
+        if not h:
+            continue
+        hl = h.lower()
+        d = desc_by_name.get(hl, "")
+        hit = False
+        for t in terms:
+            if not t:
+                continue
+            if t in hl or (len(hl) >= 2 and hl in t):
+                hit = True
+                break
+            if d and t in d:
+                hit = True
+                break
+        if hit:
+            matched.append(h)
+            if len(matched) >= limit:
+                break
+    return matched
+
+
+def _build_row_index(
+    headers: list[str],
+    rows: list[list[Any]],
+    primary_key: str | None,
+    extra_columns: list[str] | None = None,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """从原始行抽出 primary_key + 名称类列 + 关键词命中列, 形成精简行索引。
+
+    返回 (selected_headers, rows[dict])。
+    """
+    if not headers:
+        return [], []
+    pk_lower = (primary_key or "").lower()
+    selected_idx: list[int] = []
+    selected_headers: list[str] = []
+    seen: set[int] = set()
+    # 1) primary_key（大小写不敏感; 兼容 ID 默认值）
+    for i, h in enumerate(headers):
+        if h and h.lower() == pk_lower and i not in seen:
+            selected_idx.append(i)
+            selected_headers.append(h)
+            seen.add(i)
+            break
+    if not selected_idx:
+        selected_idx.append(0)
+        selected_headers.append(headers[0] if headers else "id")
+        seen.add(0)
+
+    name_cap = 4  # PK 之外最多 4 个名称类列
+    name_added = 0
+    # 2) 表头关键词命中的列
+    for i, h in enumerate(headers):
+        if i in seen:
+            continue
+        if _is_name_like_header(h):
+            selected_idx.append(i)
+            selected_headers.append(h)
+            seen.add(i)
+            name_added += 1
+            if name_added >= name_cap:
+                break
+    # 3) 兜底：内容含 CJK 的列（覆盖像 "Column_1" 这种实际中文名列）
+    if name_added < name_cap:
+        for i, h in enumerate(headers):
+            if i in seen:
+                continue
+            if _column_looks_like_name(rows, i):
+                selected_idx.append(i)
+                selected_headers.append(h)
+                seen.add(i)
+                name_added += 1
+                if name_added >= name_cap:
+                    break
+
+    # 4) 用户问题关键词命中的额外列(P0-3 列召回)
+    if extra_columns:
+        wanted_lower = {c.lower() for c in extra_columns if c}
+        for i, h in enumerate(headers):
+            if i in seen:
+                continue
+            if h and h.lower() in wanted_lower:
+                selected_idx.append(i)
+                selected_headers.append(h)
+                seen.add(i)
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        rec: dict[str, Any] = {}
+        for col, h in zip(selected_idx, selected_headers):
+            if col < len(row):
+                v = row[col]
+                if isinstance(v, str) and len(v) > 60:
+                    v = v[:60] + "…"
+                rec[h] = v
+        out.append(rec)
+    return selected_headers, out
+
+
+@router.post("/suggest")
+async def suggest_workbench_changes(
+    body: SuggestRequest,
+    workspace: Workspace = Depends(get_agent_for_request),
+) -> dict[str, Any]:
+    """Ask the active LLM to suggest concrete field changes for the given intent."""
+    import json as _json
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    svc = _service(workspace)
+    intent = (body.user_intent or "").strip()
+    if not intent:
+        raise HTTPException(status_code=400, detail="user_intent is required")
+
+    query_terms = _extract_query_terms(intent)
+
+    tables_meta: list[dict[str, Any]] = []
+    related_meta: list[dict[str, Any]] = []
+    related_seen: set[str] = set()
+    qr = getattr(svc, "query_router", None)
+    applier = getattr(svc, "change_applier", None)
+    main_tables: set[str] = set(body.context_tables[:8])
+
+    if qr is not None:
+        for tname in body.context_tables[:8]:
+            try:
+                tinfo = await qr.get_table(tname)
+            except Exception:
+                tinfo = None
+            if not tinfo:
+                continue
+            tdata = _table_to_dict(tinfo)
+            primary_key = tdata.get("primary_key") or "ID"
+            ai_summary = tdata.get("ai_summary") or ""
+            fields_raw = tdata.get("fields") or []
+            fields_dump: list[dict[str, Any]] = []
+            for f in fields_raw[:80]:
+                fd = _field_to_dict(f)
+                if fd is None:
+                    continue
+                fields_dump.append({
+                    "name": fd.get("name"),
+                    "type": fd.get("type"),
+                    "desc": fd.get("desc") or fd.get("description") or "",
+                })
+
+            row_index_headers: list[str] = []
+            row_index: list[dict[str, Any]] = []
+            sample_total = 0
+            matched_cols: list[str] = []
+            # 一次性读全表(已按表头/注释行裁剪), 仅向 LLM 暴露 PK + 名称列 + 命中列
+            if applier is not None:
+                try:
+                    page = await asyncio.to_thread(
+                        applier.read_rows, tname, 0, 5000
+                    )
+                    headers = page.get("headers") or []
+                    rows = page.get("rows") or []
+                    sample_total = page.get("total") or len(rows)
+                    matched_cols = _match_relevant_columns(
+                        headers, fields_dump, query_terms
+                    )
+                    # P0-3+: 大表先按 query_terms 命中行预过滤, 再做行索引裁剪,
+                    # 避免被 5000 / 1500 截断误伤目标行。
+                    if rows and query_terms:
+                        terms_lower = [t.lower() for t in query_terms if t]
+                        # 优先扫描 PK + 命中列, 退化时全行扫描
+                        scan_idx: list[int] = []
+                        if primary_key:
+                            for i, h in enumerate(headers):
+                                if h and h.lower() == primary_key.lower():
+                                    scan_idx.append(i)
+                                    break
+                        for h in matched_cols:
+                            try:
+                                scan_idx.append(headers.index(h))
+                            except ValueError:
+                                pass
+                        scan_idx = list(dict.fromkeys(scan_idx))
+                        hits: list[list[Any]] = []
+                        misses: list[list[Any]] = []
+                        for r in rows:
+                            cells = (
+                                [r[i] for i in scan_idx if i < len(r)]
+                                if scan_idx
+                                else r
+                            )
+                            blob = " ".join(
+                                str(c) for c in cells if c is not None
+                            ).lower()
+                            if any(t in blob for t in terms_lower):
+                                hits.append(r)
+                            else:
+                                misses.append(r)
+                        # 命中行优先, 不足额时再用未命中行兜底, 总数封顶 1500
+                        cap = 1500
+                        if len(hits) >= cap:
+                            rows = hits[:cap]
+                        else:
+                            rows = hits + misses[: cap - len(hits)]
+                    row_index_headers, row_index = _build_row_index(
+                        headers, rows, primary_key, extra_columns=matched_cols
+                    )
+                    if len(row_index) > 1500:
+                        row_index = row_index[:1500]
+                except Exception as _exc:
+                    logger.warning("read_rows failed for %s: %s", tname, _exc)
+
+            tables_meta.append({
+                "table": tname,
+                "primary_key": primary_key,
+                "ai_summary": ai_summary,
+                "fields": fields_dump,
+                "row_index_columns": row_index_headers,
+                "matched_columns": matched_cols,
+                "row_index_total": sample_total,
+                "row_index": row_index,
+            })
+
+            # P0-2: 跨表联查 - 顺着 dependency_graph 把直接相关表的 schema 带进来(不带行)
+            try:
+                dep = await qr.dependencies_of(tname)
+            except Exception:
+                dep = None
+            if isinstance(dep, dict):
+                for direction in ("upstream", "downstream"):
+                    for edge in (dep.get(direction) or [])[:6]:
+                        rt = (edge or {}).get("table")
+                        if not rt or rt in main_tables or rt in related_seen:
+                            continue
+                        related_seen.add(rt)
+                        try:
+                            r_tinfo = await qr.get_table(rt)
+                        except Exception:
+                            r_tinfo = None
+                        if not r_tinfo:
+                            continue
+                        r_data = _table_to_dict(r_tinfo)
+                        r_fields_raw = r_data.get("fields") or []
+                        r_fields_dump: list[dict[str, Any]] = []
+                        for f in r_fields_raw[:40]:
+                            fd = _field_to_dict(f)
+                            if fd is None:
+                                continue
+                            r_fields_dump.append({
+                                "name": fd.get("name"),
+                                "type": fd.get("type"),
+                                "desc": fd.get("desc")
+                                or fd.get("description")
+                                or "",
+                            })
+                        related_meta.append({
+                            "table": rt,
+                            "primary_key": r_data.get("primary_key") or "ID",
+                            "ai_summary": r_data.get("ai_summary") or "",
+                            "fields": r_fields_dump,
+                            "via": {
+                                "from_table": tname,
+                                "direction": direction,
+                                "field": edge.get("field"),
+                                "target_field": edge.get("target_field")
+                                or edge.get("source_field"),
+                                "confidence": edge.get("confidence"),
+                            },
+                        })
+                        if len(related_meta) >= 8:
+                            break
+                    if len(related_meta) >= 8:
+                        break
+
+    pending_dump = [
+        {
+            "table": p.table,
+            "row_id": p.row_id,
+            "field": p.field,
+            "new_value": p.new_value,
+        }
+        for p in body.current_pending
+    ]
+
+    # 多轮上下文(P0-5 顺手做): 取最近 6 轮
+    history_dump: list[dict[str, str]] = []
+    for turn in (body.chat_history or [])[-6:]:
+        role = (turn.role or "").strip().lower()
+        if role not in ("user", "assistant"):
+            continue
+        content = (turn.content or "").strip()
+        if not content:
+            continue
+        if len(content) > 600:
+            content = content[:600] + "…"
+        history_dump.append({"role": role, "content": content})
+
+    prompt_parts: list[str] = []
+    prompt_parts.append(
+        "你是游戏数值策划助手。你将看到目标表(tables)与相关表(related_tables)。\n"
+        "tables[].fields 是完整字段(含 desc), tables[].row_index 仅含 PK + 名称列 + "
+        "与问题关键词命中的列(matched_columns), 用于按描述/数值定位 row_id。\n"
+        "tables[].ai_summary 是该表用途总结。related_tables 来自依赖图, 仅含 schema, "
+        "用于跨表理解, 不应直接产生其上的 changes(除非用户在 tables 里点选了)。"
+    )
+    prompt_parts.append(
+        f"目标表 (tables, JSON):\n{_json.dumps(tables_meta, ensure_ascii=False)}"
+    )
+    if related_meta:
+        prompt_parts.append(
+            f"相关表 (related_tables, JSON):\n"
+            f"{_json.dumps(related_meta, ensure_ascii=False)}"
+        )
+    if history_dump:
+        prompt_parts.append(
+            f"最近对话历史 (chat_history):\n"
+            f"{_json.dumps(history_dump, ensure_ascii=False)}"
+        )
+    prompt_parts.append(
+        f"已有待编辑改动: {_json.dumps(pending_dump, ensure_ascii=False)}"
+    )
+    prompt_parts.append(f"策划本轮的需求: {intent}")
+    prompt_parts.append(
+        "输出规则:\n"
+        "1) row_id 必须取自目标表 row_index 中 primary_key 列的真实值; 找不到就把 "
+        "changes 留空, 在 message 中说明无法定位, 严禁编造 ID/字段值。\n"
+        "2) field 必须来自 tables[].fields[].name; 不要修改 related_tables 字段。\n"
+        "3) 若问题是查询/咨询(非改表), changes 留空, 在 message 中给出基于 row_index "
+        "与 ai_summary 的回答。\n"
+        "4) 严格 JSON, 不要 markdown 代码块, 不要解释:\n"
+        '{ "message": "<简短说明>", '
+        '"changes": [{"table":"<表>","row_id":"<行ID>","field":"<字段>",'
+        '"new_value":<新值>,"reason":"<理由>"}] }'
+    )
+    prompt = "\n\n".join(prompt_parts)
+
+    router_obj = svc._model_router() if hasattr(svc, "_model_router") else None
+    if router_obj is None or not hasattr(router_obj, "call_model"):
+        raise HTTPException(status_code=412, detail="No active model router")
+
+    try:
+        raw = await router_obj.call_model(prompt, model_type="default")
+    except Exception as exc:
+        logger.warning("game_workbench.suggest call_model failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"LLM call failed: {exc}")
+
+    raw = (raw or "").strip()
+    if not raw:
+        raise HTTPException(status_code=502, detail="LLM returned empty response")
+
+    parsed: dict[str, Any] | None = None
+    try:
+        parsed = _json.loads(_strip_json_fences(raw))
+    except Exception:
+        try:
+            i, j = raw.find("{"), raw.rfind("}")
+            if i >= 0 and j > i:
+                parsed = _json.loads(raw[i : j + 1])
+        except Exception:
+            parsed = None
+
+    if not isinstance(parsed, dict):
+        return {"message": raw, "changes": [], "raw": raw}
+
+    changes_out: list[dict[str, Any]] = []
+    for c in parsed.get("changes", []) or []:
+        if not isinstance(c, dict):
+            continue
+        if not c.get("table") or not c.get("field") or c.get("row_id") in (None, ""):
+            continue
+        changes_out.append({
+            "table": str(c.get("table")),
+            "row_id": c.get("row_id"),
+            "field": str(c.get("field")),
+            "new_value": c.get("new_value"),
+            "reason": str(c.get("reason") or ""),
+        })
+
+    return {
+        "message": str(parsed.get("message") or ""),
+        "changes": changes_out,
+        "context_summary": {
+            "main_tables": [m.get("table") for m in tables_meta],
+            "related_tables": [m.get("table") for m in related_meta],
+            "matched_columns": {
+                m.get("table"): m.get("matched_columns") or []
+                for m in tables_meta
+            },
+            "query_terms": query_terms,
+        },
+    }

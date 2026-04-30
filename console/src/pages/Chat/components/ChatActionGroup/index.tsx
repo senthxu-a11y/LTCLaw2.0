@@ -11,6 +11,7 @@ import { Flex, Tooltip } from "antd";
 import ChatSessionDrawer from "../ChatSessionDrawer";
 import ChatSearchPanel from "../ChatSearchPanel";
 import PlanPanel from "../../../../components/PlanPanel";
+import GameProposalsButton from "../GameProposalsButton";
 import { planApi } from "../../../../api/modules/plan";
 import { useAgentStore } from "../../../../stores/agentStore";
 
@@ -54,6 +55,7 @@ const ChatActionGroup: React.FC = () => {
 
   return (
     <Flex gap={8} align="center">
+      <GameProposalsButton />
       {planEnabled && (
         <Tooltip title={t("plan.title", "Plan")} mouseEnterDelay={0.5}>
           <IconButton

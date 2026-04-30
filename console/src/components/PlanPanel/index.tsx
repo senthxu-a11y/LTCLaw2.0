@@ -14,6 +14,10 @@ import styles from "./index.module.less";
 interface PlanPanelProps {
   open: boolean;
   onClose: () => void;
+  /** 'drawer' (default) renders Drawer overlay; 'inline' renders body inline */
+  mode?: "drawer" | "inline";
+  /** When true and in inline mode, hide content (collapsed state) */
+  collapsed?: boolean;
 }
 
 const STATE_ICONS: Record<string, string> = {
@@ -40,7 +44,7 @@ function getBackendSessionId(): string {
   return (window as any).currentSessionId || "";
 }
 
-const PlanPanel: React.FC<PlanPanelProps> = ({ open, onClose }) => {
+const PlanPanel: React.FC<PlanPanelProps> = ({ open, onClose, mode = "drawer", collapsed = false }) => {
   const { t } = useTranslation();
   const { currentSessionId } = useChatAnywhereSessionsState();
   const [plan, setPlan] = useState<PlanStateResponse | null>(null);
@@ -119,24 +123,17 @@ const PlanPanel: React.FC<PlanPanelProps> = ({ open, onClose }) => {
   const percent =
     totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
-  return (
-    <Drawer
-      className={styles.drawer}
-      open={open}
-      onClose={onClose}
-      placement="right"
-      width={380}
-      closable={false}
-      title={null}
-      styles={{ body: { padding: 0 } }}
-    >
+  const inner = (
+    <>
       <div className={styles.header}>
         <span className={styles.headerTitle}>{t("plan.title", "Plan")}</span>
-        <IconButton
-          bordered={false}
-          icon={<SparkOperateRightLine />}
-          onClick={onClose}
-        />
+        {mode === "drawer" && (
+          <IconButton
+            bordered={false}
+            icon={<SparkOperateRightLine />}
+            onClick={onClose}
+          />
+        )}
       </div>
 
       <div className={styles.content}>
@@ -209,6 +206,38 @@ const PlanPanel: React.FC<PlanPanelProps> = ({ open, onClose }) => {
           </>
         )}
       </div>
+    </>
+  );
+
+  if (mode === "inline") {
+    if (collapsed) return null;
+    return (
+      <div
+        style={{
+          height: "100%",
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        {inner}
+      </div>
+    );
+  }
+
+  return (
+    <Drawer
+      className={styles.drawer}
+      open={open}
+      onClose={onClose}
+      placement="right"
+      width={380}
+      closable={false}
+      title={null}
+      styles={{ body: { padding: 0 } }}
+    >
+      {inner}
     </Drawer>
   );
 };

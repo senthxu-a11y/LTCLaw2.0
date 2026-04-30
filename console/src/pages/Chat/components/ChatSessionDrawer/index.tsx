@@ -29,10 +29,15 @@ interface ExtendedChatSession extends IAgentScopeRuntimeWebUISession {
 }
 
 interface ChatSessionDrawerProps {
-  /** Whether the drawer is visible */
+  /** Whether the drawer is visible (ignored when mode='inline') */
   open: boolean;
-  /** Callback to close the drawer */
+  /** Callback to close the drawer (no-op in inline mode) */
   onClose: () => void;
+  /** 'drawer' (default) renders a Drawer overlay; 'inline' renders the
+   *  same body inline as a sidebar without Drawer chrome. */
+  mode?: "drawer" | "inline";
+  /** Whether to show the close button in the header (default true) */
+  showCloseButton?: boolean;
 }
 
 /** Format an ISO 8601 timestamp to YYYY-MM-DD HH:mm:ss */
@@ -219,51 +224,34 @@ const ChatSessionDrawer: React.FC<ChatSessionDrawerProps> = (props) => {
   );
 
   return (
-    <Drawer
+    <ChatSessionListBody
+      mode={props.mode ?? "drawer"}
       open={props.open}
       onClose={props.onClose}
-      placement="right"
-      width={360}
-      closable={false}
-      title={null}
-      styles={{
-        header: { display: "none" },
-        body: {
-          padding: 0,
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          overflow: "hidden",
-        },
-        mask: { background: "transparent" },
-      }}
-      className={styles.drawer}
-    >
-      {/* Header bar */}
-      <div className={styles.header}>
-        <div className={styles.headerLeft}>
-          <span className={styles.headerTitle}>{t("chat.allChats")}</span>
-        </div>
-        <div className={styles.headerRight}>
-          <IconButton
-            bordered={false}
-            icon={<SparkOperateRightLine />}
-            onClick={props.onClose}
-          />
-        </div>
-      </div>
-
-      {/* Create new chat button */}
-      <div className={styles.createSection}>
+      showCloseButton={props.showCloseButton}
+      header={
+        <>
+          <div className={styles.headerLeft}>
+            <span className={styles.headerTitle}>{t("chat.allChats")}</span>
+          </div>
+          <div className={styles.headerRight}>
+            {(props.showCloseButton ?? true) && (props.mode ?? "drawer") === "drawer" ? (
+              <IconButton
+                bordered={false}
+                icon={<SparkOperateRightLine />}
+                onClick={props.onClose}
+              />
+            ) : null}
+          </div>
+        </>
+      }
+      createButton={
         <div className={styles.createButton} onClick={handleCreateSession}>
           {t("chat.createNewChat")}
         </div>
-      </div>
-
-      {/* Session list */}
-      <div className={styles.listWrapper}>
-        <div className={styles.topGradient} />
-        <div className={styles.list}>
+      }
+      list={
+        <>
           {sortedSessions.map((session) => {
             const ext = session as ExtendedChatSession;
             const channelKey = ext.channel?.trim() || "";
@@ -297,9 +285,73 @@ const ChatSessionDrawer: React.FC<ChatSessionDrawerProps> = (props) => {
               />
             );
           })}
-        </div>
+        </>
+      }
+    />
+  );
+};
+
+/** Renders the chat session list either inside a Drawer or inline. */
+const ChatSessionListBody: React.FC<{
+  mode: "drawer" | "inline";
+  open: boolean;
+  onClose: () => void;
+  showCloseButton?: boolean;
+  header: React.ReactNode;
+  createButton: React.ReactNode;
+  list: React.ReactNode;
+}> = ({ mode, open, onClose, header, createButton, list }) => {
+  const body = (
+    <>
+      <div className={styles.header}>{header}</div>
+      <div className={styles.createSection}>{createButton}</div>
+      <div className={styles.listWrapper}>
+        <div className={styles.topGradient} />
+        <div className={styles.list}>{list}</div>
         <div className={styles.bottomGradient} />
       </div>
+    </>
+  );
+
+  if (mode === "inline") {
+    return (
+      <div
+        className={styles.inlineSidebar}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          width: "100%",
+          overflow: "hidden",
+        }}
+      >
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      placement="right"
+      width={360}
+      closable={false}
+      title={null}
+      styles={{
+        header: { display: "none" },
+        body: {
+          padding: 0,
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          overflow: "hidden",
+        },
+        mask: { background: "transparent" },
+      }}
+      className={styles.drawer}
+    >
+      {body}
     </Drawer>
   );
 };

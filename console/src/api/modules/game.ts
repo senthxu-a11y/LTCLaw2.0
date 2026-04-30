@@ -134,4 +134,28 @@ export const gameApi = {
       body: JSON.stringify({ q, mode }),
     });
   },
+
+  async rebuildIndex(agentId: string): Promise<{ revision: number; scanned_files: string[]; indexed: number }> {
+    return request(`/agents/${agentId}/game/index/rebuild`, {
+      method: "POST",
+    });
+  },
+
+  async getTableRows(
+    agentId: string,
+    name: string,
+    offset: number = 0,
+    limit: number = 100,
+  ): Promise<{
+    headers: string[];
+    rows: (string | number | boolean)[][];
+    total: number;
+    header_row: number;
+    comment_row: number | null;
+    source: string;
+  }> {
+    return request(
+      `/agents/${agentId}/game/index/tables/${encodeURIComponent(name)}/rows?offset=${offset}&limit=${limit}`,
+    );
+  },
 };

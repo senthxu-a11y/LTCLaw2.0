@@ -22,6 +22,10 @@ class ApplyError(Exception):
         super().__init__(f"{op.op} on {op.table}#{op.row_id}: {reason}")
 
 
+# Suffixes treated as table sources we can edit.
+_TABLE_SUFFIXES = {".csv", ".xlsx", ".xls", ".txt"}
+
+
 class ChangeApplier:
     def __init__(
         self,
@@ -38,6 +42,68 @@ class ChangeApplier:
 
     async def apply(self, proposal: ChangeProposal) -> dict:
         return await asyncio.to_thread(self._apply_sync, proposal)
+
+    def read_rows(
+        self, table_name: str, offset: int = 0, limit: int = 100
+    ) -> dict[str, Any]:
+        """Return paginated raw rows of a table for grid views.
+
+        Output shape:
+            { headers, rows, total, header_row, comment_row, source }
+        """
+        source = self._resolve_source_file(table_name)
+        workbook = self._load_table(source)
+        rows = workbook["rows"]
+        header_row = self.project.table_convention.header_row
+        comment_row = getattr(self.project.table_convention, "comment_row", 0) or 0
+        header_idx = max(header_row - 1, 0)
+        if len(rows) <= header_idx:
+            headers: list[str] = []
+            data_start = 0
+        else:
+            headers = [
+                "" if v is None else str(v).strip() for v in rows[header_idx]
+            ]
+            # data starts after header row and (optional) comment row
+            data_start = header_idx + 1
+            if comment_row and comment_row > header_row:
+                data_start = max(data_start, comment_row)
+        # de-duplicate empty headers to stable column keys
+        out_headers: list[str] = []
+        seen: dict[str, int] = {}
+        for i, h in enumerate(headers):
+            key = h or f"Column_{i}"
+            if key in seen:
+                seen[key] += 1
+                key = f"{key}_{seen[key]}"
+            else:
+                seen[key] = 0
+            out_headers.append(key)
+
+        body = rows[data_start:] if data_start < len(rows) else []
+        # drop fully-empty trailing rows
+        while body and all(v is None or str(v).strip() == "" for v in body[-1]):
+            body.pop()
+        total = len(body)
+        sliced = body[offset : offset + limit]
+        normalized = [
+            [None if v is None else (v if isinstance(v, (str, int, float, bool)) else str(v))
+             for v in row]
+            for row in sliced
+        ]
+        rel_source = ""
+        try:
+            rel_source = str(source.relative_to(self.svn_root)).replace("\\", "/")
+        except Exception:
+            rel_source = str(source)
+        return {
+            "headers": out_headers,
+            "rows": normalized,
+            "total": total,
+            "header_row": header_row,
+            "comment_row": comment_row,
+            "source": rel_source,
+        }
 
     def _dry_run_sync(self, proposal: ChangeProposal) -> list[dict]:
         grouped = self._group_ops_by_file(proposal.ops)
@@ -111,7 +177,7 @@ class ChangeApplier:
         for path in self.svn_root.rglob("*"):
             if not path.is_file():
                 continue
-            if path.suffix.lower() not in {".csv", ".xlsx", ".xls"}:
+            if path.suffix.lower() not in _TABLE_SUFFIXES:
                 continue
             if path.stem != table_name:
                 continue
@@ -173,6 +239,14 @@ class ChangeApplier:
                 "delimiter": delimiter,
                 "rows": rows,
             }
+        if suffix == ".txt":
+            encoding, rows = self._read_txt_with_metadata(source)
+            return {
+                "kind": "txt",
+                "source": source,
+                "encoding": encoding,
+                "rows": rows,
+            }
         raise ValueError(f"unsupported file type: {suffix}")
 
     def _read_csv_with_metadata(self, source: Path) -> tuple[str, str, list[list[Any]]]:
@@ -195,6 +269,33 @@ class ChangeApplier:
         rows = list(csv.reader(content.splitlines(), delimiter=delimiter))
         return used_encoding, delimiter, rows
 
+    def _read_txt_with_metadata(self, source: Path) -> tuple[str, list[list[Any]]]:
+        encodings = ["utf-8-sig", "utf-8", "gbk", "gb2312"]
+        content = None
+        used_encoding = "utf-8"
+        for encoding in encodings:
+            try:
+                content = source.read_text(encoding=encoding)
+                used_encoding = encoding
+                break
+            except UnicodeDecodeError:
+                continue
+        if content is None:
+            raise ValueError("unable to decode txt file")
+        # Tab-delimited rows. The header cell may carry inline type/doc
+        # annotations like ``Name\u2507Type=string;Doc=...``; we strip those.
+        rows: list[list[Any]] = []
+        for raw_line in content.splitlines():
+            cells = raw_line.split("\t")
+            cleaned: list[Any] = []
+            for cell in cells:
+                # Drop annotation suffix on header cells; keep value otherwise.
+                if "\u2507" in cell:
+                    cell = cell.split("\u2507", 1)[0]
+                cleaned.append(cell)
+            rows.append(cleaned)
+        return used_encoding, rows
+
     def _write_pending(self, workbook: dict, source: Path, pending: Path) -> None:
         if workbook["kind"] == "csv":
             with pending.open("w", encoding=workbook["encoding"], newline="") as fh:
@@ -204,6 +305,16 @@ class ChangeApplier:
         if workbook["kind"] == "xlsx":
             workbook["workbook"].save(pending)
             return
+        if workbook["kind"] == "txt":
+            lines: list[str] = []
+            for row in workbook["rows"]:
+                cells = ["" if v is None else str(v) for v in row]
+                lines.append("\t".join(cells))
+            text = "\n".join(lines)
+            if not text.endswith("\n"):
+                text += "\n"
+            pending.write_text(text, encoding=workbook["encoding"])
+            return
         raise ValueError(f"unsupported workbook kind: {workbook['kind']}")
 
     def _apply_op(self, workbook: dict, op: ChangeOp, mutate: bool) -> tuple[Any, Any]:
@@ -212,20 +323,39 @@ class ChangeApplier:
         if len(rows) <= header_idx:
             raise ApplyError(op, "header row not found")
         headers = ["" if value is None else str(value).strip() for value in rows[header_idx]]
-        field_map = {name: index for index, name in enumerate(headers) if name}
+        # Case-insensitive field map (with case-sensitive priority).
+        field_map: dict[str, int] = {}
+        field_map_ci: dict[str, int] = {}
+        for index, name in enumerate(headers):
+            if not name:
+                continue
+            field_map[name] = index
+            field_map_ci.setdefault(name.lower(), index)
         primary_key = self.project.table_convention.primary_key_field
-        if primary_key not in field_map:
+        pk_index = field_map.get(primary_key)
+        if pk_index is None:
+            pk_index = field_map_ci.get(primary_key.lower())
+        if pk_index is None:
             raise ApplyError(op, f"primary key field not found: {primary_key}")
-        pk_index = field_map[primary_key]
         data_start = header_idx + 1
+        comment_row = getattr(self.project.table_convention, "comment_row", 0) or 0
+        if comment_row and comment_row > self.project.table_convention.header_row:
+            data_start = max(data_start, comment_row)
         row_index = self._find_row_index(rows, data_start, pk_index, op.row_id)
+
+        def _resolve_field(name: str) -> int | None:
+            if not name:
+                return None
+            if name in field_map:
+                return field_map[name]
+            return field_map_ci.get(name.lower())
 
         if op.op == "update_cell":
             if row_index is None:
                 raise ApplyError(op, "row_id not found")
-            if not op.field or op.field not in field_map:
+            col_index = _resolve_field(op.field or "")
+            if col_index is None:
                 raise ApplyError(op, f"field not found: {op.field}")
-            col_index = field_map[op.field]
             before = rows[row_index][col_index] if col_index < len(rows[row_index]) else None
             after = self._coerce_value(
                 op.new_value,
@@ -250,9 +380,9 @@ class ChangeApplier:
                 for col_index in range(len(headers))
             }
             for field_name, value in op.new_value.items():
-                if field_name not in field_map:
+                col_index = _resolve_field(field_name)
+                if col_index is None:
                     raise ApplyError(op, f"field not found: {field_name}")
-                col_index = field_map[field_name]
                 row_values[col_index] = self._coerce_value(value, None, samples_by_col[col_index], op)
             row_values[pk_index] = self._coerce_value(op.row_id, None, samples_by_col[pk_index], op)
             before = None

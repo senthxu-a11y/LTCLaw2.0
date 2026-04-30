@@ -1,0 +1,221 @@
+.workbench {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 12px;
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  // 主体：左右分割
+  .split {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    min-height: 0;
+    gap: 0;
+  }
+
+  .upperPane,
+  .lowerPane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  // Tabs 内部撑满 + 内容区可滚
+  .tablesTabs {
+    :global(.ant-tabs-content-holder) {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+    }
+    :global(.ant-tabs-content) {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      height: 100%;
+    }
+    :global(.ant-tabs-tabpane) {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+  }
+
+  .tableScroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 0 8px 8px;
+  }
+
+  .splitter {
+    width: 8px;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    flex: 0 0 8px;
+
+    &::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      transform: translateX(-50%);
+      background: var(--ant-color-border);
+      transition: background 0.15s;
+    }
+
+    &:hover::after,
+    &:active::after {
+      background: var(--ant-color-primary);
+    }
+  }
+
+  .lowerBody {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .summarySection,
+  .previewSection {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .previewList {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .previewItem {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--ant-color-border);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    &.ok {
+      border-color: var(--ant-color-success);
+      background: var(--ant-color-success-bg);
+    }
+
+    &.fail {
+      border-color: var(--ant-color-error);
+      background: var(--ant-color-error-bg);
+    }
+  }
+
+  .delta {
+    font-family: var(--ant-font-family-code, monospace);
+    font-size: 13px;
+  }
+
+  .deltaArrow {
+    margin: 0 8px;
+    color: var(--ant-color-text-tertiary);
+  }
+
+  // 底部聊天栏
+  .chatBar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--ant-color-border);
+    border-radius: 8px;
+    background: var(--ant-color-bg-container);
+    flex: 0 0 auto;
+  }
+
+  .chatHistory {
+    max-height: 160px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 0;
+  }
+
+  .chatMsg {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+
+    &.user {
+      flex-direction: row-reverse;
+      .chatBubble {
+        background: var(--ant-color-primary-bg);
+      }
+    }
+  }
+
+  .chatBubble {
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: var(--ant-color-fill-tertiary);
+    max-width: 80%;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 13px;
+  }
+
+  .chatInputRow {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+
+  .aiDrawerBody {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 8px 0;
+  }
+
+  .aiSuggestionCard {
+    border: 1px solid var(--ant-color-warning-border, #ffd591);
+    border-left: 4px solid var(--ant-color-warning, #faad14);
+    background: var(--ant-color-warning-bg, rgba(250, 173, 20, 0.08));
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: 0 0 0 0 rgba(250, 173, 20, 0.5);
+    animation: aiSuggestPulse 1.6s ease-in-out 2;
+    transition: background 0.2s;
+
+    &:hover {
+      background: var(--ant-color-warning-bg-hover, rgba(250, 173, 20, 0.14));
+    }
+  }
+}
+
+@keyframes aiSuggestPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(250, 173, 20, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(250, 173, 20, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(250, 173, 20, 0);
+  }
+}

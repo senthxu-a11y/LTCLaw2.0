@@ -227,6 +227,7 @@ async def get_approval_list(
                 "created_at": pending.created_at,
                 "timeout_seconds": pending.timeout_seconds,
                 "result_summary": pending.result_summary,
+                "extra": dict(pending.extra or {}),
             },
         )
 
@@ -236,3 +237,47 @@ async def get_approval_list(
         pending_approvals=result,
         count=len(result),
     )
+
+
+@router.get(
+    "/stream",
+    summary="SSE stream of approval lifecycle events",
+)
+async def stream_approval_events(request: Request):
+    import asyncio, json
+    from sse_starlette import EventSourceResponse
+
+    svc = get_approval_service()
+    queue = await svc.subscribe_events()
+
+    async def gen():
+        try:
+            # snapshot current pending for late subscribers
+            async with svc._lock:
+                snapshot = [
+                    {
+                        "type": "snapshot",
+                        "request_id": p.request_id,
+                        "agent_id": p.agent_id,
+                        "tool_name": p.tool_name,
+                        "severity": p.severity,
+                        "created_at": p.created_at,
+                        "title": (p.result_summary or p.tool_name)[:120],
+                        "extra": dict(p.extra or {}),
+                    }
+                    for p in svc._pending.values()
+                ]
+            for ev in snapshot:
+                yield {"event": "approval", "data": json.dumps(ev, ensure_ascii=False)}
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    ev = await asyncio.wait_for(queue.get(), timeout=20.0)
+                    yield {"event": "approval", "data": json.dumps(ev, ensure_ascii=False)}
+                except asyncio.TimeoutError:
+                    yield {"event": "ping", "data": "{}"}
+        finally:
+            await svc.unsubscribe_events(queue)
+
+    return EventSourceResponse(gen())

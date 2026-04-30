@@ -2,18 +2,37 @@
 """Game change proposal HTTP API endpoints."""
 from __future__ import annotations
 
+import logging
+import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ...app.agent_context import get_agent_for_request
+from ...app.approvals.service import get_approval_service
 from ...app.workspace.workspace import Workspace
 from ...game.change_proposal import (
     ChangeOp,
     ChangeProposal,
     InvalidProposalState,
 )
+from ...security.tool_guard.approval import ApprovalDecision
+
+logger = logging.getLogger(__name__)
+
+
+def _apply_approval_required() -> bool:
+    val = os.environ.get("QWENPAW_GAME_APPLY_REQUIRE_APPROVAL", "")
+    return val.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _apply_approval_timeout() -> float:
+    raw = os.environ.get("QWENPAW_GAME_APPLY_APPROVAL_TIMEOUT", "300")
+    try:
+        return max(5.0, float(raw))
+    except (TypeError, ValueError):
+        return 300.0
 
 
 class ChangeProposalCreate(BaseModel):
@@ -132,6 +151,60 @@ async def approve_proposal(
     return updated.model_dump(mode="json")
 
 
+async def _maybe_request_apply_approval(
+    workspace: Workspace,
+    proposal: ChangeProposal,
+) -> None:
+    """Gate proposal apply behind an approval if env flag is on.
+
+    Enable via env ``QWENPAW_GAME_APPLY_REQUIRE_APPROVAL=true``.
+    Times out at ``QWENPAW_GAME_APPLY_APPROVAL_TIMEOUT`` seconds (default 300).
+    """
+    if not _apply_approval_required():
+        return
+    svc = get_approval_service()
+    timeout_s = _apply_approval_timeout()
+    op_count = len(proposal.ops)
+    summary = (
+        f"apply proposal {proposal.id} ({op_count} ops): "
+        f"{proposal.title or '(untitled)'}"
+    )
+    pending = await svc.create_generic_pending(
+        agent_id=workspace.agent_id,
+        title=f"Apply proposal: {proposal.title or proposal.id}",
+        summary=summary,
+        severity="high",
+        kind="game.proposal.apply",
+        timeout_seconds=timeout_s,
+        extra={
+            "proposal_id": proposal.id,
+            "ops_count": op_count,
+            "description": (proposal.description or "")[:500],
+        },
+    )
+    logger.info(
+        "Game apply approval requested: request_id=%s proposal=%s ops=%d "
+        "timeout=%.0fs",
+        pending.request_id[:8],
+        proposal.id,
+        op_count,
+        timeout_s,
+    )
+    decision = await svc.wait_for_approval(pending.request_id, timeout_s)
+    if decision == ApprovalDecision.APPROVED:
+        return
+    if decision == ApprovalDecision.TIMEOUT:
+        raise HTTPException(
+            status_code=408,
+            detail=(
+                "Approval not granted within "
+                f"{int(timeout_s)}s; resolve via /approval and retry"
+            ),
+        )
+    # DENIED or anything else
+    raise HTTPException(status_code=403, detail="Apply denied by reviewer")
+
+
 @router.post("/proposals/{proposal_id}/apply")
 async def apply_proposal(
     proposal_id: str,
@@ -144,6 +217,7 @@ async def apply_proposal(
     applier = getattr(svc, "change_applier", None)
     if applier is None:
         raise HTTPException(status_code=412, detail="Change applier not available")
+    await _maybe_request_apply_approval(workspace, proposal)
     try:
         result = await applier.apply(proposal)
         revision = None

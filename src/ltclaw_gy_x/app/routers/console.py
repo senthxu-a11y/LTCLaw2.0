@@ -67,6 +67,63 @@ def _extract_session_and_payload(request_data: Union[AgentRequest, dict]):
     return native_payload
 
 
+# Chat mode prefix injected into the first text part when X-Chat-Mode is set.
+# Keep aligned with console/src/pages/Chat/components/ChatModeToolbar.tsx
+_CHAT_MODE_PREFIX: dict[str, str] = {
+    "free": "",
+    "design": (
+        "[模式：策划案]请按规范的策划文档结构作答（背景/目标/方案/风险/附录），引用数据来源。"
+    ),
+    "numeric": (
+        "[模式：数值查询]请优先调用数值/表格相关 Skill，回答需带表名 + row_id + 字段。"
+        "如需修改请输出 changes。"
+    ),
+    "doc": (
+        "[模式：文档生成]请生成可直接落库的 Markdown 文档（含 frontmatter / 标题层级 / 引用清单）。"
+    ),
+    "kb": (
+        "[模式：知识查询]请基于知识库 / 文档库 / 索引图回答，标注来源文件与命中片段。"
+    ),
+}
+
+
+def _inject_chat_mode_prefix(request: "Request", native_payload: dict) -> None:
+    """Prepend a mode prefix to the first text content based on X-Chat-Mode."""
+    mode = (request.headers.get("X-Chat-Mode") or "").strip().lower()
+    if not mode or mode == "free":
+        return
+    prefix = _CHAT_MODE_PREFIX.get(mode)
+    if not prefix:
+        return
+    parts = native_payload.get("content_parts") or []
+    for i, part in enumerate(parts):
+        text = getattr(part, "text", None)
+        if isinstance(text, str):
+            try:
+                part.text = f"{prefix}\n\n{text}" if text else prefix
+                return
+            except Exception:
+                pass
+        if isinstance(part, dict):
+            t = part.get("text")
+            if isinstance(t, str):
+                part["text"] = f"{prefix}\n\n{t}" if t else prefix
+                return
+        if isinstance(part, str):
+            parts[i] = f"{prefix}\n\n{part}" if part else prefix
+            return
+    # No text-like part found: insert a synthetic TextContent at front.
+    try:
+        from agentscope_runtime.engine.schemas.agent_schemas import TextContent
+
+        parts.insert(0, TextContent(text=prefix))
+        native_payload["content_parts"] = parts
+    except Exception:
+        # Fall back to a plain string part
+        parts.insert(0, prefix)
+        native_payload["content_parts"] = parts
+
+
 def _tail_text_file(
     path: Path,
     *,
@@ -119,6 +176,7 @@ async def post_console_chat(
         native_payload = _extract_session_and_payload(request_data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    _inject_chat_mode_prefix(request, native_payload)
     session_id = console_channel.resolve_session_id(
         sender_id=native_payload["sender_id"],
         channel_meta=native_payload["meta"],

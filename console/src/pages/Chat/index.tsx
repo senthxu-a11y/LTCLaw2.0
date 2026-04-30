@@ -27,6 +27,10 @@ import { IconButton } from "@agentscope-ai/design";
 import ChatActionGroup from "./components/ChatActionGroup";
 import ChatHeaderTitle from "./components/ChatHeaderTitle";
 import ChatSessionInitializer from "./components/ChatSessionInitializer";
+import ChatSessionDrawer from "./components/ChatSessionDrawer";
+import AgentWorkspaceSelector from "./components/AgentWorkspaceSelector";
+import ChatModeToolbar, { useChatModeStore } from "./components/ChatModeToolbar";
+import WorkbenchCardPanel from "./components/WorkbenchCardPanel";import PlanPanel from "../../components/PlanPanel";
 import { ApprovalCard } from "../../components/ApprovalCard/ApprovalCard";
 import { commandsApi } from "../../api/modules/commands";
 import { useApprovalContext } from "../../contexts/ApprovalContext";
@@ -829,6 +833,12 @@ export default function ChatPage() {
         "Content-Type": "application/json",
         ...buildAuthHeaders(),
       };
+      try {
+        const chatMode = useChatModeStore.getState().mode;
+        if (chatMode && chatMode !== "free") headers["X-Chat-Mode"] = chatMode;
+      } catch {
+        /* ignore */
+      }
 
       try {
         const activeModels = await providerApi.getActiveModels({
@@ -992,6 +1002,10 @@ export default function ChatPage() {
             <RuntimeLoadingBridge bridgeRef={runtimeLoadingBridgeRef} />
             <ChatHeaderTitle />
             <span style={{ flex: 1 }} />
+            <ChatModeToolbar />
+            <span style={{ width: 8 }} />
+            <AgentWorkspaceSelector />
+            <span style={{ width: 8 }} />
             <ModelSelector />
             <ChatActionGroup />
           </>
@@ -1080,6 +1094,12 @@ export default function ChatPage() {
             "Content-Type": "application/json",
             ...buildAuthHeaders(),
           };
+          try {
+            const chatMode = useChatModeStore.getState().mode;
+            if (chatMode && chatMode !== "free") headers["X-Chat-Mode"] = chatMode;
+          } catch {
+            /* ignore */
+          }
 
           return fetch(getApiUrl("/console/chat"), {
             method: "POST",
@@ -1130,9 +1150,22 @@ export default function ChatPage() {
         height: "100%",
         width: "100%",
         display: "flex",
-        flexDirection: "column",
+        flexDirection: "row",
       }}
     >
+      {/* 左侧常驻：会话列表（可折叠） */}
+      <LeftSessionSidebar />
+
+      {/* 中间：原对话区域 */}
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
       <div className={styles.chatMessagesArea}>
         <AgentScopeRuntimeWebUI
           ref={chatRef}
@@ -1253,6 +1286,133 @@ export default function ChatPage() {
           ]}
         />
       </Modal>
+      </div>
+      {/* 右侧常驻：上下文面板（PlanPanel inline 模式） */}
+      <RightContextSidebar planEnabled={planEnabled} />
     </div>
+  );
+}
+
+/** Left collapsible sidebar wrapping the inline ChatSessionDrawer. */
+function LeftSessionSidebar() {
+  const [collapsed, setCollapsed] = useState(true);
+  return (
+    <aside
+      className={`${styles.leftSidebar} ${collapsed ? styles.leftSidebarCollapsed : ""}`}
+    >
+      <button
+        type="button"
+        className={styles.leftSidebarToggle}
+        onClick={() => setCollapsed((v) => !v)}
+        title={collapsed ? "展开会话列表" : "折叠会话列表"}
+      >
+        {collapsed ? "›" : "‹"}
+      </button>
+      {!collapsed && (
+        <div className={styles.leftSidebarBody}>
+          <ChatSessionDrawer
+            mode="inline"
+            open
+            onClose={() => {}}
+            showCloseButton={false}
+          />
+        </div>
+      )}
+    </aside>
+  );
+}
+
+/** Right context sidebar: collapsible + drag-resizable. */
+function RightContextSidebar({ planEnabled }: { planEnabled: boolean }) {
+  const STORAGE_KEY = "ltclaw.chat.rightSidebar.width";
+  const MIN_WIDTH = 220;
+  const MAX_WIDTH = 720;
+  const DEFAULT_WIDTH = 300;
+
+  const [collapsed, setCollapsed] = useState(false);
+  const [width, setWidth] = useState<number>(() => {
+    try {
+      const v = parseInt(localStorage.getItem(STORAGE_KEY) || "", 10);
+      if (!isNaN(v) && v >= MIN_WIDTH && v <= MAX_WIDTH) return v;
+    } catch {
+      /* ignore */
+    }
+    return DEFAULT_WIDTH;
+  });
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const onResizerMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      dragRef.current = { startX: e.clientX, startWidth: width };
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      const onMove = (ev: MouseEvent) => {
+        if (!dragRef.current) return;
+        // 右栏：向左拖为变宽，所以 deltaX = startX - clientX
+        const delta = dragRef.current.startX - ev.clientX;
+        let next = dragRef.current.startWidth + delta;
+        if (next < MIN_WIDTH) next = MIN_WIDTH;
+        if (next > MAX_WIDTH) next = MAX_WIDTH;
+        setWidth(next);
+      };
+      const onUp = () => {
+        dragRef.current = null;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [width],
+  );
+
+  // 持久化宽度 (拖拽结束后走 effect，比 closure 里读更可靠)
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, String(width));
+    } catch {
+      /* ignore */
+    }
+  }, [width]);
+
+  return (
+    <aside
+      className={`${styles.rightSidebar} ${collapsed ? styles.rightSidebarCollapsed : ""}`}
+      style={collapsed ? undefined : { width, minWidth: width }}
+    >
+      {!collapsed && (
+        <div
+          className={styles.rightSidebarResizer}
+          onMouseDown={onResizerMouseDown}
+        />
+      )}
+      <button
+        type="button"
+        className={styles.rightSidebarToggle}
+        onClick={() => setCollapsed((v) => !v)}
+        title={collapsed ? "展开上下文面板" : "折叠上下文面板"}
+      >
+        {collapsed ? "‹" : "›"}
+      </button>
+      {!collapsed && (
+        <div className={styles.rightSidebarBody}>
+          {planEnabled ? (
+            <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+                <PlanPanel mode="inline" open onClose={() => {}} />
+              </div>
+              <div style={{ flexShrink: 0, maxHeight: "40%", borderTop: "1px solid var(--ant-color-border-secondary, #f0f0f0)" }}>
+                <WorkbenchCardPanel />
+              </div>
+            </div>
+          ) : (
+            <WorkbenchCardPanel />
+          )}
+        </div>
+      )}
+    </aside>
   );
 }

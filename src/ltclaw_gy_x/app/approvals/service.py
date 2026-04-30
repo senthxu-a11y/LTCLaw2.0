@@ -71,6 +71,23 @@ class ApprovalService:
         self._lock = asyncio.Lock()
         self._pending: dict[str, PendingApproval] = {}
         self._channel_manager: Any | None = None
+        self._event_subscribers: list = []
+
+    async def subscribe_events(self):
+        q = asyncio.Queue(maxsize=256)
+        self._event_subscribers.append(q)
+        return q
+
+    async def unsubscribe_events(self, q) -> None:
+        if q in self._event_subscribers:
+            self._event_subscribers.remove(q)
+
+    def _publish_event_nowait(self, event: dict) -> None:
+        for q in list(self._event_subscribers):
+            try:
+                q.put_nowait(event)
+            except Exception:
+                pass
 
     def set_channel_manager(self, channel_manager: Any) -> None:
         """Store a reference to the channel manager for push notifications."""
@@ -119,6 +136,16 @@ class ApprovalService:
         async with self._lock:
             self._pending[request_id] = pending
             self._gc_pending_locked()
+            self._publish_event_nowait({
+                "type": "created",
+                "request_id": request_id,
+                "agent_id": agent_id,
+                "tool_name": tool_name,
+                "severity": pending.severity,
+                "kind": "tool",
+                "title": (pending.result_summary or tool_name)[:120],
+                "created_at": pending.created_at,
+            })
 
         logger.info(
             "Approval pending created: request_id=%s agent_id=%s tool=%s "
@@ -131,6 +158,71 @@ class ApprovalService:
             root_session_id[:8],
         )
 
+        return pending
+
+    async def create_generic_pending(
+        self,
+        *,
+        agent_id: str,
+        title: str,
+        summary: str = "",
+        severity: str = "medium",
+        session_id: str = "system",
+        root_session_id: str = "system",
+        user_id: str = "system",
+        channel: str = "system",
+        kind: str = "generic",
+        timeout_seconds: float = 300.0,
+        extra: dict[str, Any] | None = None,
+    ) -> PendingApproval:
+        """Create a pending approval not tied to a tool call.
+
+        Used by feature gates (e.g. game proposal apply) that want to
+        reuse the approval lifecycle without going through ToolGuard.
+        """
+        request_id = str(uuid.uuid4())
+        loop = asyncio.get_running_loop()
+
+        pending = PendingApproval(
+            request_id=request_id,
+            session_id=session_id,
+            root_session_id=root_session_id,
+            user_id=user_id,
+            channel=channel,
+            agent_id=agent_id,
+            tool_name=kind,
+            created_at=time.time(),
+            future=loop.create_future(),
+            timeout_seconds=timeout_seconds,
+            result_summary=(summary or title)[:500],
+            findings_count=0,
+            severity=severity,
+            extra={"title": title, "kind": kind, **(extra or {})},
+        )
+
+        async with self._lock:
+            self._pending[request_id] = pending
+            self._gc_pending_locked()
+            self._publish_event_nowait({
+                "type": "created",
+                "request_id": request_id,
+                "agent_id": agent_id,
+                "tool_name": kind,
+                "severity": severity,
+                "kind": kind,
+                "title": title,
+                "summary": summary,
+                "created_at": pending.created_at,
+            })
+
+        logger.info(
+            "Generic approval pending created: request_id=%s agent_id=%s "
+            "kind=%s title=%r",
+            request_id[:8],
+            agent_id,
+            kind,
+            title[:80],
+        )
         return pending
 
     async def resolve_request(
@@ -154,6 +246,15 @@ class ApprovalService:
         # Set Future result outside lock
         if not pending.future.done():
             pending.future.set_result(decision)
+
+        self._publish_event_nowait({
+            "type": "resolved",
+            "request_id": request_id,
+            "agent_id": pending.agent_id,
+            "tool_name": pending.tool_name,
+            "decision": decision.value,
+            "resolved_at": pending.resolved_at,
+        })
 
         logger.info(
             "Approval request %s resolved: decision=%s tool=%s",

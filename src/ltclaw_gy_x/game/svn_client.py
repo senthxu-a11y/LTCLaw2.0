@@ -1,6 +1,7 @@
 """SVN client wrapper with CLI/TortoiseSVN fallback."""
 
 import asyncio
+import random
 import os
 import re
 import shutil
@@ -251,3 +252,62 @@ class SvnClient:
             return
         cmd = self._build_cmd(["revert", *[str(path) for path in paths]])
         await self._run_cmd(cmd)
+
+
+_CONFLICT_PATTERNS = (
+    "out of date",
+    "out-of-date",
+    "conflict",
+    "e155011",
+    "e160028",
+    "e170004",
+    "txn-current-lock",
+    "needs update",
+)
+
+
+def _looks_like_conflict(err: BaseException) -> bool:
+    text = str(err).lower()
+    return any(pat in text for pat in _CONFLICT_PATTERNS)
+
+
+async def _svn_commit_with_retry(
+    client: "SvnClient",
+    paths: list[Path],
+    message: str,
+    *,
+    max_retries: int = 5,
+    base_delay: float = 1.0,
+) -> int:
+    last_err: BaseException | None = None
+    for attempt in range(max_retries):
+        try:
+            return await client.commit(paths, message)
+        except SvnError as exc:
+            if not _looks_like_conflict(exc):
+                raise
+            last_err = exc
+            if attempt + 1 >= max_retries:
+                break
+            try:
+                await client.update()
+            except SvnError:
+                pass
+            delay = base_delay * (2 ** attempt) * random.uniform(0.5, 1.5)
+            await asyncio.sleep(delay)
+    raise SvnError(f"commit_with_retry exhausted after {max_retries} attempts: {last_err}")
+
+
+async def _commit_with_retry_method(
+    self: "SvnClient",
+    paths: list[Path],
+    message: str,
+    max_retries: int = 5,
+    base_delay: float = 1.0,
+) -> int:
+    return await _svn_commit_with_retry(
+        self, paths, message, max_retries=max_retries, base_delay=base_delay
+    )
+
+
+SvnClient.commit_with_retry = _commit_with_retry_method
