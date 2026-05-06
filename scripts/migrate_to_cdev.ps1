@@ -4,7 +4,7 @@
   以脱离企业 DLP（Tencent TSD）扫描区域。
 
 .DESCRIPTION
-  按 docs/MIGRATION_CHECKLIST.md 的 Phase 0-3 自动化执行，并在 Phase 2 写入 canary 文件等候用户后续验证。
+  按 docs/tasks/MIGRATION_CHECKLIST.md 的 Phase 0-3 自动化执行，并在 Phase 2 写入 canary 文件等候用户后续验证。
   脚本不会删除旧仓库，旧目录保留作为回滚副本。
 
 .PARAMETER Source

@@ -20,7 +20,7 @@ def test_resolve_file_path_falls_back_to_configured_project_root(
     (project_root / "docs").mkdir(parents=True)
     config_root.mkdir(parents=True)
 
-    target = project_root / "docs" / "numeric-workbench-session-ux-plan.md"
+    target = project_root / "docs" / "foundations" / "numeric-workbench-session-ux-plan.md"
     target.write_text("hello", encoding="utf-8")
     user_config_path = config_root / "game_data" / "user" / "game_user.yaml"
     user_config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -36,6 +36,6 @@ def test_resolve_file_path_falls_back_to_configured_project_root(
     monkeypatch.setenv("LTCLAW_WORKING_DIR", str(config_root))
     set_current_workspace_dir(workspace_dir)
 
-    resolved = _resolve_file_path("docs/numeric-workbench-session-ux-plan.md")
+    resolved = _resolve_file_path("docs/foundations/numeric-workbench-session-ux-plan.md")
 
     assert Path(resolved) == target
