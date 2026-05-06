@@ -10,6 +10,43 @@
 
 ## 0. Execution Rules
 
+### 0.0 Model And Execution Constraints
+
+This checklist is intended to be executed by GPT-5.4 or an equivalent coding model.
+
+Use this execution style:
+
+1. Do not ask the model to implement P0-P3 in one pass.
+2. Execute by review gates: P0 first, then P1, then P2, then P3.
+3. At each review gate, stop and verify acceptance criteria before continuing.
+4. Prefer small additive modules over large rewrites.
+5. Keep old APIs compatible unless a task explicitly says otherwise.
+6. Do not let the model invent new product semantics outside this checklist and the two source plans.
+7. If a checklist item conflicts with existing code reality, inspect the code and update the checklist or ask for review before changing architecture.
+8. If implementation touches frontend UX, keep copy consistent with "local project directory", "knowledge release", "test plan", and "release candidate".
+9. If implementation touches backend `.py` files, follow the DLP avoidance rules in this document.
+10. Use GPT-5.5 or a senior review pass only for architecture conflicts, broad refactors, or persistent test failures.
+
+Recommended prompt for implementation sessions:
+
+```text
+Follow docs/tasks/knowledge-p0-p3-implementation-checklist.md exactly.
+Implement only the requested phase or task range.
+Preserve existing /game/index, /game/workbench, and /game-knowledge-base compatibility.
+Do not add SVN credential, commit, login, password, or URL handling.
+Prefer additive modules and avoid SVN hot-path files unless necessary.
+Run relevant checks and stop at the review gate with a concise status report.
+```
+
+Recommended first prompt for GPT-5.4:
+
+```text
+请先完整阅读 docs/tasks/knowledge-p0-p3-implementation-checklist.md，以及它引用的两份 source plans。
+这轮只执行 P0，不要做 P1-P3。
+严格保持旧 API 兼容，遵守 DLP Avoidance Rules。
+完成 P0 后停在 P0 Review Gate，汇报改动、验证结果和下一步建议。
+```
+
 ### 0.1 Product Rules That Must Not Change
 
 1. P1 is local-first.
@@ -31,7 +68,22 @@
 4. New release APIs should be additive first.
 5. Existing table indexer and workbench logic should be reused where safe.
 
-### 0.3 Parallel Markers
+### 0.3 DLP Avoidance Rules
+
+The local-first architecture reduces DLP risk because P0-P3 should not add SVN credential, commit, login, password, or remote URL flows. Still, DLP can be triggered by unsafe `.py` edits or sensitive string combinations, so implementation must follow these rules.
+
+1. Do not add new SVN credential handling in P0-P3.
+2. Do not add `.py` string literals containing real SVN URLs, usernames, passwords, token values, or command examples with credential flags.
+3. Do not build release assets under the source project root.
+4. Do not copy raw source tables, docs, scripts, or credential-bearing config into releases.
+5. Release manifest should store hashes, counts, relative paths, and selected candidate ids only.
+6. Test plans should store before/after values and relative source paths, not credentials or raw file copies.
+7. New code should prefer neutral names such as `project_root`, `source_snapshot`, `release_store`, and `test_plan`, not new SVN-centered names.
+8. If editing `.py` in a DLP-scanned Windows environment, follow `docs/memory/dlp-incident.md`: write via safe command-line patch/stdin workflow and verify the file has zero NUL bytes after write.
+9. Avoid touching known historical DLP hot files unless necessary: `src/ltclaw_gy_x/game/service.py`, `src/ltclaw_gy_x/game/svn_client.py`, `src/ltclaw_gy_x/app/routers/game_svn.py`.
+10. Prefer additive new modules for release/test-plan work over modifying SVN hot-path modules.
+
+### 0.4 Parallel Markers
 
 - `[S]` Sequential: do after its dependencies.
 - `[P]` Parallel: can be implemented in parallel once listed dependencies are complete.
@@ -353,6 +405,10 @@ Likely new file:
 
 1. `src/ltclaw_gy_x/app/routers/game_knowledge_release.py`
 
+Router registration:
+
+1. Add import and `router.include_router(...)` in `src/ltclaw_gy_x/app/routers/agent_scoped.py`.
+
 Endpoints:
 
 ```text
@@ -489,6 +545,7 @@ Likely files:
 1. `src/ltclaw_gy_x/game/change_proposal.py`
 2. `src/ltclaw_gy_x/app/routers/game_workbench.py`
 3. `console/src/api/modules/gameWorkbench.ts`
+4. `console/src/pages/Game/NumericWorkbench.tsx`
 
 Acceptance:
 
@@ -542,6 +599,13 @@ Likely files:
 1. `console/src/pages/**/NumericWorkbench*`
 2. `console/src/api/modules/gameWorkbench.ts`
 3. `console/src/api/types/game.ts`
+
+Repository-confirmed files:
+
+1. `console/src/pages/Game/NumericWorkbench.tsx`
+2. `console/src/pages/Game/NumericWorkbench.module.less`
+3. `console/src/pages/Game/components/DirtyList.tsx`
+4. `console/src/pages/Game/components/ImpactPanel.tsx`
 
 Acceptance:
 
