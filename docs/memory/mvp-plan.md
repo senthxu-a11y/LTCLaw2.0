@@ -74,7 +74,7 @@
   - dry_run 412 "Change applier not available"（无 SVN repo 配置时的预期态）
   - approve/apply/commit/reject/revert 全部 403 "Only maintainers can perform this action"（默认 role 非 maintainer 的预期态）
   - 路由、状态机、auth gating 均验证生效
-- 派发文档：`docs/R6-writeback-tasks.md`
+- 派发文档：`docs/tasks/R6-writeback-tasks.md`
 - DLP 教训：所有 .py 写入必须用 `[System.IO.File]::WriteAllText($p, $c, [Text.UTF8Encoding]::new($false))`；md 文件可用 create_file 工具
 
 ## 正确的产品形态摘要

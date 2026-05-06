@@ -1,7 +1,7 @@
 LTCLAW 游戏策划工作台 — 开发计划
 文档定位：本文档是「游戏策划工作台」功能的完整开发规划，由产品与架构讨论直接沉淀而来。后续 Coding Agent 或开发者可将本文档作为任务说明直接接手开发，无需再重新对齐需求背景。
 
-补充状态（2026-05-06）：本计划中的“数值工作台”部分，现已从早期的 Chat/Drawer 附属能力演化为独立的“会话驱动本地调值工作台”。后续涉及 NumericWorkbench 的施工、验收与回顾，优先参考 `docs/numeric-workbench-session-ux-plan.md` 与最新进度文档，而不是仅按本文早期表述执行。
+补充状态（2026-05-06）：本计划中的“数值工作台”部分，现已从早期的 Chat/Drawer 附属能力演化为独立的“会话驱动本地调值工作台”。后续涉及 NumericWorkbench 的施工、验收与回顾，优先参考 `docs/foundations/numeric-workbench-session-ux-plan.md` 与最新进度文档，而不是仅按本文早期表述执行。
 
 1. 背景与目标
 1.1 痛点

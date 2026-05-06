@@ -1,10 +1,10 @@
 # 数值工作台 执行文档
 
 > 文档定位：本文档是数值工作台页面的完整执行规范，可直接交给 Coding Agent 开发。
-> 与 `game-planner-workbench-plan.md` 的关系：方向文档确定了"数值工作台是独立页面 + Chat Drawer 双入口"的设计，本文档负责具体实现细节。
+> 与 `docs/plans/game-planner-workbench-plan.md` 的关系：方向文档确定了"数值工作台是独立页面 + Chat Drawer 双入口"的设计，本文档负责具体实现细节。
 
 > 状态说明（2026-05-06）：本文档中的部分交互说明已被会话驱动版主线实现替代。
-> 当前应优先以 `docs/numeric-workbench-session-ux-plan.md` 为准，尤其是以下内容已不再作为主线：
+> 当前应优先以 `docs/foundations/numeric-workbench-session-ux-plan.md` 为准，尤其是以下内容已不再作为主线：
 > - 以“生成变更草稿 / 提交审批 / 写回 SVN”作为数值工作台主流程
 > - 以右侧 Drawer 作为核心工作区
 > - 不区分会话列表页与会话内工作台页

@@ -2,7 +2,7 @@
 
 > 文档定位：本文档用于重新定义数值策划工作台的交互结构、流程图、UX 原则与施工方案。
 >
-> 本文档覆盖并替代 [docs/numeric-workbench-spec.md](/Users/Admin/LTCLaw2.0/docs/numeric-workbench-spec.md) 中以下旧设计：
+> 本文档覆盖并替代 [docs/foundations/numeric-workbench-spec.md](/Users/Admin/LTCLaw2.0/docs/foundations/numeric-workbench-spec.md) 中以下旧设计：
 > - “生成变更草稿”
 > - “提交 / 审批 / 写回 SVN” 作为数值工作台主流程
 > - “右侧 Drawer” 作为弹窗级临时信息区
@@ -38,7 +38,7 @@
 实现备注：
 
 - 当前运行时优先读取包内静态资源目录 `src/ltclaw_gy_x/console`，因此前端源码修改后必须执行 `console` 构建并同步产物，不能只改 `console/src`
-- 本文档优先级高于旧版 `docs/numeric-workbench-spec.md` 中“生成变更草稿 / 提交审批 / 右侧 Drawer 为核心工作区”的描述
+- 本文档优先级高于旧版 `docs/foundations/numeric-workbench-spec.md` 中“生成变更草稿 / 提交审批 / 右侧 Drawer 为核心工作区”的描述
 
 ---
 

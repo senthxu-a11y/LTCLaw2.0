@@ -16,12 +16,15 @@ The first stage should be local-first:
 2. Generate derived knowledge assets.
 3. Let the application query and use those derived assets.
 4. Keep original project files outside the knowledge publishing flow.
+5. Keep workbench test changes outside the knowledge publishing flow by default.
 
 In P1, the administrator is not a source-file publisher. The administrator is only a knowledge-asset builder.
 
 One-line rule:
 
 > P1 does not write back to SVN, does not upload original resources, and does not auto-sync project files. It only reads local project resources and produces versioned knowledge assets.
+
+Workbench edits are a separate fast-test workflow. They may produce test plans, patches, exports, or engine-test uploads, but they do not require administrator acceptance and do not automatically enter the formal knowledge release.
 
 ---
 
@@ -78,6 +81,7 @@ In P1, the administrator can:
 7. Build or refresh vector assets.
 8. Generate a local knowledge release.
 9. Switch the current release version.
+10. During release build, optionally include selected verified test plans as release inputs.
 
 The administrator cannot:
 
@@ -87,6 +91,7 @@ The administrator cannot:
 4. Commit to SVN.
 5. Modify the source repository through the knowledge publishing flow.
 6. Publish unreviewed candidate assets as formal knowledge.
+7. Approve or block ordinary users' fast workbench tests as part of the knowledge workflow.
 
 This means the administrator manages derived assets, not project source files.
 
@@ -126,7 +131,8 @@ Generated knowledge assets are application-owned outputs:
       release_notes.md
     current.json
   pending/
-    patches.jsonl
+    test_plans.jsonl
+    release_candidates.jsonl
 ```
 
 The release directory should not contain:
@@ -137,6 +143,7 @@ The release directory should not contain:
 4. SVN metadata.
 5. Unreviewed map candidates.
 6. Temporary workbench edits.
+7. Ordinary test plans unless explicitly selected during a release build.
 
 ---
 
@@ -152,7 +159,7 @@ The smallest useful P1 loop is:
 5. Build release assets.
 6. Query current release.
 7. Use workbench for precise table operations.
-8. Create pending patch for modifications.
+8. Create, export, upload, keep, or discard workbench test plans.
 ```
 
 This loop intentionally excludes:
@@ -164,6 +171,7 @@ This loop intentionally excludes:
 5. Incremental publishing.
 6. Enterprise permission model.
 7. Full audit workflow.
+8. Administrator approval for ordinary fast-test changes.
 
 ---
 
@@ -181,8 +189,8 @@ RAG should read from the current release only.
 Structured queries may need an explicit view selection:
 
 1. `published_view`: query facts from the current release.
-2. `working_view`: query current local source resources.
-3. `pending_changes_view`: inspect pending patches.
+2. `working_view`: query current local project resources.
+3. `test_plan_view`: inspect selected test plans or active test patches.
 
 This prevents confusion such as:
 
@@ -190,44 +198,64 @@ This prevents confusion such as:
 
 The answer is:
 
-> Because P1 separates working data from published knowledge assets. A workbench change enters pending patches first, then can be included in a future release after review.
+> Because P1 separates workbench tests from published knowledge assets. A workbench change is a test plan or test patch first. It affects the knowledge release only if it is later selected as a verified release input during a build.
 
 ---
 
 ## 7. Workbench Boundary
 
-The workbench can read local source resources and produce structured pending patches.
+The workbench can read local source resources and produce structured test plans or test patches.
 
 The workbench should not directly mutate the published knowledge release.
 
-Recommended P1 patch shape:
+The workbench's primary goal is fast numeric testing:
+
+```text
+edit values -> preview impact -> export/upload to engine test -> keep or discard the test plan
+```
+
+This flow should not require administrator acceptance.
+
+Recommended P1 test plan shape:
 
 ```json
 {
-  "id": "patch_001",
-  "status": "pending",
-  "operation": "update_cell",
-  "table": "SkillTable",
-  "primary_key": {
-    "field": "id",
-    "value": "1029"
-  },
-  "field": "damage",
-  "before": "100",
-  "after": "120",
-  "source_path": "Tables/SkillTable.xlsx",
+  "id": "test_plan_001",
+  "status": "draft",
+  "title": "Skill damage tuning test",
+  "changes": [
+    {
+      "operation": "update_cell",
+      "table": "SkillTable",
+      "primary_key": {
+        "field": "id",
+        "value": "1029"
+      },
+      "field": "damage",
+      "before": "100",
+      "after": "120",
+      "source_path": "Tables/SkillTable.xlsx"
+    }
+  ],
   "created_by": "user",
-  "created_at": "2026-05-06T00:00:00Z"
+  "created_at": "2026-05-06T00:00:00Z",
+  "engine_test_ref": null
 }
 ```
 
-Patch status should stay minimal in P1:
+Test plan status should stay minimal in P1:
 
-1. `pending`
-2. `accepted`
-3. `rejected`
+1. `draft`
+2. `testing`
+3. `kept`
+4. `discarded`
 
-Accepted patches can be considered during the next build, but the first implementation can keep this manual.
+Knowledge release inclusion is a separate build-time choice:
+
+1. Ordinary test plans are excluded by default.
+2. A user or lead can mark a kept plan as a release candidate.
+3. During release build, the administrator chooses which release candidates are included.
+4. Included candidates influence the next derived knowledge release only after the release is built.
 
 ---
 
@@ -241,7 +269,7 @@ To keep the difficulty curve flat, implement in this order:
 4. Table schema index.
 5. Document knowledge index.
 6. Simple published-query API.
-7. Pending patch queue.
+7. Workbench test plan store.
 8. RAG over current release.
 9. Optional table fact index.
 

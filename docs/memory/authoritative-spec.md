@@ -3,11 +3,11 @@
 > 来源：`/memories/repo/AUTHORITATIVE-spec.md`。游戏策划工作台产品的**唯一权威依据**，其余早期草稿一律作废。
 
 **唯一产品依据**：
-1. `docs/LTCLAW_策划工作台_交接文档.html`（v1.1） — 核心需求和框架
-2. `docs/numeric-workbench-spec.md` — 数值工作台执行规范
+1. `docs/materials/LTCLAW_策划工作台_交接文档.html`（v1.1） — 核心需求和框架
+2. `docs/foundations/numeric-workbench-spec.md` — 数值工作台执行规范
 
 旧文件 `/memories/ltclaw-mvp-plan.md` §0~§6 的"Doc Generator/Config Table/Task Export"作废。
-旧文件 `docs/game-planner-workbench-plan.md` 是早期方向稿，被交接文档 v1.1 覆盖。
+旧文件 `docs/plans/game-planner-workbench-plan.md` 是早期方向稿，被交接文档 v1.1 覆盖。
 
 ## 10 项已拍板设计决策（硬约束）
 1. **自动化边界**：索引层全自动；数值/文档/逻辑由人决策
