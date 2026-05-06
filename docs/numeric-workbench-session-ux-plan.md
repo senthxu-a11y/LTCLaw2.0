@@ -14,6 +14,32 @@
 > - 验证通过后，用户自行手动上传
 > - 用户需要在同一个工作会话里持续修改、回退、继续 AI 协作
 
+## 0. 2026-05-06 实施状态（主线对齐）
+
+截至 2026-05-06，本文档描述的“会话驱动版”已成为当前主线实现基线，不再只是 UX 方案。
+
+已落地主干：
+
+- `NumericWorkbench` 已切成 `会话列表页 -> 会话内工作台页` 双态结构
+- 会话内状态已统一收口到 `useWorkbenchSessions`，覆盖 messages、dirtyCells、openTables、activeTab、pinnedTab、searchByTable、highlight、lastManualSavedAt
+- 会话操作已明确收口为：`切换 / 新建 / 重命名 / 删除`，复制会话入口已移除
+- 删除会话入口已在会话卡片和会话工具条中直出，不再藏在深层菜单中
+- 工作台右侧区域已固定为常驻 side panel，不再使用旧版临时 Drawer 作为核心工作区
+- `保存当前会话` 与 `导出草稿` 已拆成两个动作；导出后不再清空本地 dirty，便于持续调值
+- URL 深链已与 `session / table / tableId / row / rowId / field / fieldKey` 同步，支持从 AI 建议、跳转定位、tab 切换等路径回写当前上下文
+- Chat 联动已贯通：工作台可推送 `numeric_table / draft_doc` 卡片；草稿卡片可直接打开 proposal 管理抽屉
+
+当前未完全闭合项：
+
+- 文档库仍未成为数值工作台导出草稿的真实承载面，当前更多依赖 proposal drawer 承接后续动作
+- reverse-impact 的更完整摘要尚未作为稳定主视图收口，现阶段仍以 preview / damage chain / affected tables 为主
+- 真实 SVN / 真实 LLM / 多 reviewer 的生产联调仍需专项回归，不能只以本地前端构建绿代替
+
+实现备注：
+
+- 当前运行时优先读取包内静态资源目录 `src/ltclaw_gy_x/console`，因此前端源码修改后必须执行 `console` 构建并同步产物，不能只改 `console/src`
+- 本文档优先级高于旧版 `docs/numeric-workbench-spec.md` 中“生成变更草稿 / 提交审批 / 右侧 Drawer 为核心工作区”的描述
+
 ---
 
 ## 1. 设计结论

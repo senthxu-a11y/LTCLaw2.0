@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
+  Button,
   Card,
+  Descriptions,
   Empty,
   Input,
+  Select,
   Skeleton,
   Space,
   Table,
@@ -13,78 +17,19 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { SearchOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
+import { MarkdownCopy } from "@/components/MarkdownCopy/MarkdownCopy";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
 import {
   gameDocLibraryApi,
   type DocLibraryDocument,
+  type DocLibraryDocumentDetail,
 } from "../../api/modules/gameDocLibrary";
 import { useAgentStore } from "../../stores/agentStore";
 import styles from "./DocLibrary.module.less";
 
 const { Text, Paragraph } = Typography;
-
-const mockCategories = [
-  {
-    title: "核心策划",
-    key: "core",
-    children: [
-      { title: "玩法设计", key: "玩法设计" },
-      { title: "数值表", key: "数值表" },
-    ],
-  },
-  {
-    title: "项目协作",
-    key: "collab",
-    children: [
-      { title: "任务拆解", key: "任务拆解" },
-      { title: "评审记录", key: "评审记录" },
-    ],
-  },
-];
-
-const mockDocuments: DocLibraryDocument[] = [
-  {
-    id: "doc-1",
-    title: "战斗系统阶段验收说明",
-    type: "策划案",
-    status: "已确认",
-    updated_at: "2026-04-28 16:30",
-    author: "Lin",
-    category: "玩法设计",
-    tags: ["战斗", "阶段验收"],
-  },
-  {
-    id: "doc-2",
-    title: "角色成长数值总表",
-    type: "数值表",
-    status: "待确认",
-    updated_at: "2026-04-29 10:15",
-    author: "Mia",
-    category: "数值表",
-    tags: ["成长", "角色"],
-  },
-  {
-    id: "doc-3",
-    title: "版本里程碑任务清单",
-    type: "任务",
-    status: "草稿",
-    updated_at: "2026-04-30 09:05",
-    author: "Qiao",
-    category: "任务拆解",
-    tags: ["排期", "里程碑"],
-  },
-  {
-    id: "doc-4",
-    title: "数值评审会议纪要",
-    type: "文档",
-    status: "归档",
-    updated_at: "2026-04-25 19:40",
-    author: "Ivy",
-    category: "评审记录",
-    tags: ["会议", "评审"],
-  },
-];
+const DOC_STATUSES = ["全部状态", "草稿", "待确认", "已确认", "归档"] as const;
 
 const statusColorMap: Record<string, string> = {
   草稿: "default",
@@ -101,10 +46,19 @@ export default function DocLibrary() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>();
   const [documents, setDocuments] = useState<DocLibraryDocument[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string>();
+  const [selectedDocument, setSelectedDocument] = useState<DocLibraryDocumentDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>("全部状态");
 
   const fetchDocuments = async () => {
     if (!selectedAgent) {
-      setDocuments(mockDocuments);
+      setDocuments([]);
+      setCategories([]);
+      setSelectedDocumentId(undefined);
+      setSelectedDocument(null);
       setLoading(false);
       return;
     }
@@ -112,10 +66,17 @@ export default function DocLibrary() {
     setLoading(true);
     try {
       const response = await gameDocLibraryApi.listDocuments(selectedAgent);
-      setDocuments(response.items.length > 0 ? response.items : mockDocuments);
-    } catch {
-      setDocuments(mockDocuments);
-      message.warning(t("docLibrary.mockFallback"));
+      setDocuments(response.items || []);
+      setCategories(response.categories || []);
+      setSelectedDocument((current) =>
+        current && response.items.some((item) => item.id === current.item.id) ? current : null,
+      );
+    } catch (err) {
+      setDocuments([]);
+      setCategories([]);
+      setSelectedDocumentId(undefined);
+      setSelectedDocument(null);
+      message.warning(err instanceof Error ? err.message : t("docLibrary.mockFallback"));
     } finally {
       setLoading(false);
     }
@@ -129,14 +90,84 @@ export default function DocLibrary() {
     const query = searchQuery.trim().toLowerCase();
     return documents.filter((item) => {
       const matchesCategory = !selectedCategory || item.category === selectedCategory;
+      const matchesStatus = statusFilter === "全部状态" || item.status === statusFilter;
       const matchesQuery =
         !query ||
         item.title.toLowerCase().includes(query) ||
         item.author.toLowerCase().includes(query) ||
+        item.path?.toLowerCase().includes(query) ||
         item.tags.some((tag) => tag.toLowerCase().includes(query));
-      return matchesCategory && matchesQuery;
+      return matchesCategory && matchesStatus && matchesQuery;
     });
-  }, [documents, searchQuery, selectedCategory]);
+  }, [documents, searchQuery, selectedCategory, statusFilter]);
+
+  const treeData = useMemo(
+    () => [
+      {
+        title: t("docLibrary.categoryTitle"),
+        key: "__all__",
+        children: categories.map((category) => ({ title: category, key: category })),
+      },
+    ],
+    [categories, t],
+  );
+
+  useEffect(() => {
+    if (filteredDocuments.length === 0) {
+      setSelectedDocumentId(undefined);
+      setSelectedDocument(null);
+      return;
+    }
+    if (!selectedDocumentId || !filteredDocuments.some((item) => item.id === selectedDocumentId)) {
+      setSelectedDocumentId(filteredDocuments[0].id);
+    }
+  }, [filteredDocuments, selectedDocumentId]);
+
+  useEffect(() => {
+    const loadDetail = async () => {
+      if (!selectedAgent || !selectedDocumentId) {
+        setSelectedDocument(null);
+        return;
+      }
+      setDetailLoading(true);
+      try {
+        const detail = await gameDocLibraryApi.getDocument(selectedAgent, selectedDocumentId);
+        setSelectedDocument(detail);
+      } catch (err) {
+        setSelectedDocument(null);
+        message.warning(err instanceof Error ? err.message : "文档详情加载失败");
+      } finally {
+        setDetailLoading(false);
+      }
+    };
+    loadDetail();
+  }, [message, selectedAgent, selectedDocumentId]);
+
+  const handleUpdateStatus = async (nextStatus: string) => {
+    if (!selectedAgent || !selectedDocumentId || !selectedDocument) {
+      return;
+    }
+    if (selectedDocument.item.status === nextStatus) {
+      return;
+    }
+    setStatusSaving(true);
+    try {
+      const detail = await gameDocLibraryApi.updateDocument(selectedAgent, selectedDocumentId, {
+        status: nextStatus,
+      });
+      setSelectedDocument(detail);
+      await fetchDocuments();
+      message.success(
+        nextStatus === "已确认" && detail.kb_entry_id
+          ? `文档已更新为${nextStatus}，并已同步知识库`
+          : `文档已更新为${nextStatus}`,
+      );
+    } catch (err) {
+      message.warning(err instanceof Error ? err.message : "文档状态更新失败");
+    } finally {
+      setStatusSaving(false);
+    }
+  };
 
   const columns: ColumnsType<DocLibraryDocument> = [
     {
@@ -178,7 +209,7 @@ export default function DocLibrary() {
       title: t("docLibrary.columns.updatedAt"),
       dataIndex: "updated_at",
       key: "updated_at",
-      width: 180,
+      width: 160,
     },
   ];
 
@@ -196,9 +227,12 @@ export default function DocLibrary() {
               </Paragraph>
             </div>
             <Tree
-              treeData={mockCategories}
+              treeData={treeData}
               selectedKeys={selectedCategory ? [selectedCategory] : []}
-              onSelect={(keys) => setSelectedCategory(keys[0] as string | undefined)}
+              onSelect={(keys) => {
+                const key = keys[0] as string | undefined;
+                setSelectedCategory(key && key !== "__all__" ? key : undefined);
+              }}
             />
           </Space>
         </Card>
@@ -221,6 +255,12 @@ export default function DocLibrary() {
                   onChange={(event) => setSearchQuery(event.target.value)}
                   className={styles.searchInput}
                 />
+                <Select
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  className={styles.statusSelect}
+                  options={DOC_STATUSES.map((status) => ({ label: status, value: status }))}
+                />
                 <Tag
                   className={styles.refreshTag}
                   icon={<ReloadOutlined />}
@@ -238,12 +278,99 @@ export default function DocLibrary() {
                 <Empty description={t("docLibrary.empty")} />
               </div>
             ) : (
-              <Table
-                rowKey="id"
-                columns={columns}
-                dataSource={filteredDocuments}
-                pagination={false}
-              />
+              <div className={styles.workspaceGrid}>
+                <div className={styles.listPane}>
+                  <Table
+                    rowKey="id"
+                    columns={columns}
+                    dataSource={filteredDocuments}
+                    pagination={{ pageSize: 10, hideOnSinglePage: true }}
+                    rowClassName={(record) =>
+                      record.id === selectedDocumentId ? styles.selectedRow : ""
+                    }
+                    onRow={(record) => ({
+                      onClick: () => setSelectedDocumentId(record.id),
+                    })}
+                  />
+                </div>
+
+                <Card className={styles.previewCard}>
+                  {!selectedDocumentId ? (
+                    <div className={styles.emptyWrap}>
+                      <Empty description="请选择一份文档" />
+                    </div>
+                  ) : detailLoading || !selectedDocument ? (
+                    <Skeleton active paragraph={{ rows: 12 }} />
+                  ) : (
+                    <Space direction="vertical" size={16} className={styles.fullWidth}>
+                      <div className={styles.previewHeader}>
+                        <div>
+                          <Text strong>{selectedDocument.item.title}</Text>
+                          <Paragraph type="secondary" className={styles.helperText}>
+                            {selectedDocument.item.path || selectedDocument.item.id}
+                          </Paragraph>
+                        </div>
+                        <Tag color={statusColorMap[selectedDocument.item.status] || "default"}>
+                          {selectedDocument.item.status}
+                        </Tag>
+                      </div>
+
+                      <Descriptions size="small" column={1} className={styles.previewMeta}>
+                        <Descriptions.Item label="类型">{selectedDocument.item.type}</Descriptions.Item>
+                        <Descriptions.Item label="分类">{selectedDocument.item.category}</Descriptions.Item>
+                        <Descriptions.Item label="作者">{selectedDocument.item.author}</Descriptions.Item>
+                        <Descriptions.Item label="更新时间">
+                          {selectedDocument.item.updated_at}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="标签">
+                          <div className={styles.tagRow}>
+                            {selectedDocument.item.tags.length > 0 ? (
+                              selectedDocument.item.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)
+                            ) : (
+                              <Text type="secondary">暂无标签</Text>
+                            )}
+                          </div>
+                        </Descriptions.Item>
+                      </Descriptions>
+
+                      <Space wrap>
+                        {DOC_STATUSES.filter((status) => status !== "全部状态").map((status) => (
+                          <Button
+                            key={status}
+                            type={selectedDocument.item.status === status ? "primary" : "default"}
+                            loading={statusSaving && selectedDocument.item.status !== status}
+                            onClick={() => handleUpdateStatus(status)}
+                          >
+                            {status}
+                          </Button>
+                        ))}
+                      </Space>
+
+                      {selectedDocument.truncated ? (
+                        <Alert type="warning" message="预览内容过长，已自动截断。" showIcon />
+                      ) : null}
+
+                      <div className={styles.previewBody}>
+                        {selectedDocument.preview_kind === "markdown" ? (
+                          <MarkdownCopy
+                            content={selectedDocument.content}
+                            showControls={false}
+                            markdownViewerProps={{ className: styles.markdownViewer }}
+                          />
+                        ) : selectedDocument.preview_kind === "text" ? (
+                          <pre className={styles.textPreview}>{selectedDocument.content}</pre>
+                        ) : (
+                          <Alert
+                            type="info"
+                            message={selectedDocument.content}
+                            showIcon
+                          />
+                        )}
+                      </div>
+                    </Space>
+                  )}
+                </Card>
+              </div>
             )}
           </Space>
         </Card>

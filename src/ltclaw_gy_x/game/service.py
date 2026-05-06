@@ -185,6 +185,20 @@ class GameService:
     def recent_changes(self) -> List[dict]:
         return list(self._recent_changes_buffer)
 
+    def _runtime_svn_root(self) -> Path | None:
+        candidate = getattr(self._user_config, "svn_local_root", None)
+        if candidate:
+            path = Path(candidate).expanduser()
+            if path.exists():
+                return path
+        if self._project_config is not None:
+            project_root = str(self._project_config.svn.root or "").strip()
+            if project_root and "://" not in project_root:
+                path = Path(project_root).expanduser()
+                if path.exists():
+                    return path
+        return None
+
     def _model_router(self):
         if self.runner is not None:
             r = getattr(self.runner, "model_router", None)
@@ -198,7 +212,8 @@ class GameService:
             return SimpleModelRouter(None)
 
     def _rebuild_runtime_components(self) -> None:
-        self._proposal_store = ProposalStore(self.workspace_dir)
+        runtime_svn_root = self._runtime_svn_root()
+        self._proposal_store = ProposalStore(self.workspace_dir, svn_root=runtime_svn_root)
         self._change_applier = None
         self._svn_committer = None
         self._table_indexer = None
@@ -212,7 +227,7 @@ class GameService:
             self._table_indexer = TableIndexer(
                 project=self._project_config,
                 model_router=self._model_router(),
-                cache_dir=get_llm_cache_dir(self.workspace_dir),
+                cache_dir=get_llm_cache_dir(self.workspace_dir, runtime_svn_root),
             )
             self._dependency_resolver = DependencyResolver(
                 project=self._project_config,
@@ -224,7 +239,7 @@ class GameService:
                 self._table_indexer,
             )
             try:
-                code_dir = get_code_index_dir(self.workspace_dir)
+                code_dir = get_code_index_dir(self.workspace_dir, runtime_svn_root)
                 code_dir.mkdir(parents=True, exist_ok=True)
                 self._code_indexer = CodeIndexer()
                 self._code_index_store = CodeIndexStore(code_dir)
@@ -282,9 +297,10 @@ class GameService:
                         logger.warning("SVN未安装，部分功能将不可用")
                     except Exception as e:
                         logger.warning(f"SVN客户端初始化失败: {e}")
-            get_chroma_dir(self.workspace_dir).mkdir(parents=True, exist_ok=True)
-            get_llm_cache_dir(self.workspace_dir).mkdir(parents=True, exist_ok=True)
-            get_svn_cache_dir(self.workspace_dir).mkdir(parents=True, exist_ok=True)
+            runtime_svn_root = self._runtime_svn_root()
+            get_chroma_dir(self.workspace_dir, runtime_svn_root).mkdir(parents=True, exist_ok=True)
+            get_llm_cache_dir(self.workspace_dir, runtime_svn_root).mkdir(parents=True, exist_ok=True)
+            get_svn_cache_dir(self.workspace_dir, runtime_svn_root).mkdir(parents=True, exist_ok=True)
             try:
                 self._rebuild_runtime_components()
             except Exception as e:

@@ -21,6 +21,7 @@ import {
   gameChangeApi,
   type ChangeProposalRecord,
 } from "../../../../api/modules/gameChange";
+import { subscribeOpenGameProposal } from "../../workbenchCardChannel";
 
 const POLL_INTERVAL_MS = 15_000;
 const ACTIVE_STATUSES = new Set(["draft", "approved", "applied"]);
@@ -111,6 +112,37 @@ const GameProposalsButton: React.FC = () => {
     [proposals],
   );
 
+  const openProposalDetail = useCallback(
+    async (proposalId: string) => {
+      if (!selectedAgent) return;
+      setOpen(true);
+      const existing = proposals.find((proposal) => proposal.id === proposalId) || null;
+      if (existing) {
+        setSelected(existing);
+        setDryRunResult(null);
+      }
+      try {
+        const detail = await gameChangeApi.get(selectedAgent, proposalId);
+        setSelected(detail);
+        setDryRunResult(null);
+      } catch (err) {
+        message.error(
+          err instanceof Error
+            ? err.message
+            : t("gameProposal.detailLoadFailed", { defaultValue: "Failed to load proposal detail" }),
+        );
+      }
+    },
+    [message, proposals, selectedAgent, t],
+  );
+
+  useEffect(
+    () => subscribeOpenGameProposal(({ proposalId }) => {
+      void openProposalDetail(proposalId);
+    }),
+    [openProposalDetail],
+  );
+
   const handleAction = useCallback(
     async (proposal: ChangeProposalRecord, action: ActionKey) => {
       if (!selectedAgent) return;
@@ -186,8 +218,7 @@ const GameProposalsButton: React.FC = () => {
           size="small"
           style={{ padding: 0, height: "auto" }}
           onClick={() => {
-            setSelected(record);
-            setDryRunResult(null);
+            void openProposalDetail(record.id);
           }}
         >
           {title}
@@ -217,8 +248,7 @@ const GameProposalsButton: React.FC = () => {
               size="small"
               icon={<EyeOutlined />}
               onClick={() => {
-                setSelected(record);
-                setDryRunResult(null);
+                void openProposalDetail(record.id);
               }}
             />
           </Tooltip>

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
   Card,
-  Drawer,
   Empty,
   Input,
   InputNumber,
@@ -17,6 +16,7 @@ import {
   Typography,
 } from "antd";
 import {
+  DeleteOutlined,
   PushpinFilled,
   PushpinOutlined,
   ReloadOutlined,
@@ -44,7 +44,7 @@ import { DirtyList } from "./components/DirtyList";
 import { ImpactPanel } from "./components/ImpactPanel";
 import { WorkbenchChat, type ChatMessage } from "./components/WorkbenchChat";
 import { WorkbenchChatSessionToolbar } from "./components/WorkbenchChatSessionToolbar";
-import { useWorkbenchChatSessions } from "./hooks/useWorkbenchChatSessions";
+import { useWorkbenchSessions } from "./hooks/useWorkbenchSessions";
 import ModelSelector from "../Chat/ModelSelector";
 import {
   coerceCellValue,
@@ -84,40 +84,44 @@ export default function NumericWorkbench() {
   const { t } = useTranslation();
   const { message } = useAppMessage();
   const { selectedAgent } = useAgentStore();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Deep-link
   const dlTable = searchParams.get("table") || searchParams.get("tableId") || "";
   const dlRow = searchParams.get("row") || searchParams.get("rowId") || "";
   const dlField = searchParams.get("field") || searchParams.get("fieldKey") || "";
+  const sessionParam = searchParams.get("session") || "";
+  const hasDeepLink = Boolean(dlTable || dlRow || dlField);
+  const isWorkbenchView = Boolean(sessionParam || hasDeepLink);
+
+  const sessionStore = useWorkbenchSessions();
 
   const [tableNames, setTableNames] = useState<string[]>([]);
   const [tablesLoading, setTablesLoading] = useState(false);
-  const [openTables, setOpenTables] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<string | null>(null);
+  const openTables = sessionStore.openTables;
+  const setOpenTables = sessionStore.setOpenTables;
+  const activeTab = sessionStore.activeTab;
+  const setActiveTab = sessionStore.setActiveTab;
   /** Tab 钉选：当存在 pinnedTab 时，上区横向分屏（左 activeTab / 右 pinnedTab） */
-  const [pinnedTab, setPinnedTab] = useState<string | null>(null);
+  const pinnedTab = sessionStore.pinnedTab;
+  const setPinnedTab = sessionStore.setPinnedTab;
   const [detailsByTable, setDetailsByTable] = useState<Record<string, TableIndex>>({});
   const [rowsByTable, setRowsByTable] = useState<Record<string, RowsData>>({});
   const [rowsLoading, setRowsLoading] = useState(false);
-  const [searchByTable, setSearchByTable] = useState<Record<string, string>>({});
+  const searchByTable = sessionStore.searchByTable;
+  const setSearchByTable = sessionStore.setSearchByTable;
 
   // 高亮（来自 deep-link 或「定位」按钮）
-  const [highlight, setHighlight] = useState<{
-    table?: string;
-    field?: string;
-    row?: string;
-    ts: number;
-  }>({ ts: 0 });
+  const highlight = sessionStore.highlight;
+  const setHighlight = sessionStore.setHighlight;
 
   // 单元格编辑态（同时只允许一个）
   const [editing, setEditing] = useState<CellEditState | null>(null);
 
   // 工作台 Chat（属于工作台本地会话，持久化到 localStorage）
   const [chatInput, setChatInput] = useState("");
-  const chatStore = useWorkbenchChatSessions();
-  const chatMessages = chatStore.messages;
-  const setChatMessages = chatStore.setMessages;
+  const chatMessages = sessionStore.messages;
+  const setChatMessages = sessionStore.setMessages;
   const [chatSending, setChatSending] = useState(false);
 
   // 工作台专属 Agent / 模型覆盖（默认 "" 表示使用全局 selectedAgent）
@@ -147,7 +151,10 @@ export default function NumericWorkbench() {
   const aiAgentId = workbenchAgentOverride || selectedAgent;
 
   // dirty 状态 hook
-  const dirty = useDirtyCells();
+  const dirty = useDirtyCells({
+    initialCells: sessionStore.dirtyCells,
+    onChange: sessionStore.setDirtyCells,
+  });
 
   // 影响 / 反向依赖（基于当前 dirty）
   const [preview, setPreview] = useState<PreviewItem[]>([]);
@@ -172,6 +179,147 @@ export default function NumericWorkbench() {
   const draggingRef = useRef(false);
 
   const debounceRef = useRef<number | null>(null);
+
+  const updateQuery = useCallback(
+    (patch: Record<string, string | null>, replace = false) => {
+      const next = new URLSearchParams(searchParams);
+      Object.entries(patch).forEach(([key, value]) => {
+        if (!value) {
+          next.delete(key);
+        } else {
+          next.set(key, value);
+        }
+      });
+      setSearchParams(next, { replace });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  const syncWorkbenchRoute = useCallback(
+    (
+      params: {
+        session?: string | null;
+        table?: string | null;
+        row?: string | null;
+        field?: string | null;
+      },
+      replace = false,
+    ) => {
+      updateQuery(
+        {
+          session: params.session ?? null,
+          table: params.table ?? null,
+          tableId: params.table ?? null,
+          row: params.row ?? null,
+          rowId: params.row ?? null,
+          field: params.field ?? null,
+          fieldKey: params.field ?? null,
+        },
+        replace,
+      );
+    },
+    [updateQuery],
+  );
+
+  const notifyAutoPreserved = useCallback(() => {
+    if (!sessionStore.isCurrentDirtySinceSave) return;
+    message.info(
+      t("gameWorkbench.autoPreservedNotice", {
+        defaultValue: "当前会话仍有未手动保存的本地变更，但状态已自动保留。",
+      }),
+    );
+  }, [message, sessionStore.isCurrentDirtySinceSave, t]);
+
+  const openSession = useCallback(
+    (id: string) => {
+      const switchingSession = id !== sessionStore.currentId;
+      const routeAlreadyFocused = sessionParam === id && !dlTable && !dlRow && !dlField;
+      if (!switchingSession && routeAlreadyFocused) return;
+      if (switchingSession) {
+        notifyAutoPreserved();
+        sessionStore.switchSession(id);
+      }
+      syncWorkbenchRoute({ session: id }, false);
+    },
+    [dlField, dlRow, dlTable, notifyAutoPreserved, sessionParam, sessionStore, syncWorkbenchRoute],
+  );
+
+  const createAndOpenSession = useCallback(() => {
+    notifyAutoPreserved();
+    const id = sessionStore.createSession();
+    syncWorkbenchRoute({ session: id }, false);
+  }, [notifyAutoPreserved, sessionStore, syncWorkbenchRoute]);
+
+  const backToSessionList = useCallback(() => {
+    notifyAutoPreserved();
+    syncWorkbenchRoute({ session: null }, false);
+  }, [notifyAutoPreserved, syncWorkbenchRoute]);
+
+  const removeSessionAndRoute = useCallback(
+    (id: string) => {
+      const remaining = sessionStore.sessions.filter((session) => session.id !== id);
+      const fallback = remaining[0]?.id || null;
+      const removingCurrent = id === sessionStore.currentId;
+      sessionStore.removeSession(id);
+      if (!removingCurrent) return;
+      syncWorkbenchRoute({ session: fallback }, true);
+      message.success(
+        t("gameWorkbench.sessionRemoved", {
+          defaultValue: "当前会话已删除。",
+        }),
+      );
+    },
+    [message, sessionStore, syncWorkbenchRoute, t],
+  );
+
+  const confirmRemoveSession = useCallback(
+    (sessionId: string, sessionName: string, dirtySinceSave: boolean) => {
+      Modal.confirm({
+        title: t("gameWorkbench.removeSessionTitle", {
+          defaultValue: "删除会话",
+        }),
+        content: dirtySinceSave
+          ? t("gameWorkbench.removeSessionDirtyConfirm", {
+              defaultValue: `删除会话「${sessionName}」？当前会话还有未手动保存的本地变更，删除后将无法恢复。`,
+            })
+          : t("gameWorkbench.removeSessionConfirm", {
+              defaultValue: `删除会话「${sessionName}」？此操作不可撤销。`,
+            }),
+        okType: "danger",
+        okText: t("gameWorkbench.removeSessionOk", { defaultValue: "删除" }),
+        cancelText: t("gameWorkbench.removeSessionCancel", { defaultValue: "取消" }),
+        onOk: () => removeSessionAndRoute(sessionId),
+      });
+    },
+    [removeSessionAndRoute, t],
+  );
+
+  useEffect(() => {
+    if (sessionParam && sessionParam !== sessionStore.currentId) {
+      sessionStore.switchSession(sessionParam);
+    }
+  }, [sessionParam, sessionStore.currentId, sessionStore.switchSession]);
+
+  useEffect(() => {
+    if (hasDeepLink && !sessionParam && sessionStore.currentId) {
+      syncWorkbenchRoute(
+        {
+          session: sessionStore.currentId,
+          table: dlTable || null,
+          row: dlRow || null,
+          field: dlField || null,
+        },
+        true,
+      );
+    }
+  }, [dlField, dlRow, dlTable, hasDeepLink, sessionParam, sessionStore.currentId, syncWorkbenchRoute]);
+
+  useEffect(() => {
+    if (!sessionParam) return;
+    if (sessionStore.sessions.some((session) => session.id === sessionParam)) return;
+    if (!sessionStore.currentId) return;
+    syncWorkbenchRoute({ session: sessionStore.currentId }, true);
+  }, [sessionParam, sessionStore.sessions, sessionStore.currentId, syncWorkbenchRoute]);
 
   // ── 加载表 ─────────────────────────────────────────────
   const loadTables = useCallback(async () => {
@@ -651,6 +799,12 @@ export default function NumericWorkbench() {
           field: firstSug.field,
           ts: Date.now(),
         });
+        syncWorkbenchRoute({
+          session: sessionStore.currentId,
+          table: firstSug.table,
+          row: String(firstSug.row_id),
+          field: firstSug.field,
+        });
         window.setTimeout(() => setHighlight((h) => ({ ...h, ts: 0 })), 2000);
       }
       const assistantMsg: ChatMessage = {
@@ -690,8 +844,8 @@ export default function NumericWorkbench() {
             .filter(Boolean)
             .join("\n"),
           href: tablesUsed[0]
-            ? `/numeric-workbench?table=${encodeURIComponent(tablesUsed[0])}`
-            : "/numeric-workbench",
+            ? `/numeric-workbench?session=${encodeURIComponent(sessionStore.currentId)}&table=${encodeURIComponent(tablesUsed[0])}`
+            : `/numeric-workbench?session=${encodeURIComponent(sessionStore.currentId)}`,
           payload: { tables: tablesUsed, changes: sugs, query_terms: resp.context_summary?.query_terms },
         });
       } catch {
@@ -710,7 +864,7 @@ export default function NumericWorkbench() {
     } finally {
       setChatSending(false);
     }
-  }, [chatInput, chatMessages, aiAgentId, openTables, validChanges, setChatMessages, t]);
+  }, [chatInput, chatMessages, aiAgentId, openTables, validChanges, setChatMessages, t, selectedAgent, sessionStore.currentId, syncWorkbenchRoute]);
 
   // ── 接受 AI 建议（写入 dirty） ────────────────────────
   const jumpToCell = useCallback(
@@ -718,17 +872,24 @@ export default function NumericWorkbench() {
       if (!openTables.includes(tableName)) {
         setOpenTables((prev) => [...prev, tableName]);
       }
+      const rowKey = String(rowId);
       setActiveTab(tableName);
-      setSearchByTable((prev) => ({ ...prev, [tableName]: String(rowId) }));
+      setSearchByTable((prev) => ({ ...prev, [tableName]: rowKey }));
       setHighlight({
         table: tableName,
-        row: String(rowId),
+        row: rowKey,
         field,
         ts: Date.now(),
       });
+      syncWorkbenchRoute({
+        session: sessionStore.currentId,
+        table: tableName,
+        row: rowKey,
+        field,
+      });
       window.setTimeout(() => setHighlight((h) => ({ ...h, ts: 0 })), 1800);
     },
-    [openTables],
+    [openTables, sessionStore.currentId, syncWorkbenchRoute],
   );
 
   const findOriginValue = useCallback(
@@ -846,20 +1007,80 @@ export default function NumericWorkbench() {
         field: c.field,
         new_value: c.new_value,
       }));
-      await gameChangeApi.create(selectedAgent, {
+      const proposal = await gameChangeApi.create(selectedAgent, {
         title: draftTitle.trim() || "untitled",
         description: draftDesc,
         ops,
       });
       message.success(t("gameWorkbench.draftCreated", { defaultValue: "草案已生成" }));
+      try {
+        const draftTables = Array.from(new Set(validChanges.map((change) => change.table)));
+        pushWorkbenchCard({
+          id: `draft-${proposal.id}`,
+          agentId: selectedAgent,
+          kind: "draft_doc",
+          title: proposal.title || t("gameWorkbench.draftCardTitle", { defaultValue: "数值改动草稿" }),
+          summary: [
+            t("gameWorkbench.draftCardSummaryCount", {
+              defaultValue: `变更项：${ops.length}`,
+            }),
+            draftTables.length
+              ? t("gameWorkbench.draftCardSummaryTables", {
+                  defaultValue: `涉及表：${draftTables.join(", ")}`,
+                })
+              : "",
+            proposal.status
+              ? t("gameWorkbench.draftCardSummaryStatus", {
+                  defaultValue: `状态：${proposal.status}`,
+                })
+              : "",
+            draftDesc.trim()
+              ? t("gameWorkbench.draftCardSummaryDesc", {
+                  defaultValue: `说明：${draftDesc.trim().slice(0, 120)}`,
+                })
+              : "",
+          ].filter(Boolean).join("\n"),
+          href: "/chat",
+          payload: {
+            proposalId: proposal.id,
+            status: proposal.status,
+            opsCount: ops.length,
+            tables: draftTables,
+          },
+        });
+      } catch {
+        /* ignore */
+      }
       setDraftOpen(false);
-      dirty.clearAll();
     } catch {
       message.error(t("gameWorkbench.draftCreateFailed", { defaultValue: "草案生成失败" }));
     } finally {
       setSubmitting(false);
     }
   };
+
+  const saveSession = useCallback(() => {
+    const sessionName = sessionStore.current?.name || t("gameWorkbench.defaultSessionName", {
+      defaultValue: "当前会话",
+    });
+    const savedAt = sessionStore.markCurrentSaved();
+    if (!savedAt) return;
+    message.success(
+      t("gameWorkbench.sessionSaved", {
+        defaultValue: `已保存到本地会话：${sessionName}`,
+      }),
+    );
+  }, [message, sessionStore, t]);
+
+  const draftPreviewTables = useMemo(
+    () => Array.from(new Set(dirty.dirtyList.map((change) => change.table))),
+    [dirty.dirtyList],
+  );
+
+  const draftPreviewChanges = useMemo(
+    () => dirty.dirtyList.slice(0, 6),
+    [dirty.dirtyList],
+  );
 
   // ── Tab items（不分屏时） ─────────────────────────────
   const tabItems = useMemo(
@@ -898,66 +1119,233 @@ export default function NumericWorkbench() {
     [openTables, pinnedTab, activeTab, message, t, renderTablePane],
   );
 
+  if (!isWorkbenchView) {
+    return (
+      <div className={styles.sessionListPage}>
+        <PageHeader
+          parent={t("nav.game", { defaultValue: "Game Development" })}
+          current={t("nav.gameWorkbench", { defaultValue: "数值工作台" })}
+          subRow={
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {t("gameWorkbench.sessionListSubtitle", {
+                defaultValue: "选择一个调值会话继续工作，或新建一个本地会话开始调值。",
+              })}
+            </Text>
+          }
+          extra={
+            <Button type="primary" onClick={createAndOpenSession}>
+              {t("gameWorkbench.createSession", { defaultValue: "新建会话" })}
+            </Button>
+          }
+        />
+
+        <Card className={styles.sessionHero}>
+          <Space direction="vertical" size={4}>
+            <Text strong style={{ fontSize: 18 }}>
+              {t("gameWorkbench.sessionListTitle", { defaultValue: "继续一个调值会话" })}
+            </Text>
+            <Text type="secondary">
+              {t("gameWorkbench.sessionListDesc", {
+                defaultValue: "会话会恢复你上次打开的表、修改条目与 AI 对话上下文。",
+              })}
+            </Text>
+          </Space>
+        </Card>
+
+        <div className={styles.sessionGrid}>
+          {sessionStore.sessions.map((session) => (
+            <Card
+              key={session.id}
+              className={styles.sessionCard}
+              hoverable
+              onClick={() => openSession(session.id)}
+            >
+              <div className={styles.sessionCardTop}>
+                <Space direction="vertical" size={4}>
+                  <Text strong>{session.name}</Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {t("gameWorkbench.sessionBaseline", {
+                      defaultValue: "基线 revision：本地会话",
+                    })}
+                  </Text>
+                </Space>
+                <Tag color={session.id === sessionStore.currentId ? "blue" : "default"}>
+                  {session.id === sessionStore.currentId
+                    ? t("gameWorkbench.currentSession", { defaultValue: "当前" })
+                    : t("gameWorkbench.savedSession", { defaultValue: "已保存" })}
+                </Tag>
+              </div>
+              <div className={styles.sessionMetaRow}>
+                <Tag color={session.updatedAt > (session.lastManualSavedAt ?? 0) ? "volcano" : "green"}>
+                  {session.updatedAt > (session.lastManualSavedAt ?? 0)
+                    ? t("gameWorkbench.sessionPendingSave", { defaultValue: "待保存" })
+                    : t("gameWorkbench.sessionSavedState", { defaultValue: "已手动保存" })}
+                </Tag>
+                <Tag color="orange">
+                  {t("gameWorkbench.sessionDirtyCount", {
+                    defaultValue: `${session.dirtyCells.length} 项修改`,
+                  })}
+                </Tag>
+                <Tag>
+                  {t("gameWorkbench.sessionTableCount", {
+                    defaultValue: `${session.openTables.length} 张表`,
+                  })}
+                </Tag>
+                <Tag color="purple">
+                  {t("gameWorkbench.sessionMessageCount", {
+                    defaultValue: `${session.messages.length} 条对话`,
+                  })}
+                </Tag>
+              </div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {t("gameWorkbench.sessionUpdatedAt", {
+                  defaultValue: `上次编辑：${new Date(session.updatedAt).toLocaleString()}`,
+                })}
+              </Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {t("gameWorkbench.sessionSavedAt", {
+                  defaultValue: `上次保存：${new Date(session.lastManualSavedAt ?? session.updatedAt).toLocaleString()}`,
+                })}
+              </Text>
+              <div className={styles.sessionCardFooter}>
+                <Space>
+                  <Button
+                    danger
+                    icon={<DeleteOutlined />}
+                    disabled={sessionStore.sessions.length <= 1}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      confirmRemoveSession(
+                        session.id,
+                        session.name,
+                        session.updatedAt > (session.lastManualSavedAt ?? 0),
+                      );
+                    }}
+                  >
+                    {t("gameWorkbench.removeSession", { defaultValue: "删除" })}
+                  </Button>
+                  <Button type="primary" onClick={(e) => {
+                    e.stopPropagation();
+                    openSession(session.id);
+                  }}>
+                    {t("gameWorkbench.resumeSession", { defaultValue: "继续会话" })}
+                  </Button>
+                </Space>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.workbench}>
       <PageHeader
         parent={t("nav.game", { defaultValue: "Game Development" })}
-        current={t("nav.gameWorkbench", { defaultValue: "数值工作台" })}
+        current={sessionStore.current?.name || t("nav.gameWorkbench", { defaultValue: "数值工作台" })}
+        extra={
+          <Space>
+            <Tag color={sessionStore.isCurrentDirtySinceSave ? "volcano" : "green"}>
+              {sessionStore.isCurrentDirtySinceSave
+                ? t("gameWorkbench.currentSessionPendingSave", { defaultValue: "本地变更待保存" })
+                : t("gameWorkbench.currentSessionSaved", { defaultValue: "本地会话已保存" })}
+            </Tag>
+            <Button onClick={backToSessionList}>
+              {t("gameWorkbench.backToSessions", { defaultValue: "返回会话列表" })}
+            </Button>
+            <Button
+              danger
+              disabled={sessionStore.sessions.length <= 1 || !sessionStore.current}
+              onClick={() => {
+                if (!sessionStore.current) return;
+                confirmRemoveSession(
+                  sessionStore.current.id,
+                  sessionStore.current.name,
+                  sessionStore.isCurrentDirtySinceSave,
+                );
+              }}
+            >
+              {t("gameWorkbench.removeCurrentSession", { defaultValue: "删除当前会话" })}
+            </Button>
+            <Button type="primary" onClick={saveSession} disabled={!sessionStore.isCurrentDirtySinceSave}>
+              {t("gameWorkbench.saveSession", { defaultValue: "保存当前会话" })}
+            </Button>
+          </Space>
+        }
         subRow={
           <Text type="secondary" style={{ fontSize: 12 }}>
             {t("gameWorkbench.subtitleV2", {
-              defaultValue: "下方 Chat 描述意图 → 上方表内直接改 → 右栏看依赖与影响 → 一键提交",
+              defaultValue: "下方 Chat 描述意图 → 上方表内直接改 → 右栏看依赖与影响 → 保存当前会话",
             })}
           </Text>
         }
       />
 
-      <div className={styles.toolbar}>
-        <Select
-          mode="multiple"
-          placeholder={t("gameWorkbench.tablePlaceholder", {
-            defaultValue: "选择要打开的表（可多选）",
-          })}
-          loading={tablesLoading}
-          value={openTables}
-          onChange={(v) => setOpenTables(v)}
-          style={{ minWidth: 360 }}
-          showSearch
-          allowClear
-          options={tableNames.map((n) => ({ label: n, value: n }))}
-        />
-        <Button icon={<ReloadOutlined />} onClick={loadTables} loading={tablesLoading}>
-          {t("gameWorkbench.refresh", { defaultValue: "刷新" })}
-        </Button>
-        <Tag color="blue">
-          {t("gameWorkbench.dirtyTotalTag", {
-            count: dirty.dirtyList.length,
-            defaultValue: `当前 ${dirty.dirtyList.length} 项待保存`,
-          })}
-        </Tag>
-        {rowsLoading && <Spin size="small" />}
-      </div>
+      <div className={styles.workbenchShell}>
+        <div className={styles.editorArea}>
+          <div className={styles.toolbar}>
+            <Select
+              mode="multiple"
+              placeholder={t("gameWorkbench.tablePlaceholder", {
+                defaultValue: "选择要打开的表（可多选）",
+              })}
+              loading={tablesLoading}
+              value={openTables}
+              onChange={(nextOpenTables) => {
+                setOpenTables(nextOpenTables);
+                if (nextOpenTables.length === 0) {
+                  syncWorkbenchRoute({ session: sessionStore.currentId });
+                  return;
+                }
+                const nextActiveTab =
+                  activeTab && nextOpenTables.includes(activeTab)
+                    ? activeTab
+                    : nextOpenTables[0];
+                if (nextActiveTab) {
+                  syncWorkbenchRoute({
+                    session: sessionStore.currentId,
+                    table: nextActiveTab,
+                  });
+                }
+              }}
+              style={{ minWidth: 360 }}
+              showSearch
+              allowClear
+              options={tableNames.map((n) => ({ label: n, value: n }))}
+            />
+            <Button icon={<ReloadOutlined />} onClick={loadTables} loading={tablesLoading}>
+              {t("gameWorkbench.refresh", { defaultValue: "刷新" })}
+            </Button>
+            <Tag color="blue">
+              {t("gameWorkbench.dirtyTotalTag", {
+                count: dirty.dirtyList.length,
+                defaultValue: `当前 ${dirty.dirtyList.length} 项待保存`,
+              })}
+            </Tag>
+            {rowsLoading && <Spin size="small" />}
+          </div>
 
-      <div className={styles.split} ref={splitContainerRef}>
-        <Card
-          className={styles.upperPane}
-          style={{ flex: `${topRatio} 1 0` }}
-          styles={{ body: { padding: 0, flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" } }}
-          title={
-            <Space>
-              <span>
-                {t("gameWorkbench.tablesViewTitle", { defaultValue: "多表编辑视图" })}
-              </span>
-              {pinnedTab && (
-                <Tag color="purple" icon={<PushpinFilled />}>
-                  {t("gameWorkbench.pinnedTag", {
-                    defaultValue: `分屏中：${activeTab} ↔ ${pinnedTab}`,
-                  })}
-                </Tag>
-              )}
-            </Space>
-          }
-        >
+          <div className={styles.split} ref={splitContainerRef}>
+            <Card
+              className={styles.upperPane}
+              style={{ flex: `${topRatio} 1 0` }}
+              styles={{ body: { padding: 0, flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" } }}
+              title={
+                <Space>
+                  <span>
+                    {t("gameWorkbench.tablesViewTitle", { defaultValue: "多表编辑视图" })}
+                  </span>
+                  {pinnedTab && (
+                    <Tag color="purple" icon={<PushpinFilled />}>
+                      {t("gameWorkbench.pinnedTag", {
+                        defaultValue: `分屏中：${activeTab} ↔ ${pinnedTab}`,
+                      })}
+                    </Tag>
+                  )}
+                </Space>
+              }
+            >
           {openTables.length === 0 ? (
             <Empty
               style={{ padding: 24 }}
@@ -1003,12 +1391,31 @@ export default function NumericWorkbench() {
               type="editable-card"
               hideAdd
               activeKey={activeTab ?? undefined}
-              onChange={setActiveTab}
+              onChange={(nextActiveTab) => {
+                setActiveTab(nextActiveTab);
+                syncWorkbenchRoute({
+                  session: sessionStore.currentId,
+                  table: nextActiveTab,
+                });
+              }}
               onEdit={(targetKey, action) => {
                 if (action === "remove" && typeof targetKey === "string") {
-                  setOpenTables((prev) => prev.filter((n) => n !== targetKey));
+                  const nextOpenTables = openTables.filter((n) => n !== targetKey);
+                  setOpenTables(nextOpenTables);
                   dirty.clearTable(targetKey);
                   if (pinnedTab === targetKey) setPinnedTab(null);
+                  if (nextOpenTables.length === 0) {
+                    syncWorkbenchRoute({ session: sessionStore.currentId });
+                    return;
+                  }
+                  const nextActiveTab =
+                    targetKey === activeTab ? nextOpenTables[0] : activeTab ?? nextOpenTables[0];
+                  if (nextActiveTab) {
+                    syncWorkbenchRoute({
+                      session: sessionStore.currentId,
+                      table: nextActiveTab,
+                    });
+                  }
                 }
               }}
               items={tabItems}
@@ -1017,95 +1424,100 @@ export default function NumericWorkbench() {
               style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
             />
           )}
-        </Card>
+            </Card>
 
-        <div className={styles.splitter} onMouseDown={onSplitterMouseDown} role="separator" />
+            <div className={styles.splitter} onMouseDown={onSplitterMouseDown} role="separator" />
 
-        <Card
-          className={styles.lowerPane}
-          style={{ flex: `${1 - topRatio} 1 0` }}
-          styles={{ body: { padding: 0, flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" } }}
-        >
-          <WorkbenchChat
-            messages={chatMessages}
-            input={chatInput}
-            sending={chatSending}
-            onInputChange={setChatInput}
-            onSend={sendChat}
-            onAcceptSuggestion={(sug) => {
-              const idx = chatMessages.findIndex((m) => m.suggestions?.includes(sug));
-              if (idx >= 0) acceptSuggestion(idx, sug);
-            }}
-            onAcceptAll={(sugs) => {
-              const idx = chatMessages.findIndex((m) => m.suggestions === sugs);
-              if (idx >= 0) acceptAllSuggestions(idx, sugs);
-            }}
-            onJumpToCell={jumpToCell}
-            onClear={chatStore.clearCurrentMessages}
-            headerExtra={
-              <Space size={4}>
-                <Tooltip title={t("gameWorkbench.workbenchAgent", { defaultValue: "工作台专属 Agent（决定 AI 主模型）" })}>
-                  <Select
-                    size="small"
-                    value={workbenchAgentOverride || ""}
-                    style={{ minWidth: 140 }}
-                    onChange={(v) => setWorkbenchAgentOverride(v)}
-                    options={[
-                      {
-                        value: "",
-                        label: t("gameWorkbench.followGlobalAgent", {
-                          defaultValue: "跟随全局 Agent",
-                        }),
-                      },
-                      ...agents.map((a) => ({ value: a.id, label: a.name || a.id })),
-                    ]}
+            <Card
+              className={styles.lowerPane}
+              style={{ flex: `${1 - topRatio} 1 0` }}
+              styles={{ body: { padding: 0, flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" } }}
+            >
+              <WorkbenchChat
+                messages={chatMessages}
+                input={chatInput}
+                sending={chatSending}
+                onInputChange={setChatInput}
+                onSend={sendChat}
+                onAcceptSuggestion={(sug) => {
+                  const idx = chatMessages.findIndex((m) => m.suggestions?.includes(sug));
+                  if (idx >= 0) acceptSuggestion(idx, sug);
+                }}
+                onAcceptAll={(sugs) => {
+                  const idx = chatMessages.findIndex((m) => m.suggestions === sugs);
+                  if (idx >= 0) acceptAllSuggestions(idx, sugs);
+                }}
+                onJumpToCell={jumpToCell}
+                onClear={sessionStore.clearCurrentMessages}
+                headerExtra={
+                  <Space size={4}>
+                    <Tooltip title={t("gameWorkbench.workbenchAgent", { defaultValue: "工作台专属 Agent（决定 AI 主模型）" })}>
+                      <Select
+                        size="small"
+                        value={workbenchAgentOverride || ""}
+                        style={{ minWidth: 140 }}
+                        onChange={(v) => setWorkbenchAgentOverride(v)}
+                        options={[
+                          {
+                            value: "",
+                            label: t("gameWorkbench.followGlobalAgent", {
+                              defaultValue: "跟随全局 Agent",
+                            }),
+                          },
+                          ...agents.map((a) => ({ value: a.id, label: a.name || a.id })),
+                        ]}
+                      />
+                    </Tooltip>
+                    <ModelSelector agentId={aiAgentId} disableRouteSync />
+                  </Space>
+                }
+                subHeader={
+                  <WorkbenchChatSessionToolbar
+                    sessions={sessionStore.sessions}
+                    currentId={sessionStore.currentId}
+                    currentDirty={sessionStore.isCurrentDirtySinceSave}
+                    onSwitch={openSession}
+                    onNew={createAndOpenSession}
+                    onRename={sessionStore.renameSession}
+                    onRemove={(id) => {
+                      const target = sessionStore.sessions.find((session) => session.id === id);
+                      if (!target) return;
+                      confirmRemoveSession(
+                        target.id,
+                        target.name,
+                        id === sessionStore.currentId
+                          ? sessionStore.isCurrentDirtySinceSave
+                          : target.updatedAt > (target.lastManualSavedAt ?? 0),
+                      );
+                    }}
                   />
-                </Tooltip>
-                <ModelSelector agentId={aiAgentId} disableRouteSync />
-              </Space>
-            }
-            subHeader={
-              <WorkbenchChatSessionToolbar
-                sessions={chatStore.sessions}
-                currentId={chatStore.currentId}
-                onSwitch={chatStore.switchSession}
-                onNew={() => chatStore.createSession()}
-                onRename={chatStore.renameSession}
-                onRemove={chatStore.removeSession}
+                }
               />
-            }
-          />
-        </Card>
-      </div>
+            </Card>
+          </div>
+        </div>
 
-      <Drawer
-        title={
-          <Space>
-            <RobotOutlined />
-            <span>
-              {t("gameWorkbench.rightPanelTitle", { defaultValue: "依赖 / 影响 / 修改条目" })}
-            </span>
+        <aside className={styles.sidePanel}>
+          <div className={styles.sidePanelHeader}>
+            <Space>
+              <RobotOutlined />
+              <Text strong>
+                {t("gameWorkbench.rightPanelTitle", { defaultValue: "修改 / 影响 / AI 建议" })}
+              </Text>
+            </Space>
             {activeTab && <Tag>{activeTab}</Tag>}
-          </Space>
-        }
-        placement="right"
-        width={460}
-        open
-        closable={false}
-        mask={false}
-        getContainer={false}
-        rootStyle={{ position: "absolute" }}
-        styles={{ wrapper: { boxShadow: "-2px 0 8px rgba(0,0,0,0.06)" } }}
-      >
-        <div className={styles.aiDrawerBody}>
+          </div>
+          <div className={styles.aiDrawerBody}>
           <DirtyList
             items={dirty.dirtyList}
             onJump={(table, rowKey, field) => jumpToCell(table, rowKey, field)}
             onRevert={(table, rowKey, field) => dirty.clearCell(table, rowKey, field)}
             onClearAll={dirty.clearAll}
-            onSave={openDraft}
-            saving={submitting}
-            saveDisabled={validChanges.length === 0}
+            onSaveSession={saveSession}
+            saveSessionDisabled={!sessionStore.isCurrentDirtySinceSave}
+            onExportDraft={openDraft}
+            exporting={submitting}
+            exportDisabled={validChanges.length === 0}
           />
           <ImpactPanel
             preview={preview}
@@ -1116,16 +1528,17 @@ export default function NumericWorkbench() {
             impacts={impacts}
             reverseImpact={null}
           />
-        </div>
-      </Drawer>
+          </div>
+        </aside>
+      </div>
 
       <Modal
-        title={t("gameWorkbench.draftModalTitle", { defaultValue: "生成改动草案" })}
+        title={t("gameWorkbench.draftModalTitle", { defaultValue: "导出变更草稿" })}
         open={draftOpen}
         onOk={submitDraft}
         onCancel={() => setDraftOpen(false)}
         confirmLoading={submitting}
-        okText={t("gameWorkbench.submit", { defaultValue: "提交" })}
+        okText={t("gameWorkbench.export", { defaultValue: "导出" })}
         cancelText={t("gameWorkbench.cancel", { defaultValue: "取消" })}
       >
         <Space direction="vertical" style={{ width: "100%" }}>
@@ -1143,6 +1556,35 @@ export default function NumericWorkbench() {
               defaultValue: `共 ${validChanges.length} 项修改`,
             })}
           </Text>
+          <Card size="small" title={t("gameWorkbench.draftPreviewTitle", { defaultValue: "导出预览" })}>
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Space size={[6, 6]} wrap>
+                {draftPreviewTables.map((tableName) => (
+                  <Tag key={tableName} color="gold">
+                    {tableName}
+                  </Tag>
+                ))}
+              </Space>
+              {draftPreviewChanges.map((change, index) => (
+                <div key={`${change.table}-${change.rowKey}-${change.field}-${index}`}>
+                  <Text strong>
+                    {change.table} / {String(change.rowKey)} / {change.field}
+                  </Text>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {formatVal(change.oldValue)} -&gt; {formatVal(change.newValue)}
+                  </Text>
+                </div>
+              ))}
+              {validChanges.length > draftPreviewChanges.length && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {t("gameWorkbench.draftPreviewMore", {
+                    defaultValue: `其余 ${validChanges.length - draftPreviewChanges.length} 项将在导出时一并带上。`,
+                  })}
+                </Text>
+              )}
+            </Space>
+          </Card>
         </Space>
       </Modal>
     </div>

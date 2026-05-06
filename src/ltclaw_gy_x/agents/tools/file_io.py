@@ -20,9 +20,34 @@ from ...config.context import (
 from ...constant import WORKING_DIR, TRUNCATION_NOTICE_MARKER
 
 
+def _get_configured_project_root() -> Path | None:
+    """Return the user-configured project root, if available.
+
+    This lets file tools resolve repo-relative paths like ``docs/...`` even
+    when the agent workspace itself lives under ``~/.ltclaw_gy_x/workspaces``.
+    """
+    try:
+        from ...game.config import load_user_config
+    except Exception:
+        return None
+
+    try:
+        user_config = load_user_config()
+        svn_local_root = getattr(user_config, "svn_local_root", None)
+        if not svn_local_root:
+            return None
+        project_root = Path(svn_local_root).expanduser()
+        if project_root.exists() and project_root.is_dir():
+            return project_root
+    except Exception:
+        return None
+
+    return None
+
+
 def _resolve_file_path(file_path: str) -> str:
     """Resolve file path: use absolute path as-is,
-    resolve relative path from current workspace or WORKING_DIR.
+    resolve relative path from current workspace or configured project root.
 
     Args:
         file_path: The input file path (absolute or relative).
@@ -33,10 +58,20 @@ def _resolve_file_path(file_path: str) -> str:
     path = Path(file_path).expanduser()
     if path.is_absolute():
         return str(path)
-    else:
-        # Use current workspace_dir from context, fallback to WORKING_DIR
-        workspace_dir = get_current_workspace_dir() or WORKING_DIR
-        return str(workspace_dir / file_path)
+
+    # Use current workspace_dir from context, fallback to WORKING_DIR.
+    workspace_dir = Path(get_current_workspace_dir() or WORKING_DIR).expanduser()
+    workspace_candidate = workspace_dir / path
+    if workspace_candidate.exists():
+        return str(workspace_candidate)
+
+    project_root = _get_configured_project_root()
+    if project_root is not None:
+        project_candidate = project_root / path
+        if project_candidate.exists():
+            return str(project_candidate)
+
+    return str(workspace_candidate)
 
 
 def _get_encoding_for_file(file_path: str) -> str:

@@ -57,9 +57,11 @@ class ProposalStore:
         "applied": {"committed", "reverted"},
     }
 
-    def __init__(self, workspace_dir: Path):
+    def __init__(self, workspace_dir: Path, svn_root: Path | None = None, session_id: str | None = None):
         self.workspace_dir = Path(workspace_dir)
-        self.proposals_dir = get_proposals_dir(self.workspace_dir)
+        self.svn_root = Path(svn_root) if svn_root is not None else None
+        self.session_id = session_id
+        self.proposals_dir = get_proposals_dir(self.workspace_dir, self.svn_root, self.session_id)
         self.proposals_dir.mkdir(parents=True, exist_ok=True)
 
     async def create(self, proposal: ChangeProposal) -> ChangeProposal:

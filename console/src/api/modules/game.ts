@@ -2,6 +2,7 @@
 import type { 
   ProjectConfig, 
   UserGameConfig, 
+  GameStorageSummary,
   ValidationIssue,
   CommitResult,
   TableIndex,
@@ -53,6 +54,10 @@ export const gameApi = {
       method: "PUT",
       body: JSON.stringify(config),
     });
+  },
+
+  async getStorageSummary(agentId: string): Promise<GameStorageSummary> {
+    return request<GameStorageSummary>(`/agents/${agentId}/game/project/storage`);
   },
 
   // SVN operations

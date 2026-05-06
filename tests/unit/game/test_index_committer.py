@@ -1,4 +1,4 @@
-"""单元测试: IndexCommitter 序列化与缓存写入。"""
+"""????: IndexCommitter ?????????"""
 from datetime import datetime
 from pathlib import Path
 
@@ -38,9 +38,10 @@ class _StubSvn:
 
 
 @pytest.fixture
-def committer(tmp_path):
+def committer(tmp_path, monkeypatch):
     svn_root = tmp_path / "svn"; svn_root.mkdir()
     workspace = tmp_path / "ws"; workspace.mkdir()
+    monkeypatch.setenv("LTCLAW_GAME_PROJECTS_DIR", str(tmp_path / "game-projects"))
     return IndexCommitter(
         project=_project(),
         svn_client=_StubSvn(svn_root),
@@ -49,11 +50,33 @@ def committer(tmp_path):
     )
 
 
-def test_setup_paths_in_svn_root(committer):
-    assert committer.svn_tables_file is not None
-    assert committer.svn_dependency_file is not None
-    assert ".ltclaw_index" in str(committer.svn_tables_file)
+def test_setup_paths_use_central_store(committer, tmp_path):
+    assert committer.svn_tables_dir is not None
+    assert committer.svn_tables_dir.is_relative_to(tmp_path / "game-projects")
+    assert committer.svn_tables_file is None
+    assert committer.svn_dependency_file is None
     assert committer.cache_dir.exists()
+
+
+def test_setup_paths_use_central_store_when_configured(tmp_path, monkeypatch):
+    svn_root = tmp_path / "svn"
+    workspace = tmp_path / "ws"
+    central_root = tmp_path / "game-projects"
+    svn_root.mkdir()
+    workspace.mkdir()
+    monkeypatch.setenv("LTCLAW_GAME_PROJECTS_DIR", str(central_root))
+
+    committer = IndexCommitter(
+        project=_project(),
+        svn_client=_StubSvn(svn_root),
+        workspace_dir=workspace,
+        index_output_dir=".ltclaw_index",
+    )
+
+    assert committer.svn_tables_dir is not None
+    assert committer.svn_tables_dir.is_relative_to(central_root)
+    assert committer.svn_tables_file is None
+    assert committer.svn_dependency_file is None
 
 
 def test_serialize_deserialize_table_indexes_roundtrip(committer):
@@ -100,3 +123,11 @@ def test_serialize_dependency_graph_includes_edges(committer):
         assert "Hero" in s and "Weapon" in s
     else:
         assert "Hero" in g.model_dump_json()
+
+
+def test_runtime_cache_paths_are_nested_by_agent_and_session(committer, tmp_path):
+    assert committer.cache_dir.is_relative_to(tmp_path / "game-projects")
+    parts = committer.cache_dir.parts
+    assert "agents" in parts
+    assert "sessions" in parts
+    assert "caches" in parts

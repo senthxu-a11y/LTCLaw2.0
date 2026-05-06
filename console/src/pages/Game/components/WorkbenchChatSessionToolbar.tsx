@@ -1,16 +1,17 @@
 import { useState } from "react";
-import { Button, Dropdown, Input, Modal, Select, Space, Tooltip } from "antd";
+import { Button, Input, Modal, Select, Space, Tooltip } from "antd";
 import {
   DeleteOutlined,
   EditOutlined,
   HistoryOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
-import type { WorkbenchChatSession } from "../hooks/useWorkbenchChatSessions";
+import type { WorkbenchSession } from "../hooks/useWorkbenchSessions";
 
 interface Props {
-  sessions: WorkbenchChatSession[];
+  sessions: WorkbenchSession[];
   currentId: string;
+  currentDirty?: boolean;
   onSwitch: (id: string) => void;
   onNew: () => void;
   onRename: (id: string, name: string) => void;
@@ -18,10 +19,32 @@ interface Props {
 }
 
 export function WorkbenchChatSessionToolbar(props: Props) {
-  const { sessions, currentId, onSwitch, onNew, onRename, onRemove } = props;
+  const {
+    sessions,
+    currentId,
+    currentDirty,
+    onSwitch,
+    onNew,
+    onRename,
+    onRemove,
+  } = props;
   const current = sessions.find((s) => s.id === currentId);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
+
+  const confirmRemoveCurrent = () => {
+    if (!current) return;
+    Modal.confirm({
+      title: "删除会话",
+      content: currentDirty
+        ? `删除会话「${current.name}」？当前会话还有未手动保存的本地变更，删除后将无法恢复。`
+        : `删除会话「${current.name}」？此操作不可撤销。`,
+      okType: "danger",
+      okText: "删除",
+      cancelText: "取消",
+      onOk: () => onRemove(current.id),
+    });
+  };
 
   return (
     <Space size={4}>
@@ -50,45 +73,26 @@ export function WorkbenchChatSessionToolbar(props: Props) {
       <Tooltip title="新建会话">
         <Button size="small" icon={<PlusOutlined />} onClick={onNew} />
       </Tooltip>
-      <Dropdown
-        trigger={["click"]}
-        menu={{
-          items: [
-            {
-              key: "rename",
-              icon: <EditOutlined />,
-              label: "重命名当前会话",
-              onClick: () => {
-                if (!current) return;
-                setRenameValue(current.name);
-                setRenaming(true);
-              },
-            },
-            {
-              key: "remove",
-              icon: <DeleteOutlined />,
-              label: "删除当前会话",
-              danger: true,
-              disabled: sessions.length <= 1,
-              onClick: () => {
-                if (!current) return;
-                Modal.confirm({
-                  title: "删除会话",
-                  content: `删除会话「${current.name}」？此操作不可撤销。`,
-                  okType: "danger",
-                  okText: "删除",
-                  cancelText: "取消",
-                  onOk: () => onRemove(current.id),
-                });
-              },
-            },
-          ],
-        }}
-      >
-        <Button size="small" type="text">
-          ⋯
-        </Button>
-      </Dropdown>
+      <Tooltip title="重命名当前会话">
+        <Button
+          size="small"
+          icon={<EditOutlined />}
+          onClick={() => {
+            if (!current) return;
+            setRenameValue(current.name);
+            setRenaming(true);
+          }}
+        />
+      </Tooltip>
+      <Tooltip title="删除当前会话">
+        <Button
+          size="small"
+          danger
+          icon={<DeleteOutlined />}
+          onClick={confirmRemoveCurrent}
+          disabled={sessions.length <= 1}
+        />
+      </Tooltip>
 
       <Modal
         title="重命名会话"

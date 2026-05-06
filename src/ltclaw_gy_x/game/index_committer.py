@@ -1,5 +1,5 @@
 """
-索引提交器: 负责索引文件的本地缓存与可选 SVN 提交。
+?????: ?????????????? SVN ???
 """
 
 import hashlib
@@ -12,7 +12,15 @@ from typing import List, Optional
 from .config import ProjectConfig
 from .history_archiver import diff_and_archive
 from .models import ChangeSet, DependencyGraph, TableIndex
-from .paths import get_svn_cache_dir, get_tables_dir, get_workspace_game_dir
+from .paths import (
+    get_dependency_graph_path,
+    get_index_dir,
+    get_registry_path,
+    get_svn_cache_dir,
+    get_table_indexes_path,
+    get_tables_dir,
+    get_workspace_game_dir,
+)
 from .svn_client import SvnClient
 
 logger = logging.getLogger(__name__)
@@ -30,9 +38,10 @@ class IndexCommitter:
         self.svn = svn_client
         self.workspace_dir = workspace_dir
         self.index_output_dir = index_output_dir
-        self.cache_dir = get_svn_cache_dir(workspace_dir)
+        runtime_svn_root = Path(self.svn.working_copy) if self.svn else None
+        self.cache_dir = get_svn_cache_dir(workspace_dir, runtime_svn_root)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.workspace_tables_dir = get_workspace_game_dir(workspace_dir) / "tables"
+        self.workspace_tables_dir = get_workspace_game_dir(workspace_dir, runtime_svn_root) / "tables"
         self.workspace_tables_dir.mkdir(parents=True, exist_ok=True)
         self.tables_index_file = self.cache_dir / "table_indexes.json"
         self.dependency_graph_file = self.cache_dir / "dependency_graph.json"
@@ -50,19 +59,25 @@ class IndexCommitter:
             return
         try:
             svn_root = Path(self.svn.working_copy)
-            output_dir = svn_root / self.index_output_dir
             self.svn_tables_dir = get_tables_dir(svn_root)
-            self.svn_tables_file = output_dir / "table_indexes.json"
-            self.svn_dependency_file = output_dir / "dependency_graph.json"
-            self.svn_registry_file = output_dir / "registry.json"
-            output_dir.mkdir(parents=True, exist_ok=True)
+            output_dir = get_index_dir(svn_root)
+            self.svn_tables_file = None
+            self.svn_dependency_file = None
+            self.svn_registry_file = None
+
+            if output_dir.is_relative_to(svn_root):
+                self.svn_tables_file = get_table_indexes_path(svn_root)
+                self.svn_dependency_file = get_dependency_graph_path(svn_root)
+                self.svn_registry_file = get_registry_path(svn_root)
+
             self.svn_tables_dir.mkdir(parents=True, exist_ok=True)
+            output_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             logger.warning(f"setup paths failed: {e}")
 
     def _serialize_table_indexes(self, tables: List[TableIndex]) -> str:
-        # 注意: 此处不写入 datetime.now() — 输出必须确定性可复算 SHA。
-        # registry.json 自己在顶层维护 generated_at, 这里不需要。
+        # ??: ????? datetime.now() ? ?????????? SHA?
+        # registry.json ??????? generated_at, ??????
         data = {
             "version": "1.0",
             "tables": [t.model_dump(mode="json") for t in tables],
@@ -105,7 +120,7 @@ class IndexCommitter:
             data = json.loads(s)
             return [TableIndex.model_validate(t) for t in data.get("tables", [])]
         except Exception as e:
-            logger.error(f"反序列化表索引失败: {e}")
+            logger.error(f"?????????: {e}")
             return []
 
     def _serialize_dependency_graph(self, g: DependencyGraph) -> str:
@@ -119,7 +134,7 @@ class IndexCommitter:
             data.pop("version", None)
             return DependencyGraph.model_validate(data)
         except Exception as e:
-            logger.error(f"反序列化依赖图失败: {e}")
+            logger.error(f"?????????: {e}")
             return None
 
     def _serialize_changeset(self, c: ChangeSet) -> str:
@@ -133,7 +148,7 @@ class IndexCommitter:
             data.pop("version", None)
             return ChangeSet.model_validate(data)
         except Exception as e:
-            logger.error(f"反序列化变更集失败: {e}")
+            logger.error(f"?????????: {e}")
             return None
 
     def _serialize_registry(self, tables: List[TableIndex], graph: DependencyGraph) -> str:
@@ -172,7 +187,7 @@ class IndexCommitter:
         try:
             return json.loads(s)
         except Exception as e:
-            logger.error(f"反序列化清单失败: {e}")
+            logger.error(f"????????: {e}")
             return None
 
     async def save_table_indexes(
@@ -186,12 +201,12 @@ class IndexCommitter:
             self._write_per_table_indexes(tables)
             if self.svn_tables_file:
                 self._write_text_atomic(self.svn_tables_file, content)
-                msg = commit_message or f"更新表索引 ({len(tables)} tables)"
+                msg = commit_message or f"????? ({len(tables)} tables)"
                 if not await self._commit_to_svn([self.svn_tables_file], msg):
                     return False
             return True
         except Exception as e:
-            logger.error(f"保存表索引失败: {e}")
+            logger.error(f"???????: {e}")
             return False
 
     async def save_dependency_graph(
@@ -204,12 +219,12 @@ class IndexCommitter:
             self._write_text_atomic(self.dependency_graph_file, content)
             if self.svn_dependency_file:
                 self._write_text_atomic(self.svn_dependency_file, content)
-                msg = commit_message or f"更新依赖关系图 ({len(graph.edges)} dependencies)"
+                msg = commit_message or f"??????? ({len(graph.edges)} dependencies)"
                 if not await self._commit_to_svn([self.svn_dependency_file], msg):
                     return False
             return True
         except Exception as e:
-            logger.error(f"保存依赖图失败: {e}")
+            logger.error(f"???????: {e}")
             return False
 
     async def save_changeset(self, changeset: ChangeSet) -> bool:
@@ -218,7 +233,7 @@ class IndexCommitter:
             self._write_text_atomic(self.changeset_file, content)
             return True
         except Exception as e:
-            logger.error(f"保存变更集失败: {e}")
+            logger.error(f"???????: {e}")
             return False
 
     async def save_all(
@@ -242,7 +257,7 @@ class IndexCommitter:
             try:
                 diff_and_archive(prev_tables, tables, self.history_dir)
             except Exception as e:
-                logger.warning(f"归档历史失败: {e}")
+                logger.warning(f"??????: {e}")
             files = []
             if self.svn_tables_file:
                 self._write_text_atomic(self.svn_tables_file, tj)
@@ -254,12 +269,12 @@ class IndexCommitter:
                 self._write_text_atomic(self.svn_registry_file, rj)
                 files.append(self.svn_registry_file)
             if files:
-                msg = commit_message or f"批量更新索引数据 ({len(tables)} tables, {len(graph.edges)} dependencies)"
+                msg = commit_message or f"???????? ({len(tables)} tables, {len(graph.edges)} dependencies)"
                 if not await self._commit_to_svn(files, msg):
                     return False
             return True
         except Exception as e:
-            logger.error(f"批量保存失败: {e}")
+            logger.error(f"??????: {e}")
             return False
 
     async def _commit_to_svn(self, files: List[Path], message: str) -> bool:
@@ -272,11 +287,11 @@ class IndexCommitter:
             try:
                 await self.svn.add(existing)
             except Exception as e:
-                logger.warning(f"add 警告: {e}")
+                logger.warning(f"add ??: {e}")
             await self.svn.commit(existing, message)
             return True
         except Exception as e:
-            logger.error(f"提交失败: {e}")
+            logger.error(f"????: {e}")
             return False
 
     def load_table_indexes(self) -> List[TableIndex]:
@@ -285,7 +300,7 @@ class IndexCommitter:
                 return self._deserialize_table_indexes(self.tables_index_file.read_text(encoding="utf-8"))
             return []
         except Exception as e:
-            logger.error(f"加载表索引失败: {e}")
+            logger.error(f"???????: {e}")
             return []
 
     def load_dependency_graph(self) -> Optional[DependencyGraph]:
@@ -294,7 +309,7 @@ class IndexCommitter:
                 return self._deserialize_dependency_graph(self.dependency_graph_file.read_text(encoding="utf-8"))
             return None
         except Exception as e:
-            logger.error(f"加载依赖图失败: {e}")
+            logger.error(f"???????: {e}")
             return None
 
     def load_changeset(self) -> Optional[ChangeSet]:
@@ -303,7 +318,7 @@ class IndexCommitter:
                 return self._deserialize_changeset(self.changeset_file.read_text(encoding="utf-8"))
             return None
         except Exception as e:
-            logger.error(f"加载变更集失败: {e}")
+            logger.error(f"???????: {e}")
             return None
 
     def load_registry(self) -> Optional[dict]:
@@ -312,5 +327,5 @@ class IndexCommitter:
                 return self._deserialize_registry(self.registry_file.read_text(encoding="utf-8"))
             return None
         except Exception as e:
-            logger.error(f"加载清单失败: {e}")
+            logger.error(f"??????: {e}")
             return None

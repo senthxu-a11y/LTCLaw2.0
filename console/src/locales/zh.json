@@ -97,13 +97,13 @@
   },
   "docLibrary": {
     "title": "文档库",
-    "description": "查看策划案、数值表和协作文档的占位列表，后续可接入真实文档索引。",
+    "description": "查看当前项目中的策划案、数值说明和协作文档。",
     "categoryTitle": "分类树",
-    "categoryHint": "按当前 mock 分类浏览文档。",
+    "categoryHint": "按当前项目中的真实分类浏览文档。",
     "listTitle": "文档列表",
     "searchPlaceholder": "搜索标题、作者或标签",
     "empty": "当前筛选下暂无文档",
-    "mockFallback": "文档库接口暂未返回数据，已展示 mock 数据。",
+    "mockFallback": "文档库加载失败，请检查项目配置或本地 SVN 工作副本。",
     "columns": {
       "title": "标题",
       "type": "类型",

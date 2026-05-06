@@ -59,6 +59,29 @@ export interface UserGameConfig {
   svn_trust_cert?: boolean;
 }
 
+export interface GameStorageSummary {
+  working_root: string;
+  game_data_root: string;
+  workspace_dir: string;
+  user_config_path: string;
+  legacy_user_config_path: string;
+  svn_root?: string | null;
+  project_store_dir?: string | null;
+  project_config_path?: string | null;
+  project_index_dir?: string | null;
+  agent_store_dir: string;
+  session_store_dir: string;
+  workbench_dir: string;
+  chroma_dir: string;
+  llm_cache_dir: string;
+  svn_cache_dir: string;
+  proposals_dir: string;
+  code_index_dir: string;
+  retrieval_dir: string;
+  knowledge_base_dir: string;
+  session_name: string;
+}
+
 export interface ValidationIssue {
   severity: "error" | "warning";
   path: string;

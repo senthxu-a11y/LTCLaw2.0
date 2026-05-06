@@ -71,6 +71,49 @@
         :global(.ant-switch) {
           margin-right: 8px;
         }
+
+        .storageHint {
+          margin-bottom: 16px;
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+          line-height: 1.6;
+        }
+
+        .storageGroup {
+          margin-bottom: 16px;
+
+          &:last-child {
+            margin-bottom: 0;
+          }
+        }
+
+        .storageGroupTitle {
+          margin-bottom: 8px;
+          font-weight: 600;
+          color: var(--ant-color-text);
+        }
+
+        .storageRow {
+          display: grid;
+          grid-template-columns: 160px minmax(0, 1fr);
+          gap: 12px;
+          padding: 8px 0;
+          border-bottom: 1px solid var(--ant-color-border-secondary);
+        }
+
+        .storageLabel {
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+        }
+
+        .storageValue {
+          font-family: "Cascadia Code", "Consolas", monospace;
+          font-size: 12px;
+          line-height: 1.6;
+          color: var(--ant-color-text);
+          word-break: break-all;
+          white-space: pre-wrap;
+        }
       }
     }
   }
@@ -99,6 +142,11 @@
       
       :global(.ant-card-body) {
         padding: 16px;
+      }
+
+      .storageRow {
+        grid-template-columns: 1fr;
+        gap: 4px;
       }
     }
   }

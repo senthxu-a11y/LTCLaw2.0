@@ -11,9 +11,11 @@ export interface DirtyListProps {
   onJump: (table: string, rowKey: string, field: string) => void;
   onRevert: (table: string, rowKey: string, field: string) => void;
   onClearAll: () => void;
-  onSave: () => void;
-  saveDisabled?: boolean;
-  saving?: boolean;
+  onSaveSession: () => void;
+  saveSessionDisabled?: boolean;
+  onExportDraft?: () => void;
+  exportDisabled?: boolean;
+  exporting?: boolean;
 }
 
 const formatVal = (v: unknown): string => {
@@ -24,7 +26,17 @@ const formatVal = (v: unknown): string => {
 
 export function DirtyList(props: DirtyListProps) {
   const { t } = useTranslation();
-  const { items, onJump, onRevert, onClearAll, onSave, saveDisabled, saving } = props;
+  const {
+    items,
+    onJump,
+    onRevert,
+    onClearAll,
+    onSaveSession,
+    saveSessionDisabled,
+    onExportDraft,
+    exportDisabled,
+    exporting,
+  } = props;
 
   return (
     <div className={styles.panelSection}>
@@ -53,12 +65,22 @@ export function DirtyList(props: DirtyListProps) {
             size="small"
             type="primary"
             icon={<SaveOutlined />}
-            onClick={onSave}
-            disabled={saveDisabled || items.length === 0}
-            loading={saving}
+            onClick={onSaveSession}
+            disabled={saveSessionDisabled}
           >
-            {t("gameWorkbench.saveDraft", { defaultValue: "保存为变更草稿" })}
+            {t("gameWorkbench.saveSession", { defaultValue: "保存当前会话" })}
           </Button>
+          {onExportDraft && (
+            <Button
+              size="small"
+              icon={<SaveOutlined />}
+              onClick={onExportDraft}
+              disabled={exportDisabled || items.length === 0}
+              loading={exporting}
+            >
+              {t("gameWorkbench.exportDraft", { defaultValue: "导出草稿" })}
+            </Button>
+          )}
         </Space>
       </div>
 

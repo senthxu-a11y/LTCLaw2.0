@@ -7,6 +7,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ...knowledge_base import KnowledgeBaseEntry, get_kb_store
+from ...game.retrieval import unified_search
 from ..agent_context import get_agent_for_request
 
 logger = logging.getLogger(__name__)
@@ -92,16 +93,44 @@ async def search_entries(
 ) -> dict[str, Any]:
     workspace = await get_agent_for_request(request)
     store = get_kb_store(workspace.workspace_dir)
+    game_service = workspace.service_manager.services.get("game_service")
     query = str(body.get("query") or "").strip()
     top_k = int(body.get("top_k") or 10)
     category = body.get("category") or None
+    mode = str(body.get("mode") or "hybrid").strip().lower()
     if not query:
         return {"items": [], "count": 0, "query": query}
+    if game_service is not None and getattr(game_service, "configured", False):
+        payload = unified_search(
+            game_service,
+            query,
+            top_k=max(1, min(top_k, 50)),
+            mode=mode,
+        )
+        items = []
+        for item in payload.get("results", []):
+            if category and item.get("category") != category:
+                continue
+            items.append(item)
+        return {
+            "items": items,
+            "count": len(items),
+            "query": query,
+            "mode": payload.get("mode", mode),
+            "status": payload.get("status", {}),
+        }
+
     hits = store.search(query, top_k=max(1, min(top_k, 50)), category=category)
     items = []
     for entry, score in hits:
         d = _serialize(entry)
         d["score"] = round(float(score), 4)
+        d["source_type"] = "kb_entry"
+        d["evidence"] = {
+            "kb_entry_id": entry.id,
+            "path": entry.extra.get("doc_path") or entry.extra.get("path"),
+            "source": entry.source,
+        }
         items.append(d)
     return {"items": items, "count": len(items), "query": query}
 

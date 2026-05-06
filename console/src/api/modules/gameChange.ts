@@ -28,7 +28,7 @@ export const gameChangeApi = {
   },
 
   create(agentId: string, body: ChangeProposalCreate) {
-    return request(`/agents/${agentId}/game/change/proposals`, {
+    return request<ChangeProposalRecord>(`/agents/${agentId}/game/change/proposals`, {
       method: "POST",
       body: JSON.stringify(body),
     });

@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
 import { gameApi } from "../../api/modules/game";
 import { agentsApi } from "../../api/modules/agents";
-import type { ProjectConfig, ValidationIssue } from "../../api/types/game";
+import type { GameStorageSummary, ProjectConfig, ValidationIssue } from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
 import styles from "./GameProject.module.less";
 
@@ -38,6 +38,7 @@ export default function GameProject() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [storageSummary, setStorageSummary] = useState<GameStorageSummary | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSaving, setWizardSaving] = useState(false);
   const [wizardForm] = Form.useForm<{ id?: string; name: string }>();
@@ -50,10 +51,12 @@ export default function GameProject() {
     setLoading(true);
     setError(null);
     try {
-      const [projectConfig, userConfig] = await Promise.all([
+      const [projectConfig, userConfig, storage] = await Promise.all([
         gameApi.getProjectConfig(selectedAgent),
         gameApi.getUserConfig(selectedAgent).catch(() => null),
+        gameApi.getStorageSummary(selectedAgent).catch(() => null),
       ]);
+      setStorageSummary(storage);
       if (projectConfig) {
         const pc = projectConfig as any;
         const uc = (userConfig || {}) as any;
@@ -101,6 +104,56 @@ export default function GameProject() {
       setLoading(false);
     }
   };
+
+  const storageGroups = storageSummary
+    ? [
+        {
+          title: t("gameProject.storageRootTitle", { defaultValue: "统一数据根" }),
+          items: [
+            [t("gameProject.storageWorkingRoot", { defaultValue: "工作根目录" }), storageSummary.working_root],
+            [t("gameProject.storageGameDataRoot", { defaultValue: "游戏数据根" }), storageSummary.game_data_root],
+            [t("gameProject.storageWorkspaceDir", { defaultValue: "Agent Workspace" }), storageSummary.workspace_dir],
+          ],
+        },
+        {
+          title: t("gameProject.storageProjectTitle", { defaultValue: "项目级" }),
+          items: [
+            [t("gameProject.storageSvnRoot", { defaultValue: "工程根目录" }), storageSummary.svn_root || "-"],
+            [t("gameProject.storageProjectStore", { defaultValue: "项目存储目录" }), storageSummary.project_store_dir || "-"],
+            [t("gameProject.storageProjectConfig", { defaultValue: "项目配置文件" }), storageSummary.project_config_path || "-"],
+            [t("gameProject.storageProjectIndexes", { defaultValue: "项目索引目录" }), storageSummary.project_index_dir || "-"],
+          ],
+        },
+        {
+          title: t("gameProject.storageSessionTitle", { defaultValue: "Agent / 对话级" }),
+          items: [
+            [t("gameProject.storageAgentRoot", { defaultValue: "Agent 目录" }), storageSummary.agent_store_dir],
+            [t("gameProject.storageSessionRoot", { defaultValue: "对话目录" }), storageSummary.session_store_dir],
+            [t("gameProject.storageSessionName", { defaultValue: "当前会话名" }), storageSummary.session_name],
+            [t("gameProject.storageWorkbench", { defaultValue: "数值工作台目录" }), storageSummary.workbench_dir],
+            [t("gameProject.storageProposals", { defaultValue: "提案目录" }), storageSummary.proposals_dir],
+          ],
+        },
+        {
+          title: t("gameProject.storageDatabaseTitle", { defaultValue: "缓存 / 数据库" }),
+          items: [
+            [t("gameProject.storageChroma", { defaultValue: "Chroma 缓存" }), storageSummary.chroma_dir],
+            [t("gameProject.storageLlmCache", { defaultValue: "LLM 缓存" }), storageSummary.llm_cache_dir],
+            [t("gameProject.storageSvnCache", { defaultValue: "SVN 缓存" }), storageSummary.svn_cache_dir],
+            [t("gameProject.storageCodeIndex", { defaultValue: "代码索引库" }), storageSummary.code_index_dir],
+            [t("gameProject.storageRetrieval", { defaultValue: "文档检索库" }), storageSummary.retrieval_dir],
+            [t("gameProject.storageKnowledgeBase", { defaultValue: "知识库目录" }), storageSummary.knowledge_base_dir],
+          ],
+        },
+        {
+          title: t("gameProject.storageUserTitle", { defaultValue: "用户配置" }),
+          items: [
+            [t("gameProject.storageUserConfig", { defaultValue: "当前用户配置" }), storageSummary.user_config_path],
+            [t("gameProject.storageLegacyUserConfig", { defaultValue: "旧用户配置回读" }), storageSummary.legacy_user_config_path],
+          ],
+        },
+      ]
+    : [];
 
   const handleSave = async () => {
     try {
@@ -285,6 +338,28 @@ export default function GameProject() {
 
       <div className={styles.content}>
         <Form form={form} layout="vertical" className={styles.form}>
+          <Card
+            title={t("gameProject.storageTitle", { defaultValue: "当前实际数据落盘目录" })}
+            className={styles.section}
+          >
+            <div className={styles.storageHint}>
+              {t("gameProject.storageHint", {
+                defaultValue:
+                  "这里显示后端当前实际使用的目录，不是推测值。项目级、Agent 级、对话级以及缓存/数据库都会按这个结果落盘。",
+              })}
+            </div>
+            {storageGroups.map((group) => (
+              <div key={group.title} className={styles.storageGroup}>
+                <div className={styles.storageGroupTitle}>{group.title}</div>
+                {group.items.map(([label, value]) => (
+                  <div key={`${group.title}-${label}`} className={styles.storageRow}>
+                    <div className={styles.storageLabel}>{label}</div>
+                    <div className={styles.storageValue}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </Card>
           
           {/* Basic Info Section */}
           <Card title={t("gameProject.basicInfo")} className={styles.section}>

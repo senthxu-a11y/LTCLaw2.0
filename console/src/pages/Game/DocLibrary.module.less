@@ -40,6 +40,10 @@
   width: 280px;
 }
 
+.statusSelect {
+  width: 140px;
+}
+
 .tagRow {
   display: flex;
   gap: 8px;
@@ -57,6 +61,64 @@
   width: 100%;
 }
 
+.workspaceGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 520px;
+}
+
+.listPane {
+  min-width: 0;
+}
+
+.previewCard {
+  min-width: 0;
+  height: 100%;
+
+  :global(.ant-card-body) {
+    height: 100%;
+  }
+}
+
+.previewHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.previewMeta {
+  :global(.ant-descriptions-item-label) {
+    width: 84px;
+  }
+}
+
+.previewBody {
+  min-height: 280px;
+}
+
+.markdownViewer {
+  max-height: 560px;
+}
+
+.textPreview {
+  margin: 0;
+  padding: 16px;
+  border-radius: 6px;
+  background: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  max-height: 560px;
+}
+
+.selectedRow {
+  :global(td) {
+    background: #f0f7ff !important;
+  }
+}
+
 @media (max-width: 960px) {
   .body {
     grid-template-columns: 1fr;
@@ -68,5 +130,13 @@
 
   .searchInput {
     width: 100%;
+  }
+
+  .statusSelect {
+    width: 100%;
+  }
+
+  .workspaceGrid {
+    grid-template-columns: 1fr;
   }
 }

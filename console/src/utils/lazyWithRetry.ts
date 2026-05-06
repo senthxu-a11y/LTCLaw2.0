@@ -44,8 +44,14 @@ const PAGE_MODULES = import.meta.glob<ComponentType<unknown>>(
     "../pages/*/index.tsx",
     "../pages/*/*/index.ts",
     "../pages/*/*/index.tsx",
-    "../pages/*/*.ts",
-    "../pages/*/*.tsx",
+    "!../pages/Chat/**",
+    "../pages/Game/GameProject.tsx",
+    "../pages/Game/SvnSync.tsx",
+    "../pages/Game/IndexMap.tsx",
+    "../pages/Game/DocLibrary.tsx",
+    "../pages/Game/KnowledgeBase.tsx",
+    "../pages/Game/NumericWorkbench.tsx",
+    "!../pages/Game/index.ts",
     "!../pages/**/__tests__/**",
     "!../pages/**/*.module.*",
     "!../pages/**/*.test.*",
@@ -97,7 +103,7 @@ export function lazyWithRetry<T extends ComponentType<unknown>>(
       const key = moduleKeyOrPath.startsWith(".")
         ? pathToModuleKey(moduleKeyOrPath)
         : moduleKeyOrPath;
-      const patched = moduleRegistry.get(key, "default");
+      const patched = moduleRegistry.getModule(key)?.default;
       if (patched) return { default: patched as T };
       return mod;
     }),
@@ -151,7 +157,7 @@ export function lazyImportWithRetry(
       () => factory().then((comp) => ({ default: comp })),
       MAX_RETRIES,
     ).then((mod) => {
-      const patched = moduleRegistry.get(key, "default");
+      const patched = moduleRegistry.getModule(key)?.default;
       if (patched) return { default: patched as ComponentType<unknown> };
       return mod;
     }),

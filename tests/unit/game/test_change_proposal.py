@@ -163,4 +163,6 @@ async def test_store_creates_proposals_directory(tmp_path):
     store = ProposalStore(tmp_path)
 
     assert store.proposals_dir == get_proposals_dir(tmp_path)
+    assert "sessions" in store.proposals_dir.parts
+    assert "tools" in store.proposals_dir.parts
     assert store.proposals_dir.exists()

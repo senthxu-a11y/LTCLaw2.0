@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 from ...app.agent_context import get_current_agent_id
 from ...app.multi_agent_manager import get_active_manager
 from ...game.change_proposal import ChangeOp, ChangeProposal
+from ...game.retrieval import unified_search
 
 
 async def _get_game_service():
@@ -168,8 +169,12 @@ async def game_reverse_impact(
 
 
 async def game_search_knowledge(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-    """Search the design knowledge base. Phase-2 stub: returns empty list."""
-    return []
+    """Search the unified game knowledge surface across KB/docs/tables/code."""
+    service, err = await _get_game_service()
+    if err:
+        return [err]
+    payload = unified_search(service, query, top_k=max(1, min(top_k, 20)), mode="hybrid")
+    return payload.get("results", [])
 
 
 async def game_list_systems() -> List[Dict[str, Any]]:

@@ -13,6 +13,7 @@ from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from starlette.responses import StreamingResponse
 
 from agentscope_runtime.engine.schemas.agent_schemas import AgentRequest
+from ...game.retrieval import build_chat_context_block, unified_search
 from ...utils.logging import LOG_FILE_PATH
 from ..agent_context import get_agent_for_request
 
@@ -29,6 +30,30 @@ def _safe_filename(name: str) -> str:
     """Safe basename, alphanumeric/./-/_, max 200 chars."""
     base = Path(name).name if name else "file"
     return re.sub(r"[^\w.\-]", "_", base)[:200] or "file"
+
+
+def _normalize_content_parts(content_parts: list) -> list:
+    """Convert plain frontend text payloads into runtime TextContent."""
+    try:
+        from agentscope_runtime.engine.schemas.agent_schemas import (
+            ContentType,
+            TextContent,
+        )
+    except Exception:
+        return content_parts
+
+    normalized = []
+    for part in content_parts:
+        if isinstance(part, str):
+            normalized.append(TextContent(type=ContentType.TEXT, text=part))
+            continue
+        if isinstance(part, dict):
+            text = part.get("text")
+            if isinstance(text, str):
+                normalized.append(TextContent(type=ContentType.TEXT, text=text))
+                continue
+        normalized.append(part)
+    return normalized
 
 
 def _extract_session_and_payload(request_data: Union[AgentRequest, dict]):
@@ -54,6 +79,7 @@ def _extract_session_and_payload(request_data: Union[AgentRequest, dict]):
                 content_parts.extend(list(content_part.content or []))
             elif isinstance(content_part, dict) and "content" in content_part:
                 content_parts.extend(content_part["content"] or [])
+        content_parts = _normalize_content_parts(content_parts)
 
     native_payload = {
         "channel_id": channel_id,
@@ -72,17 +98,16 @@ def _extract_session_and_payload(request_data: Union[AgentRequest, dict]):
 _CHAT_MODE_PREFIX: dict[str, str] = {
     "free": "",
     "design": (
-        "[模式：策划案]请按规范的策划文档结构作答（背景/目标/方案/风险/附录），引用数据来源。"
+        "[????]??????????????/??/??/??????????????"
     ),
     "numeric": (
-        "[模式：数值查询]请优先调用数值/表格相关 Skill，回答需带表名 + row_id + 字段。"
-        "如需修改请输出 changes。"
+        "[????]????????????/??/???????????????? changeset ???"
     ),
     "doc": (
-        "[模式：文档生成]请生成可直接落库的 Markdown 文档（含 frontmatter / 标题层级 / 引用清单）。"
+        "[????]?????????????? Markdown ???frontmatter????????????"
     ),
     "kb": (
-        "[模式：知识查询]请基于知识库 / 文档库 / 索引图回答，标注来源文件与命中片段。"
+        "[?????]?????????????????????????????????????"
     ),
 }
 
@@ -112,15 +137,81 @@ def _inject_chat_mode_prefix(request: "Request", native_payload: dict) -> None:
         if isinstance(part, str):
             parts[i] = f"{prefix}\n\n{part}" if part else prefix
             return
-    # No text-like part found: insert a synthetic TextContent at front.
     try:
         from agentscope_runtime.engine.schemas.agent_schemas import TextContent
 
         parts.insert(0, TextContent(text=prefix))
         native_payload["content_parts"] = parts
     except Exception:
-        # Fall back to a plain string part
         parts.insert(0, prefix)
+        native_payload["content_parts"] = parts
+
+
+def _extract_text_query(native_payload: dict) -> str:
+    parts = native_payload.get("content_parts") or []
+    texts: list[str] = []
+    for part in parts:
+        text = getattr(part, "text", None)
+        if isinstance(text, str) and text.strip():
+            texts.append(text.strip())
+            continue
+        if isinstance(part, dict):
+            candidate = part.get("text")
+            if isinstance(candidate, str) and candidate.strip():
+                texts.append(candidate.strip())
+                continue
+        if isinstance(part, str) and part.strip():
+            texts.append(part.strip())
+    return "\n".join(texts).strip()
+
+
+async def _augment_chat_mode_context(request: "Request", workspace, native_payload: dict) -> None:
+    mode = (request.headers.get("X-Chat-Mode") or "").strip().lower()
+    native_payload.setdefault("meta", {})["chat_mode"] = mode or "free"
+    if mode not in {"kb", "doc", "numeric"}:
+        return
+    game_service = workspace.service_manager.services.get("game_service")
+    if game_service is None or not getattr(game_service, "configured", False):
+        return
+    query = _extract_text_query(native_payload)
+    if not query:
+        return
+    retrieval_mode = "semantic" if mode == "doc" else "hybrid"
+    top_k = 6 if mode == "numeric" else 8
+    payload = unified_search(game_service, query, top_k=top_k, mode=retrieval_mode)
+    context_block = build_chat_context_block(payload, max_items=top_k)
+    if not context_block:
+        return
+    native_payload["meta"]["retrieval"] = {
+        "query": payload.get("query", query),
+        "mode": payload.get("mode", retrieval_mode),
+        "status": payload.get("status", {}),
+        "results": payload.get("results", []),
+    }
+    parts = native_payload.get("content_parts") or []
+    for i, part in enumerate(parts):
+        text = getattr(part, "text", None)
+        if isinstance(text, str):
+            try:
+                part.text = f"{context_block}\n\n{text}" if text else context_block
+                return
+            except Exception:
+                pass
+        if isinstance(part, dict):
+            candidate = part.get("text")
+            if isinstance(candidate, str):
+                part["text"] = f"{context_block}\n\n{candidate}" if candidate else context_block
+                return
+        if isinstance(part, str):
+            parts[i] = f"{context_block}\n\n{part}" if part else context_block
+            return
+    try:
+        from agentscope_runtime.engine.schemas.agent_schemas import TextContent
+
+        parts.insert(0, TextContent(text=context_block))
+        native_payload["content_parts"] = parts
+    except Exception:
+        parts.insert(0, context_block)
         native_payload["content_parts"] = parts
 
 
@@ -174,9 +265,10 @@ async def post_console_chat(
         )
     try:
         native_payload = _extract_session_and_payload(request_data)
+        _inject_chat_mode_prefix(request, native_payload)
+        await _augment_chat_mode_context(request, workspace, native_payload)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    _inject_chat_mode_prefix(request, native_payload)
     session_id = console_channel.resolve_session_id(
         sender_id=native_payload["sender_id"],
         channel_meta=native_payload["meta"],

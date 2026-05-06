@@ -15,7 +15,7 @@ from ltclaw_gy_x.game.config import (
     validate_project_config,
 )
 from ltclaw_gy_x.game.models import CommitResult
-from ltclaw_gy_x.game.paths import get_project_config_path
+from ltclaw_gy_x.game.paths import get_project_config_path, get_storage_summary
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +107,25 @@ async def validate_config(workspace=Depends(get_agent_for_request)):
     if project_config is None:
         return []
     return validate_project_config(project_config)
+
+
+@router.get("/storage")
+async def get_storage_summary_api(workspace=Depends(get_agent_for_request)):
+    game_service = _game_service_or_404(workspace)
+    svn_root = None
+    svn_local_root = getattr(game_service.user_config, "svn_local_root", None)
+    if svn_local_root:
+        candidate = Path(svn_local_root).expanduser()
+        if candidate.exists():
+            svn_root = candidate
+    elif game_service.project_config is not None:
+        configured_root = str(game_service.project_config.svn.root or "").strip()
+        if configured_root and "://" not in configured_root:
+            candidate = Path(configured_root).expanduser()
+            if candidate.exists():
+                svn_root = candidate
+    workspace_dir = Path(getattr(workspace, "workspace_dir", "."))
+    return get_storage_summary(workspace_dir, svn_root=svn_root)
 
 
 @router.delete("/config")

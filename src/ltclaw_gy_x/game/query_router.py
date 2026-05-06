@@ -9,7 +9,7 @@ from .models import (
     TableIndex, FieldInfo, DependencyGraph, SystemGroup,
     FieldPatch,
 )
-from .paths import get_tables_dir
+from .paths import get_dependency_graph_path, get_tables_dir
 
 
 class QueryRouter:
@@ -101,7 +101,7 @@ class QueryRouter:
             return {"upstream": [], "downstream": []}
         try:
             svn_root = Path(self.service.project_config.svn.root)
-            dep_file = svn_root / ".ltclaw_index" / "dependency_graph.json"
+            dep_file = get_dependency_graph_path(svn_root)
             if not dep_file.exists():
                 return {"upstream": [], "downstream": []}
             with open(dep_file, "r", encoding="utf-8") as file_obj:

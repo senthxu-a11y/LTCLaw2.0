@@ -30,7 +30,12 @@ export interface WorkbenchCard {
 
 const STORAGE_KEY = "ltclaw.chat.workbenchCards";
 const EVENT = "ltclaw:workbench-card";
+const OPEN_PROPOSAL_EVENT = "ltclaw:open-game-proposal";
 const MAX_KEEP = 20;
+
+export interface OpenGameProposalDetail {
+  proposalId: string;
+}
 
 function loadCards(): WorkbenchCard[] {
   try {
@@ -142,4 +147,26 @@ export function clearWorkbenchCards() {
   } catch {
     /* ignore */
   }
+}
+
+export function openGameProposal(detail: OpenGameProposalDetail) {
+  try {
+    window.dispatchEvent(new CustomEvent(OPEN_PROPOSAL_EVENT, { detail }));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function subscribeOpenGameProposal(
+  cb: (detail: OpenGameProposalDetail) => void,
+): () => void {
+  const handler = (event: Event) => {
+    const detail = (event as CustomEvent<OpenGameProposalDetail>).detail;
+    if (!detail?.proposalId) return;
+    cb(detail);
+  };
+  window.addEventListener(OPEN_PROPOSAL_EVENT, handler as EventListener);
+  return () => {
+    window.removeEventListener(OPEN_PROPOSAL_EVENT, handler as EventListener);
+  };
 }

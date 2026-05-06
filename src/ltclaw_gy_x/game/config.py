@@ -1,7 +1,7 @@
 """
-游戏策划工作台配置管理
+???????????
 
-提供项目配置和用户配置的pydantic模型、加载/保存/校验功能。
+????????????pydantic?????/??/?????
 """
 
 import os
@@ -12,73 +12,78 @@ from pathlib import Path
 from typing import Literal, Union
 from pydantic import BaseModel, Field
 
-from .paths import get_project_config_path, get_user_config_path
+from .paths import (
+    get_legacy_project_config_path,
+    get_legacy_user_config_path,
+    get_project_config_path,
+    get_user_config_path,
+)
 
 
 class ProjectMeta(BaseModel):
-    """项目基本信息"""
-    name: str = Field(description="项目名称")
-    engine: str = Field(description="游戏引擎 (如Unity, Unreal等)")
-    language: str = Field(default="zh", description="主要语言代码")
+    """??????"""
+    name: str = Field(description="????")
+    engine: str = Field(description="???? (?Unity, Unreal?)")
+    language: str = Field(default="zh", description="??????")
 
 
 class SvnConfig(BaseModel):
-    """SVN配置"""
-    root: str = Field(description="SVN工作副本根目录路径")
-    poll_interval_seconds: int = Field(default=300, description="轮询间隔秒数")
-    jitter_seconds: int = Field(default=30, description="随机抖动秒数，避免多机同时提交")
+    """SVN??"""
+    root: str = Field(description="SVN?????????")
+    poll_interval_seconds: int = Field(default=300, description="??????")
+    jitter_seconds: int = Field(default=30, description="???????????????")
 
 
 class PathRule(BaseModel):
-    """路径规则：定义哪些路径包含哪类资源"""
-    path: str = Field(description="路径模式 (支持glob)")
-    semantic: Literal["table", "doc", "template"] = Field(description="语义类型")
-    system: Union[str, None] = Field(default=None, description="所属系统名称")
+    """?????????????????"""
+    path: str = Field(description="???? (??glob)")
+    semantic: Literal["table", "doc", "template"] = Field(description="????")
+    system: Union[str, None] = Field(default=None, description="??????")
 
 
 class FilterConfig(BaseModel):
-    """过滤配置"""
+    """????"""
     include_ext: list[str] = Field(default_factory=lambda: [".xlsx", ".xls", ".csv", ".md", ".txt", ".docx"],
-                                   description="包含的文件扩展名")
+                                   description="????????")
     exclude_glob: list[str] = Field(default_factory=lambda: ["**/temp/**", "**/.svn/**", "**/~$*"],
-                                    description="排除的glob模式")
+                                    description="???glob??")
 
 
 class IDRange(BaseModel):
-    """ID范围定义"""
-    type: str = Field(description="范围类型 (如系统名称)")
-    start: int = Field(description="起始ID")
-    end: int = Field(description="结束ID (包含)")
+    """ID????"""
+    type: str = Field(description="???? (?????)")
+    start: int = Field(description="??ID")
+    end: int = Field(description="??ID (??)")
 
 
 class TableConvention(BaseModel):
-    """表格约定"""
-    header_row: int = Field(default=1, description="表头行号(1-based)")
-    comment_row: Union[int, None] = Field(default=None, description="注释行号(1-based)")
-    primary_key_field: str = Field(default="ID", description="主键字段名 (project 默认)")
+    """????"""
+    header_row: int = Field(default=1, description="????(1-based)")
+    comment_row: Union[int, None] = Field(default=None, description="????(1-based)")
+    primary_key_field: str = Field(default="ID", description="????? (project ??)")
     per_table_primary_keys: dict[str, str] = Field(
         default_factory=dict,
-        description="按表名覆盖主键字段，例如 {\"道具\": \"道具id\"}",
+        description="???????????? {\"??\": \"??id\"}",
     )
     auto_detect_primary_key: bool = Field(
         default=True,
-        description="未命中默认/覆盖时，按表头自动嗅探含 'id' 的字段（支持中英文）",
+        description="?????/???????????? 'id' ??????????",
     )
-    id_ranges: list[IDRange] = Field(default_factory=list, description="ID分段规则")
+    id_ranges: list[IDRange] = Field(default_factory=list, description="ID????")
 
     def resolve_primary_key(
         self,
         table_name: str | None = None,
         headers: list[str] | None = None,
     ) -> str:
-        """根据 per-table 覆盖 + 自动嗅探返回最终主键字段名。
+        """?? per-table ?? + ??????????????
 
-        优先级：
+        ????
           1) per_table_primary_keys[table_name]
-          2) project 默认 primary_key_field（若在 headers 中能匹配）
-          3) auto_detect_primary_key=True 时按 headers 中
-             "id" 关键字 (大小写不敏感, 支持中文 "id"/"编号"/"序号") 嗅探
-          4) 回退到 project 默认 primary_key_field
+          2) project ?? primary_key_field??? headers ?????
+          3) auto_detect_primary_key=True ?? headers ?
+             "id" ??? (??????, ???? "id"/"??"/"??") ??
+          4) ??? project ?? primary_key_field
         """
         if table_name and table_name in self.per_table_primary_keys:
             override = self.per_table_primary_keys[table_name]
@@ -93,67 +98,72 @@ class TableConvention(BaseModel):
             return lower_set[default_key.lower()]
         if not self.auto_detect_primary_key:
             return default_key
-        # 嗅探：优先精确 "id" / "编号" / "序号"，再退化到包含 "id" 的字段
-        sniff_exact = ("id", "编号", "序号")
+        # ??????? "id" / "??" / "??"??????? "id" ???
+        sniff_exact = ("id", "??", "??")
         for h in lowered:
             if h.lower() in sniff_exact:
                 return h
         for h in lowered:
-            if "id" in h.lower() or "编号" in h or "序号" in h:
+            if "id" in h.lower() or "??" in h or "??" in h:
                 return h
         return default_key
 
 
 class ModelSlotRef(BaseModel):
-    """模型槽引用"""
+    """?????"""
     provider_id: str = Field(description="Provider ID")
     model_id: str = Field(description="Model ID")
 
 
 class ProjectConfig(BaseModel):
-    """项目配置"""
+    """????"""
     schema_version: Literal["project-config.v1"] = Field(default="project-config.v1")
     project: ProjectMeta
     svn: SvnConfig
     paths: list[PathRule] = Field(default_factory=list)
     filters: FilterConfig = Field(default_factory=FilterConfig)
     table_convention: TableConvention = Field(default_factory=TableConvention)
-    doc_templates: dict[str, str] = Field(default_factory=dict, description="文档模板映射")
-    models: dict[str, ModelSlotRef] = Field(default_factory=dict, description="AI模型配置")
+    doc_templates: dict[str, str] = Field(default_factory=dict, description="??????")
+    models: dict[str, ModelSlotRef] = Field(default_factory=dict, description="AI????")
 
 
 class UserGameConfig(BaseModel):
-    """用户游戏配置"""
-    my_role: Literal["maintainer", "consumer"] = Field(default="consumer", description="我的角色")
-    svn_local_root: Union[str, None] = Field(default=None, description="本地SVN工作副本根目录")
-    svn_url: Union[str, None] = Field(default=None, description="SVN远端URL")
-    svn_username: Union[str, None] = Field(default=None, description="SVN用户名")
-    svn_password: Union[str, None] = Field(default=None, description="SVN密码(落盘加密)")
-    svn_trust_cert: bool = Field(default=False, description="信任自签证书")
+    """??????"""
+    my_role: Literal["maintainer", "consumer"] = Field(default="consumer", description="????")
+    svn_local_root: Union[str, None] = Field(default=None, description="??SVN???????")
+    svn_url: Union[str, None] = Field(default=None, description="SVN??URL")
+    svn_username: Union[str, None] = Field(default=None, description="SVN???")
+    svn_password: Union[str, None] = Field(default=None, description="SVN??(????)")
+    svn_trust_cert: bool = Field(default=False, description="??????")
 
 
 class ValidationIssue(BaseModel):
-    """配置校验问题"""
+    """??????"""
     severity: Literal["error", "warning"]
-    path: str = Field(description="问题路径")
-    message: str = Field(description="问题描述")
+    path: str = Field(description="????")
+    message: str = Field(description="????")
 
 
 def load_project_config(svn_root: Path) -> Union[ProjectConfig, None]:
-    """加载项目配置，不存在返回None"""
-    config_path = get_project_config_path(svn_root)
-    if not config_path.exists():
-        return None
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        return ProjectConfig.model_validate(data)
-    except Exception:
-        return None
+    """????????????None"""
+    config_paths = [
+        get_project_config_path(svn_root),
+        get_legacy_project_config_path(svn_root),
+    ]
+    for config_path in config_paths:
+        if not config_path.exists():
+            continue
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            return ProjectConfig.model_validate(data)
+        except Exception:
+            continue
+    return None
 
 
 def save_project_config(svn_root: Path, cfg: ProjectConfig) -> None:
-    """保存项目配置，原子写入"""
+    """???????????"""
     config_path = get_project_config_path(svn_root)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
@@ -175,7 +185,7 @@ def save_project_config(svn_root: Path, cfg: ProjectConfig) -> None:
 
 
 def validate_project_config(cfg: ProjectConfig) -> list[ValidationIssue]:
-    """校验项目配置"""
+    """??????"""
     issues = []
     svn_root_str = cfg.svn.root or ""
     is_remote = any(svn_root_str.startswith(p) for p in ("svn://", "svn+ssh://", "http://", "https://", "file://"))
@@ -185,13 +195,13 @@ def validate_project_config(cfg: ProjectConfig) -> list[ValidationIssue]:
             issues.append(ValidationIssue(
                 severity="warning",
                 path="svn.root",
-                message=f"SVN根目录不存在: {svn_root}",
+                message=f"SVN??????: {svn_root}",
             ))
         elif svn_root_str and not (svn_root / ".svn").exists():
             issues.append(ValidationIssue(
                 severity="warning",
                 path="svn.root",
-                message=f"目录不是SVN工作副本: {svn_root}",
+                message=f"????SVN????: {svn_root}",
             ))
     id_ranges = cfg.table_convention.id_ranges
     for i, range1 in enumerate(id_ranges):
@@ -200,7 +210,7 @@ def validate_project_config(cfg: ProjectConfig) -> list[ValidationIssue]:
                 issues.append(ValidationIssue(
                     severity="warning",
                     path=f"table_convention.id_ranges[{i}]",
-                    message=f"ID范围重叠: {range1.type}({range1.start}-{range1.end}) 与 {range2.type}({range2.start}-{range2.end})"
+                    message=f"ID????: {range1.type}({range1.start}-{range1.end}) ? {range2.type}({range2.start}-{range2.end})"
                 ))
     for i, rule in enumerate(cfg.paths):
         try:
@@ -208,13 +218,13 @@ def validate_project_config(cfg: ProjectConfig) -> list[ValidationIssue]:
                 issues.append(ValidationIssue(
                     severity="error",
                     path=f"paths[{i}].path",
-                    message="路径不能为空"
+                    message="??????"
                 ))
         except Exception as e:
             issues.append(ValidationIssue(
                 severity="error",
                 path=f"paths[{i}]",
-                message=f"路径规则校验失败: {e}"
+                message=f"????????: {e}"
             ))
     return issues
 
@@ -223,25 +233,27 @@ _USER_SECRET_FIELDS: frozenset[str] = frozenset({"svn_password"})
 
 
 def load_user_config() -> UserGameConfig:
-    """加载用户配置，解密敏感字段"""
-    config_path = get_user_config_path()
-    if not config_path.exists():
-        return UserGameConfig()
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
+    """?????????????"""
+    config_paths = [get_user_config_path(), get_legacy_user_config_path()]
+    for config_path in config_paths:
+        if not config_path.exists():
+            continue
         try:
-            from ltclaw_gy_x.security.secret_store import decrypt_dict_fields
-            data = decrypt_dict_fields(dict(data), _USER_SECRET_FIELDS)
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            try:
+                from ltclaw_gy_x.security.secret_store import decrypt_dict_fields
+                data = decrypt_dict_fields(dict(data), _USER_SECRET_FIELDS)
+            except Exception:
+                pass
+            return UserGameConfig.model_validate(data)
         except Exception:
-            pass
-        return UserGameConfig.model_validate(data)
-    except Exception:
-        return UserGameConfig()
+            continue
+    return UserGameConfig()
 
 
 def save_user_config(cfg: UserGameConfig) -> None:
-    """保存用户配置，原子写入；敏感字段加密"""
+    """??????????????????"""
     config_path = get_user_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
     payload = cfg.model_dump(exclude_defaults=False)

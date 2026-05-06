@@ -7,6 +7,7 @@ import {
   subscribeWorkbenchCards,
   subscribeWorkbenchCardsBackend,
   clearWorkbenchCards,
+  openGameProposal,
   type WorkbenchCard,
 } from "../workbenchCardChannel";
 import { useAgentStore } from "../../../stores/agentStore";
@@ -84,13 +85,23 @@ export default function WorkbenchCardPanel() {
                 <div style={{ fontSize: 12, color: "var(--ant-color-text-secondary)", whiteSpace: "pre-wrap" }}>
                   {c.summary}
                 </div>
-                {c.href && (
-                  <div style={{ marginTop: 4 }}>
+                <div style={{ marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {c.kind === "draft_doc" && typeof c.payload?.proposalId === "string" && (
+                    <Button
+                      size="small"
+                      type="link"
+                      style={{ padding: 0, height: "auto" }}
+                      onClick={() => openGameProposal({ proposalId: c.payload?.proposalId as string })}
+                    >
+                      {t("chat.workbenchCardOpenProposal", { defaultValue: "查看草案 →" })}
+                    </Button>
+                  )}
+                  {c.href && (
                     <Link to={c.href} style={{ fontSize: 12 }}>
                       {t("chat.workbenchCardOpen", { defaultValue: "打开 →" })}
                     </Link>
-                  </div>
-                )}
+                  )}
+                </div>
               </List.Item>
             )}
           />

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FieldChange } from "../../../api/modules/gameWorkbench";
 
 /**
@@ -17,6 +17,11 @@ export interface DirtyCell {
 }
 
 export type DirtyMap = Record<string, DirtyCell>;
+
+interface UseDirtyCellsOptions {
+  initialCells?: DirtyCell[];
+  onChange?: (cells: DirtyCell[]) => void;
+}
 
 export function dirtyKeyOf(
   table: string,
@@ -57,8 +62,16 @@ export function coerceCellValue(
   return { value: raw, typeOk: true };
 }
 
-export function useDirtyCells() {
-  const [dirty, setDirty] = useState<DirtyMap>({});
+const cellsToMap = (cells: DirtyCell[]): DirtyMap =>
+  Object.fromEntries(
+    cells.map((cell) => [dirtyKeyOf(cell.table, cell.rowKey, cell.field), cell]),
+  );
+
+export function useDirtyCells(options: UseDirtyCellsOptions = {}) {
+  const { initialCells = [], onChange } = options;
+  const initialSerialized = JSON.stringify(initialCells);
+  const externalStateRef = useRef(initialSerialized);
+  const [dirty, setDirty] = useState<DirtyMap>(() => cellsToMap(initialCells));
 
   const setCell = useCallback((cell: DirtyCell) => {
     setDirty((prev) => ({
@@ -93,6 +106,21 @@ export function useDirtyCells() {
   const clearAll = useCallback(() => setDirty({}), []);
 
   const dirtyList = useMemo(() => Object.values(dirty), [dirty]);
+
+  useEffect(() => {
+    const serialized = JSON.stringify(initialCells);
+    if (serialized === externalStateRef.current) return;
+    externalStateRef.current = serialized;
+    setDirty(cellsToMap(initialCells));
+  }, [initialCells]);
+
+  useEffect(() => {
+    if (!onChange) return;
+    const serialized = JSON.stringify(dirtyList);
+    if (serialized === externalStateRef.current) return;
+    externalStateRef.current = serialized;
+    onChange(dirtyList);
+  }, [dirtyList, onChange]);
 
   const validChanges = useMemo<FieldChange[]>(
     () =>

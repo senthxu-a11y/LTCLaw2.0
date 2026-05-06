@@ -27,7 +27,19 @@ export async function registerHostModulesDynamic(): Promise<void> {
       "../pages/*/index.tsx",
       "../pages/*/*/index.ts",
       "../pages/*/*/index.tsx",
+      "!../pages/Chat/**",
+      "../pages/Game/GameProject.tsx",
+      "../pages/Game/SvnSync.tsx",
+      "../pages/Game/IndexMap.tsx",
+      "../pages/Game/DocLibrary.tsx",
+      "../pages/Game/KnowledgeBase.tsx",
+      "../pages/Game/NumericWorkbench.tsx",
+      "!../pages/Game/index.ts",
       "!../pages/**/__tests__/**",
+      "!../pages/**/*.module.*",
+      "!../pages/**/*.test.*",
+      "!../pages/**/*.spec.*",
+      "!../pages/**/*.d.ts",
     ],
     {
       eager: false,
@@ -45,11 +57,17 @@ export async function registerHostModulesDynamic(): Promise<void> {
   let registeredCount = 0;
   for (const [path, importFn] of Object.entries(modules)) {
     try {
-      // Convert absolute path to module key
-      // "../pages/Agent/Config/index.tsx" -> "Agent/Config/index"
+      // Convert absolute path to module key.
+      // Directory entries keep their explicit ".../index" key.
+      // Flat page files are additionally exposed as ".../index"
+      // so lazyImportWithRetry("../../pages/Game/NumericWorkbench")
+      // can resolve the plugin-patch lookup key consistently.
       const moduleKey = path
         .replace(/^\.\.\/pages\//, "")
         .replace(/\.(ts|tsx)$/, "");
+      const aliasKey = /\/index$/.test(moduleKey)
+        ? null
+        : `${moduleKey}/index`;
 
       // Lazy load the module
       const module = await importFn();
@@ -57,48 +75,9 @@ export async function registerHostModulesDynamic(): Promise<void> {
       // Check if module has exports
       if (module && Object.keys(module).length > 0) {
         moduleRegistry.register(moduleKey, module);
-        registeredCount++;
-      }
-    } catch (error) {
-      console.warn(`[patchable] Failed to register module: ${path}`, error);
-    }
-  }
-
-  console.log(`[patchable] Registered ${registeredCount} module(s)`);
-}
-
-/**
- * Alternative: Eager loading (loads all page entry modules immediately)
- * Use this if you need all modules available at startup
- *
- * Excludes test files using negative glob patterns at build time
- */
-export function registerHostModulesEager(): void {
-  // Eager loading - all modules loaded at build time
-  // Use negative patterns to exclude test files at glob level
-  const modules = import.meta.glob<Record<string, unknown>>(
-    [
-      "../pages/*/index.ts",
-      "../pages/*/index.tsx",
-      "../pages/*/*/index.ts",
-      "../pages/*/*/index.tsx",
-      "!../pages/**/__tests__/**",
-    ],
-    {
-      eager: true,
-      import: "*",
-    },
-  );
-
-  let registeredCount = 0;
-  for (const [path, module] of Object.entries(modules)) {
-    try {
-      const moduleKey = path
-        .replace(/^\.\.\/pages\//, "")
-        .replace(/\.(ts|tsx)$/, "");
-
-      if (module && Object.keys(module).length > 0) {
-        moduleRegistry.register(moduleKey, module);
+        if (aliasKey) {
+          moduleRegistry.register(aliasKey, module);
+        }
         registeredCount++;
       }
     } catch (error) {

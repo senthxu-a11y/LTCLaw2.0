@@ -3,6 +3,8 @@
 > 更新日期：2026-04-30（深夜补丁 II）
 > 关联：[v1-progress-2026-04-30-pm.md](./v1-progress-2026-04-30-pm.md)、[game-planner-workbench-planv.0.md](./game-planner-workbench-planv.0.md)
 
+> 增补说明（2026-05-06）：4 月 30 日之后，数值工作台主线又完成了一轮会话化收口。本页保留 4 月 30 日时点报告作为阶段记录；若评估当前状态，需要叠加下面的“后续增量更新”。
+
 ## 1. 整体完成度
 
 | 维度 | 上一版 (pm) | 本版 (night II) |
@@ -68,3 +70,30 @@
 1. **真实 LLM + 真实 SVN 冒烟**：用户配置生产 SVN URL/凭据后，跑 `game_propose_change → dry_run → approve（走 /approval/stream 推送）→ apply → commit_with_retry`；验证 multi-reviewer SSE 联动 + revision 守卫真实表现。
 2. **P2 #5 .cs 索引**：起独立 `code_index` 子系统（.cs → 类/方法符号表），与 `table_indexer` 解耦，落 `{workspace}/code_index/`。
 3. **P2 #6 reverse-impact**：基于 `dependency_graph` + .cs 索引做反向传播，在 propose / preview 阶段提示「本次改动会影响 X、Y、Z」。
+
+## 7. 后续增量更新（2026-05-06）
+
+### 数值工作台完成“会话驱动版”收口
+
+- `console/src/pages/Game/NumericWorkbench.tsx` 已从单页调值器演进为 `会话列表页 + 会话内工作台页`
+- `console/src/pages/Game/hooks/useWorkbenchSessions.ts` 成为统一状态源，接管 dirty cells、chat messages、open tables、active tab、pinned tab、search/highlight、lastManualSavedAt
+- 早期 `useWorkbenchChatSessions` 路线已被统一 session store 替代，重复写状态导致的卡死问题已通过 equality short-circuit 收口
+- 会话操作只保留 `切换 / 新建 / 重命名 / 删除`，复制入口已移除；删除按钮已前置到会话卡片和工具条
+
+### 工作流语义完成拆分
+
+- `保存当前会话` 与 `导出草稿` 已拆成两个不同动作，不再把“会话保存”误绑定到 dirty item 数量
+- 导出草稿后保留本地 dirty，不再中断持续调值流程
+- 右栏布局已切为常驻 side panel，承载 `修改 / 影响 / AI建议`，不再依赖旧版 Drawer 承载核心工作区
+
+### Chat / Proposal 联动补齐
+
+- 工作台可推送 `numeric_table` 与 `draft_doc` 卡片到 Chat 右栏
+- `draft_doc` 卡片若带 `proposalId`，可直接打开 proposal 管理 drawer 定位详情
+- URL 深链已与 `session / table / row / field` 上下文同步，AI 首条建议、jumpToCell、tab 切换、关闭表等动作都可回写当前定位
+
+### 当前真实评估修正
+
+- 数值工作台完成度已明显高于本页发布时点，可按“当前完成度最高的业务模块”看待
+- 但“知识库 / 文档库实用度 ~85%”这一旧估值偏乐观：KnowledgeBase 已较实，DocLibrary 仍明显偏弱，当前不能把两者视为同一成熟度
+- 当前最大的系统性风险已从前端交互本身转移到 `DocLibrary 真后端缺口` 与 `真实 SVN / 真实 LLM 生产冒烟`

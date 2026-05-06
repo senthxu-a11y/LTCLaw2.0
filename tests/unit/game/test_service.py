@@ -19,7 +19,7 @@ from ltclaw_gy_x.game.service import GameService, SimpleModelRouter
 
 @pytest.fixture
 def isolated_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("QWENPAW_WORKING_DIR", str(tmp_path / "qpw"))
+    monkeypatch.setenv("LTCLAW_WORKING_DIR", str(tmp_path / "qpw"))
     yield tmp_path
 
 
@@ -45,7 +45,8 @@ def test_initial_state_unconfigured(service):
 
 
 def test_workspace_game_dir_created(service, tmp_path):
-    assert (tmp_path / "workspace" / "game_index").exists()
+    expected = tmp_path / "qpw" / "game_data" / "agents" / "workspace" / "sessions" / "default" / "workbench"
+    assert expected.exists()
 
 
 @pytest.mark.asyncio

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from ...app.agent_context import get_agent_for_request
 from ...app.workspace.workspace import Workspace
 from ...game.models import FieldPatch, FieldInfo
+from ...game.retrieval import get_retrieval_status
 
 
 class QueryRequest(BaseModel):
@@ -95,6 +96,17 @@ async def query(request: QueryRequest, workspace: Workspace = Depends(get_agent_
     _, qr = _get(workspace)
     return await qr.query(request.q, request.mode)
 
+
+@router.get("/status")
+async def get_index_status(
+    rebuild_doc_index: bool = Query(False),
+    workspace: Workspace = Depends(get_agent_for_request),
+):
+    svc, _ = _get(workspace)
+    if not getattr(svc, "configured", False):
+        return {"configured": False}
+    return get_retrieval_status(svc, rebuild_doc_index=rebuild_doc_index)
+
 @router.get("/tables/{name}/rows")
 async def get_table_rows(
     name: str,
@@ -128,17 +140,17 @@ async def rebuild_index(workspace: Workspace = Depends(get_agent_for_request)):
 
 @router.get("/impact")
 async def reverse_impact(
-    table: str = Query(..., description="目标表名"),
-    field: Optional[str] = Query(None, description="目标字段（可选，留空则按整表分析）"),
-    max_depth: int = Query(3, ge=1, le=6, description="最大递归深度"),
+    table: str = Query(..., description="????"),
+    field: Optional[str] = Query(None, description="?????????????????"),
+    max_depth: int = Query(3, ge=1, le=6, description="??????"),
     workspace: Workspace = Depends(get_agent_for_request),
 ):
-    """反向遍历依赖图，给出受影响的下游表/字段（用于 NumericWorkbench 影响范围侧栏）。
+    """?????????????????/????? NumericWorkbench ????????
 
-    语义：DependencyEdge(from_table.from_field → to_table.to_field) 表示
-    `from_table` 的某行通过 `from_field` 引用 `to_table.to_field`。
-    因此当目标 `to_table` 的行被修改时，所有 `from_table` 都是潜在下游。
-    本接口对每个被影响节点继续向上递归，输出 BFS 路径。
+    ???DependencyEdge(from_table.from_field ? to_table.to_field) ??
+    `from_table` ????? `from_field` ?? `to_table.to_field`?
+    ????? `to_table` ????????? `from_table` ???????
+    ???????????????????? BFS ???
     """
     svc, _ = _get(workspace)
     committer = getattr(svc, "index_committer", None)
@@ -151,14 +163,14 @@ async def reverse_impact(
     if dep is None:
         return {"target": {"table": table, "field": field}, "impacts": [], "tables": [], "total": 0}
 
-    # 索引边：to_table -> [edge]
+    # ????to_table -> [edge]
     by_to: dict[str, list] = {}
     for e in getattr(dep, "edges", []) or []:
         by_to.setdefault(e.to_table, []).append(e)
 
     seen: set[tuple[str, str]] = set()
     impacts: list[dict] = []
-    # BFS 队列：(table, field|None, depth, path_str)
+    # BFS ???(table, field|None, depth, path_str)
     queue: list[tuple[str, Optional[str], int, list[str]]] = [
         (table, field, 0, [f"{table}{('.' + field) if field else ''}"])
     ]

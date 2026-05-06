@@ -97,13 +97,13 @@
   },
   "docLibrary": {
     "title": "Doc Library",
-    "description": "Browse placeholder planning docs, spreadsheets, and collaboration files until real indexing is wired in.",
+    "description": "Browse planning docs, numeric notes, and collaboration files from the current project.",
     "categoryTitle": "Categories",
-    "categoryHint": "Filter mock documents by the current category tree.",
+    "categoryHint": "Filter real project documents by category.",
     "listTitle": "Document List",
     "searchPlaceholder": "Search title, author, or tag",
     "empty": "No documents match the current filters",
-    "mockFallback": "The Doc Library API returned no data yet, showing mock content instead.",
+    "mockFallback": "Failed to load the document library. Check the project config or local SVN working copy.",
     "columns": {
       "title": "Title",
       "type": "Type",
