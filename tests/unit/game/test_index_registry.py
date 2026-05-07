@@ -106,16 +106,14 @@ def test_registry_integrity_hash_matches_payload(committer):
     assert data["integrity"]["dependency_graph_sha256"] == expected_g
 
 
-def test_save_all_writes_registry_to_cache_and_svn(committer):
+def test_save_all_writes_registry_to_app_owned_cache(committer):
     cs = ChangeSet(from_rev=0, to_rev=1, added=[], modified=[], deleted=[])
     asyncio.run(committer.save_all([_make_table("A")], _make_graph(), cs))
     assert committer.registry_file.exists()
     cache = json.loads(committer.registry_file.read_text(encoding="utf-8"))
     assert cache["schema_version"] == "registry.v1"
-    assert committer.svn_registry_file is not None
-    assert committer.svn_registry_file.exists()
-    out = json.loads(committer.svn_registry_file.read_text(encoding="utf-8"))
-    assert out["dependencies_count"] == 1
+    assert cache["dependencies_count"] == 1
+    assert committer.svn_registry_file is None
 
 
 def test_load_registry_roundtrip(committer):

@@ -596,7 +596,13 @@ Implemented scope note:
 
 ### P1.10 [R] P1 Review Gate
 
-Status as of 2026-05-07: final P1 gate passed, including safe build endpoint and safe frontend build UX.
+Status as of 2026-05-07: final P1 gate passed for a local-first MVP loop, including safe build endpoint and safe frontend build UX.
+
+Boundary qualifier:
+
+1. P1 is complete for trusted or single-user local-first MVP usage.
+2. P1 is not yet a hardened multi-role governance surface.
+3. Build, set-current, full-payload build, and future map-edit routes still require backend capability checks before multi-user use.
 
 Checklist:
 
@@ -626,6 +632,7 @@ Current non-goal at this gate:
 1. Direct ordinary-user exposure of `POST /game/knowledge/releases/build`.
 2. Release candidate selection UX beyond empty/default `candidate_ids`.
 3. RAG or semantic retrieval beyond current keyword-only release query.
+4. Full permission hardening for build/publish/map-edit.
 
 ---
 
@@ -638,7 +645,9 @@ Current scope note as of 2026-05-07:
 1. `pending/test_plans.jsonl` and `pending/release_candidates.jsonl` are app-owned pending data under the project store.
 2. Test plans and release candidates do not automatically enter the formal knowledge release.
 3. Test plans and release candidates do not automatically set the current knowledge release.
-4. The current P2.1/P2.2 slice does not read or write SVN and does not copy raw source files.
+4. Ordinary workbench fast testing does not require administrator acceptance.
+5. Candidate `accepted` is release-eligibility state, not a required approval gate for fast numeric testing.
+6. The current P2.1/P2.2 slice does not read or write SVN and does not copy raw source files.
 
 ### P2.1 [S] Add Test Plan Store
 
@@ -1199,7 +1208,7 @@ Implemented scope note:
 
 Depends on: P3.7a
 
-Status as of 2026-05-07: completed as a backend-only formal map store plus GET/PUT API slice.
+Status as of 2026-05-07: backend store/API validation landed; not productized.
 
 Tasks:
 
@@ -1220,18 +1229,57 @@ Acceptance:
 
 Implemented scope note:
 
-1. The current P3.7b implementation updates these files: `src/ltclaw_gy_x/game/paths.py`, `src/ltclaw_gy_x/game/knowledge_formal_map_store.py`, `src/ltclaw_gy_x/app/routers/game_knowledge_map.py`, `src/ltclaw_gy_x/app/routers/agent_scoped.py`, `tests/unit/game/test_knowledge_formal_map_store.py`, and `tests/unit/routers/test_game_knowledge_map_router.py`.
+1. The current P3.7b implementation updates these files: `src/ltclaw_gy_x/game/paths.py`, `src/ltclaw_gy_x/game/local_project_paths.py`, `src/ltclaw_gy_x/game/knowledge_formal_map_store.py`, `src/ltclaw_gy_x/game/knowledge_release_builders.py`, `src/ltclaw_gy_x/app/routers/game_knowledge_map.py`, `src/ltclaw_gy_x/app/routers/agent_scoped.py`, `tests/unit/game/test_knowledge_formal_map_store.py`, and `tests/unit/routers/test_game_knowledge_map_router.py`.
 2. The saved formal map lives under the app-owned project store at `working/formal_map.json`.
 3. `GET /game/knowledge/map` now returns `mode=formal_map` plus `map`, `map_hash`, `updated_at`, and `updated_by` when a saved formal map exists.
 4. `GET /game/knowledge/map` returns HTTP 200 with `mode=no_formal_map` and null `map`, `map_hash`, `updated_at`, and `updated_by` when no saved formal map exists.
 5. `PUT /game/knowledge/map` accepts `map` plus optional `updated_by`, then returns `mode=formal_map_saved`, `map_hash`, `updated_at`, and `updated_by`.
-6. Save-time validation currently covers `KnowledgeMap` schema validation, relative `source_path` guard, allowed `status` values, relationship endpoint reference validation, and deterministic `map_hash` generation.
+6. Save-time validation currently covers `KnowledgeMap` schema validation, allowed enum `status` values through model validation, tables/docs/scripts `source_path` guards, relationship endpoint reference validation, relationship `source_hash` prefix validation, deprecated-ref validation, and deterministic `map_hash` generation.
 7. The formal-map save path uses app-owned storage only and does not modify any historical release, does not auto-build a release, does not auto-set current release, and does not read or write SVN.
 8. The current validation scope remains backend-only; no frontend UI or map-review UX is added in this slice.
 
+Open product gaps:
+
+1. Safe-build formal-map consumption is not implemented yet.
+2. Formal map review UX is not implemented yet.
+3. Frontend exposure should wait until role-gating for formal map writes is decided.
+
+### P3.7b+ [P] Safe-Build Formal Map Consumption Boundary
+
+Depends on: P3.7b backend store/API validation
+
+Status as of 2026-05-07: next recommended construction slice.
+
+Purpose:
+
+1. Decide and implement how `working/formal_map.json` is consumed during the next safe release build.
+2. Keep formal-map save separate from release build; saving a formal map must still not mutate releases, set current release, or touch SVN.
+3. Make release build the only point where a saved formal map may be snapshotted into `releases/<release_id>/map.json`.
+
+Tasks:
+
+1. Add a boundary review or implementation note for formal-map build consumption.
+2. Decide whether `build-from-current-indexes` should prefer `working/formal_map.json` when present.
+3. If preferred, validate the saved formal map again at build time before snapshotting.
+4. Ensure the manifest `map_hash` matches the final release `map.json`.
+5. Add tests for these cases:
+   - no saved formal map: build keeps deterministic generated map behavior
+   - valid saved formal map: build snapshots it into the new release
+   - invalid saved formal map: build fails clearly and does not create a partial release
+   - saved formal map release id mismatch: build either rewrites through a deliberate rule or rejects clearly
+6. Do not add frontend UI in this slice.
+
+Acceptance:
+
+1. The build-consumption rule is explicit and tested.
+2. Saving formal map remains a non-release mutation.
+3. Release build remains the only release-history mutation point.
+4. Current-release pointer is not changed unless the existing build endpoint explicitly does that by contract.
+5. No SVN read/write is introduced by formal-map consumption.
+
 ### P3.7c [P] Map Review UX
 
-Depends on: P3.7b API shape
+Depends on: P3.7b API shape, P3.7b+ safe-build consumption rule
 
 Tasks:
 
@@ -1247,8 +1295,8 @@ Acceptance:
 
 Next-step note:
 
-1. Two reasonable follow-ups are formal map review UX design and safe-build formal-map consumption boundary implementation.
-2. The recommended order is to review and lock the safe-build consumption boundary first, then design or implement UI on top of that boundary.
+1. The next recommended follow-up is P3.7b+ safe-build formal-map consumption.
+2. After P3.7b+ is locked, design or implement UI on top of that boundary.
 3. The key open rule is whether the next safe build should prefer `working/formal_map.json` and how that saved formal map should be snapshotted into `release/map.json`.
 
 ### P3.8 [S] RAG Router Over Current Release

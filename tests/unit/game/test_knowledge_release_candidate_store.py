@@ -143,7 +143,10 @@ def test_list_release_candidates_does_not_modify_pending_file_or_release_state(m
     assert not (project_root / '.svn').exists()
 
 
-@pytest.mark.parametrize('source_path', ['../Secrets.xlsx', 'C:/abs/path.xlsx', '/abs/path.xlsx'])
+@pytest.mark.parametrize(
+    'source_path',
+    ['../Secrets.xlsx', '..\\Secrets.xlsx', 'C:/abs/path.xlsx', 'C:\\abs\\path.xlsx', '/abs/path.xlsx'],
+)
 def test_append_rejects_release_candidate_source_path_escape(monkeypatch, tmp_path, source_path):
     working_root = tmp_path / 'ltclaw-data'
     project_root = tmp_path / 'project-root'

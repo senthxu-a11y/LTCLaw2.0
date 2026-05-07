@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .local_project_paths import normalize_local_project_relative_path
 from .models import ReleaseCandidate
 from .paths import get_project_store_dir, get_release_candidates_path
 
@@ -113,11 +114,7 @@ def _normalize_status_filter(value: str | None) -> str | None:
 
 
 def _normalize_relative_path(value: str) -> str:
-    raw_value = str(value or '').strip()
-    candidate = Path(raw_value)
-    if not candidate.parts or candidate.is_absolute() or raw_value.startswith(('/', '\\')):
-        raise KnowledgeReleaseCandidateValidationError(f'Invalid source path: {value!r}')
-    normalized_parts = [part for part in candidate.parts if part not in ('', '.')]
-    if not normalized_parts or any(part == '..' for part in normalized_parts):
-        raise KnowledgeReleaseCandidateValidationError(f'Invalid source path: {value!r}')
-    return Path(*normalized_parts).as_posix()
+    try:
+        return normalize_local_project_relative_path(value, error_label='source path')
+    except ValueError as exc:
+        raise KnowledgeReleaseCandidateValidationError(f'Invalid source path: {value!r}') from exc

@@ -83,14 +83,7 @@ def _manifest(project_root: Path, release_id: str, knowledge_map):
 
 
 def _create_release(monkeypatch, tmp_path, release_id: str):
-    working_root = tmp_path / 'ltclaw-data'
-    project_root = tmp_path / 'project-root'
-    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
-    _write_source(project_root, 'Tables/SkillTable.xlsx', 'table source\n')
-    _write_source(project_root, 'Docs/Combat.md', 'doc source\n')
-    _write_source(project_root, 'Scripts/CombatResolver.cs', 'script source\n')
-    knowledge_map = _knowledge_map(release_id)
-    manifest = _manifest(project_root, release_id, knowledge_map)
+    project_root, manifest, knowledge_map = _create_release_inputs(monkeypatch, tmp_path, release_id)
     release_dir = create_release(
         project_root,
         manifest,
@@ -103,6 +96,18 @@ def _create_release(monkeypatch, tmp_path, release_id: str):
         release_notes='# release notes\n',
     )
     return project_root, release_dir, manifest
+
+
+def _create_release_inputs(monkeypatch, tmp_path, release_id: str):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'table source\n')
+    _write_source(project_root, 'Docs/Combat.md', 'doc source\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'script source\n')
+    knowledge_map = _knowledge_map(release_id)
+    manifest = _manifest(project_root, release_id, knowledge_map)
+    return project_root, manifest, knowledge_map
 
 
 def test_create_release_writes_app_owned_assets(monkeypatch, tmp_path):
@@ -149,6 +154,14 @@ def test_get_current_release_fails_clearly_when_missing(monkeypatch, tmp_path):
 
     with pytest.raises(CurrentKnowledgeReleaseNotSetError, match='No current knowledge release is set'):
         get_current_release(project_root)
+
+
+@pytest.mark.parametrize('asset_path', ['../escape.jsonl', '..\\escape.jsonl', 'C:/abs/path.jsonl', '/abs/path.jsonl'])
+def test_create_release_rejects_index_asset_path_escape(monkeypatch, tmp_path, asset_path):
+    project_root, manifest, knowledge_map = _create_release_inputs(monkeypatch, tmp_path, 'release-asset-path')
+
+    with pytest.raises(ValueError, match='Invalid release asset path'):
+        create_release(project_root, manifest, knowledge_map, indexes={asset_path: '{}\n'})
 
 
 @pytest.mark.parametrize('release_id', ['', '.', '..', '../escape', 'nested/id', 'nested\\id'])

@@ -66,7 +66,10 @@ def test_list_test_plans_returns_empty_when_missing(monkeypatch, tmp_path):
     assert list_test_plans(project_root) == []
 
 
-@pytest.mark.parametrize('source_path', ['../Secrets.xlsx', 'C:/abs/path.xlsx', '/abs/path.xlsx'])
+@pytest.mark.parametrize(
+    'source_path',
+    ['../Secrets.xlsx', '..\\Secrets.xlsx', 'C:/abs/path.xlsx', 'C:\\abs\\path.xlsx', '/abs/path.xlsx'],
+)
 def test_append_rejects_source_path_escape(monkeypatch, tmp_path, source_path):
     working_root = tmp_path / 'ltclaw-data'
     project_root = tmp_path / 'project-root'

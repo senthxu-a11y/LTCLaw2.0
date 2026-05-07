@@ -425,3 +425,22 @@ def test_export_script_evidence_jsonl_empty_result():
 def test_validate_release_id_boundaries(release_id):
     with pytest.raises(ValueError, match="Invalid release id"):
         validate_release_id(release_id)
+
+
+@pytest.mark.parametrize('source_path', ['../Secrets.xlsx', '..\\Secrets.xlsx', 'C:/abs/path.xlsx', '/abs/path.xlsx'])
+def test_validate_knowledge_map_rejects_source_path_escape(source_path):
+    knowledge_map = build_minimal_map(
+        'release-001',
+        tables=[
+            KnowledgeTableRef(
+                table_id='SkillTable',
+                title='SkillTable',
+                source_path=source_path,
+                source_hash='sha256:table',
+                system_id='combat',
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match='Invalid local project relative path'):
+        validate_knowledge_map(knowledge_map)

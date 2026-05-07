@@ -8,10 +8,11 @@ Authority:
 2. docs/tasks/knowledge-p3-1-rag-read-boundary-review-2026-05-07.md
 3. docs/tasks/knowledge-p2-gate-status-2026-05-07.md
 4. docs/tasks/knowledge-p1-gate-status-2026-05-07.md
+5. docs/tasks/knowledge-admin-vs-fast-test-boundary-review-2026-05-07.md
 
 ## Scope Snapshot
 
-The current completed P3 slice is narrow and backend-only.
+The current P3 record is narrow and backend-only.
 
 Completed in this gate:
 
@@ -24,7 +25,10 @@ Completed in this gate:
 7. P3.5 backend-only deterministic map candidate builder.
 8. P3.6 read-only map candidate API skeleton.
 9. P3.7a formal map read/save boundary review.
-10. P3.7b backend-only formal map store plus GET/PUT API.
+
+Partially landed but not gate-passed:
+
+1. P3.7b backend-only formal map store plus GET/PUT API draft.
 
 This gate does not introduce a real LLM, embedding, vector store, frontend RAG UI, or SVN behavior.
 
@@ -121,18 +125,30 @@ This gate does not introduce a real LLM, embedding, vector store, frontend RAG U
 7. The review concludes that future release build may snapshot saved formal map only during a later safe build, while candidate map remains advisory only.
 8. The next recommended implementation step is backend formal map store plus GET/PUT API, not frontend UI.
 
-### P3.7b Completed Scope
+### P3.7b Backend Store/API Scope
 
-1. A backend-only formal map store now exists under app-owned project state.
-2. The implementation files for this slice are `src/ltclaw_gy_x/game/paths.py`, `src/ltclaw_gy_x/game/knowledge_formal_map_store.py`, `src/ltclaw_gy_x/app/routers/game_knowledge_map.py`, `src/ltclaw_gy_x/app/routers/agent_scoped.py`, `tests/unit/game/test_knowledge_formal_map_store.py`, and `tests/unit/routers/test_game_knowledge_map_router.py`.
+P3.7b backend validation is now complete for the store/API skeleton, but it is still not a shipped product surface.
+
+The current code satisfies the P3.7a save-boundary validation requirement for backend persistence. Safe-build consumption and frontend map-review UX remain separate follow-up work.
+
+Currently landed:
+
+1. A backend-only formal map store draft exists under app-owned project state.
+2. The implementation files for this slice are `src/ltclaw_gy_x/game/paths.py`, `src/ltclaw_gy_x/game/local_project_paths.py`, `src/ltclaw_gy_x/game/knowledge_formal_map_store.py`, `src/ltclaw_gy_x/game/knowledge_release_builders.py`, `src/ltclaw_gy_x/app/routers/game_knowledge_map.py`, `src/ltclaw_gy_x/app/routers/agent_scoped.py`, `tests/unit/game/test_knowledge_formal_map_store.py`, and `tests/unit/routers/test_game_knowledge_map_router.py`.
 3. The saved formal map path is app-owned project storage at `working/formal_map.json`.
 4. `GET /api/agents/{agentId}/game/knowledge/map` now returns `mode=formal_map` plus `map`, `map_hash`, `updated_at`, and `updated_by` when a saved formal map exists.
 5. `GET /api/agents/{agentId}/game/knowledge/map` returns HTTP 200 with `mode=no_formal_map` and null `map`, `map_hash`, `updated_at`, and `updated_by` when no saved formal map exists.
 6. `PUT /api/agents/{agentId}/game/knowledge/map` accepts `map` plus optional `updated_by`, then returns `mode=formal_map_saved`, `map_hash`, `updated_at`, and `updated_by`.
-7. Save-time validation currently covers `KnowledgeMap` schema validation, relative `source_path` guard, allowed `status` values, relationship endpoint reference validation, and deterministic `map_hash` generation.
+7. Save-time validation currently covers `KnowledgeMap` schema validation, allowed enum `status` values through model validation, tables/docs/scripts `source_path` guards, relationship endpoint reference validation, relationship `source_hash` prefix validation, deprecated-ref validation, and deterministic `map_hash` generation.
 8. The save path remains app-owned only: it does not mutate historical releases, does not auto-build, does not auto-set current release, and does not read or write SVN.
 9. The router remains thin and candidate-map read behavior from P3.6 is preserved.
 10. This slice added no frontend UI and no new release mutation behavior.
+
+Still missing before this becomes a product workflow:
+
+1. formal map review UX
+2. safe-build formal-map consumption rule
+3. a decision on whether the formal map API must be role-gated before frontend use
 
 ## Endpoint Summary
 
@@ -187,11 +203,11 @@ The current verified summary is:
 18. P3.5 touched Python files were rechecked as `NUL=0`.
 19. P3.6 minimal adjacent regression across map builder/router plus release store/service and RAG context/answer: `52 passed`.
 20. P3.6 touched Python files were rechecked as `NUL=0`.
-21. P3.7b focused formal-map suite: `20 passed`.
-22. P3.7b router suite: `12 passed`.
-23. P3.7b adjacent regression: `56 passed`.
+21. Current formal-map focused collection in this repository is 9 store tests plus 8 router tests.
+22. Current targeted formal-map/router focused regression after source-path repair: `17 passed`.
+23. Current knowledge-release/plan/candidate/query/RAG/map/workbench adjacent regression after source-path repair: `166 passed`.
 24. P3.7b touched Python files were rechecked as `NUL=0`.
-25. P3.7b added no frontend change, no release mutation, no auto build, no auto set current, and no SVN read/write.
+25. The partial P3.7b draft added no frontend change, no release mutation, no auto build, no auto set current, and no SVN read/write.
 
 ## Current Risks And Notes
 
@@ -210,21 +226,23 @@ The current verified summary is:
 
 1. Formal map review UX.
 2. Safe-build formal-map consumption boundary and implementation are not yet finalized.
-3. Real LLM integration.
-4. Embedding or vector store.
-5. Frontend RAG UI.
-6. Candidate-evidence RAG usage.
+3. Formal map review UX is not implemented.
+4. Real LLM integration.
+5. Embedding or vector store.
+6. Frontend RAG UI.
+7. Candidate-evidence RAG usage.
 
 ## Recommended Next Step
 
-The recommended next direction after P3.7b is:
+The recommended next direction after the P3.7b backend validation slice is:
 
 1. Do not start with UI.
-2. Prefer P3.7c as safe-build formal-map consumption boundary review or implementation.
-3. Do not add frontend UI until the build-consumption rule is confirmed.
-4. The core open question is whether the next safe build should prefer `working/formal_map.json` and how that saved formal map should be snapshotted into `release/map.json`.
-5. Keep candidate-map exposure backend-only until formal-map persistence and build consumption are both validated.
-6. Keep `candidate_evidence.jsonl` excluded unless a later dedicated review explicitly widens the boundary.
+2. Treat P3.7b backend validation as landed.
+3. Do the safe-build formal-map consumption boundary review or implementation next.
+4. Do not add frontend UI until the build-consumption rule is confirmed.
+5. The core open question is whether the next safe build should prefer `working/formal_map.json` and how that saved formal map should be snapshotted into `release/map.json`.
+6. Keep candidate-map exposure backend-only until formal-map persistence and build consumption are both validated.
+7. Keep `candidate_evidence.jsonl` excluded unless a later dedicated review explicitly widens the boundary.
 
 ## Gate Decision
 
@@ -239,5 +257,5 @@ The current P3 gate result is:
 7. P3.5 is complete as a backend-only deterministic map candidate builder.
 8. P3.6 is complete as a read-only map candidate API skeleton.
 9. P3.7a is complete as a formal map read/save boundary review.
-10. P3.7b is complete as a backend-only formal map store plus GET/PUT API slice.
+10. P3.7b backend store/API validation is complete, but frontend exposure remains blocked on formal-map role-gating and safe-build consumption decisions.
 11. The current slice is still not a shipped RAG answer or map-review product surface because no formal map review UX, finalized safe-build formal-map consumption rule, real LLM, or frontend UI has been added.

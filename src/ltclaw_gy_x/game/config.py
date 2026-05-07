@@ -99,12 +99,12 @@ class TableConvention(BaseModel):
         if not self.auto_detect_primary_key:
             return default_key
         # ??????? "id" / "??" / "??"??????? "id" ???
-        sniff_exact = ("id", "??", "??")
+        sniff_exact = ("id", "\u7f16\u53f7", "\u7de8\u865f", "??", "??")
         for h in lowered:
             if h.lower() in sniff_exact:
                 return h
         for h in lowered:
-            if "id" in h.lower() or "??" in h or "??" in h:
+            if "id" in h.lower() or "\u7f16\u53f7" in h or "\u7de8\u865f" in h or "??" in h or "??" in h:
                 return h
         return default_key
 

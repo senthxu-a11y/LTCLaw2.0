@@ -7,6 +7,7 @@ Authority:
 1. docs/plans/knowledge-architecture-handover-2026-05-06.md
 2. docs/plans/knowledge-p1-local-first-scope-2026-05-06.md
 3. docs/tasks/knowledge-p0-p3-implementation-checklist.md
+4. docs/tasks/knowledge-admin-vs-fast-test-boundary-review-2026-05-07.md
 
 ## Scope Snapshot
 
@@ -22,6 +23,13 @@ Completed in this gate:
 6. P2.6 frontend release candidate selection UI.
 
 This gate covers app-owned pending persistence, backend-only build-time candidate inclusion, and the minimal frontend candidate selection UI on top of the existing safe build boundary. It still does not include admin approval UI, candidate-evidence query or RAG usage, or any P3 work.
+
+Boundary clarification:
+
+1. P2 does not add administrator acceptance to ordinary workbench fast testing.
+2. Test plans can be created, tested, kept, or discarded without administrator acceptance.
+3. Release candidates are optional future release-build inputs, not automatic formal knowledge changes.
+4. Candidate `accepted` means release-eligible candidate state; it is not a required approval gate for fast numeric testing.
 
 Final gate decision:
 

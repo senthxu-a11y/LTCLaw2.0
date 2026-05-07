@@ -7,6 +7,8 @@ Authority:
 1. docs/plans/knowledge-architecture-handover-2026-05-06.md
 2. docs/plans/knowledge-p1-local-first-scope-2026-05-06.md
 3. docs/tasks/knowledge-p0-p3-implementation-checklist.md
+4. docs/tasks/knowledge-admin-vs-fast-test-boundary-review-2026-05-07.md
+5. docs/tasks/knowledge-p1-boundary-audit-2026-05-07.md
 
 ## Scope Snapshot
 
@@ -32,6 +34,12 @@ The completed frontend scope now includes P1.9a and P1.9d:
 
 The original full-payload build endpoint remains non-productized.
 
+Gate interpretation:
+
+1. P1 is complete for a local-first MVP loop in a trusted or single-user context.
+2. P1 is not complete as a hardened multi-role governance surface.
+3. Backend capability checks for build, set-current, full-payload build, and future map edit remain follow-up work.
+
 ## Verified Items
 
 The current P1 gate results are:
@@ -54,6 +62,8 @@ The current P1 gate results are:
 3. P1.8 current-release query is keyword-only; it is not RAG.
 4. The current P1.9d build modal sends only `release_id` and `release_notes`; release candidate selection UX is still deferred.
 5. Several Python files in this Windows workspace had DLP/NUL corruption and were rewritten as clean UTF-8 before the final regressions.
+6. Release build and set-current still need backend role/capability checks before multi-user usage.
+7. The frontend build button is not itself a security boundary; backend enforcement is still required.
 
 ## Recommendation For Next Step
 

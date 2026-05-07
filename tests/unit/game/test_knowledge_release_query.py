@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
+import pytest
+
 from ltclaw_gy_x.game.knowledge_release_builders import build_minimal_manifest, build_minimal_map
 from ltclaw_gy_x.game.knowledge_release_query import query_current_release
 from ltclaw_gy_x.game.knowledge_release_store import create_release, set_current_release
@@ -151,7 +153,8 @@ def test_query_current_release_returns_no_current_release(monkeypatch, tmp_path)
     }
 
 
-def test_query_current_release_ignores_manifest_index_path_escape(monkeypatch, tmp_path):
+@pytest.mark.parametrize('index_path', ['../outside-doc.jsonl', '..\\outside-doc.jsonl', 'C:/outside-doc.jsonl'])
+def test_query_current_release_ignores_manifest_index_path_escape(monkeypatch, tmp_path, index_path):
     working_root = tmp_path / 'ltclaw-data'
     project_root = tmp_path / 'project-root'
     monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
@@ -178,7 +181,7 @@ def test_query_current_release_ignores_manifest_index_path_escape(monkeypatch, t
     )
     manifest_path = get_release_dir(project_root, 'release-002') / 'manifest.json'
     manifest_payload = json.loads(manifest_path.read_text(encoding='utf-8'))
-    manifest_payload['indexes']['doc_knowledge']['path'] = '../outside-doc.jsonl'
+    manifest_payload['indexes']['doc_knowledge']['path'] = index_path
     manifest_path.write_text(json.dumps(manifest_payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
     payload = query_current_release(project_root, 'damage')

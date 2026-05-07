@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .local_project_paths import normalize_local_project_relative_path
 from .knowledge_release_store import (
     CurrentKnowledgeReleaseNotSetError,
     KnowledgeReleaseNotFoundError,
@@ -102,13 +103,11 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def _resolve_release_index_path(release_dir: Path, relative_path: str | None) -> Path | None:
-    candidate = Path(str(relative_path or '').strip())
-    if not candidate.parts or candidate.is_absolute():
+    try:
+        normalized_path = normalize_local_project_relative_path(relative_path, error_label='release index path')
+    except ValueError:
         return None
-    normalized_parts = [part for part in candidate.parts if part not in ('', '.')]
-    if not normalized_parts or any(part == '..' for part in normalized_parts):
-        return None
-    resolved = (release_dir / Path(*normalized_parts)).resolve(strict=False)
+    resolved = (release_dir / normalized_path).resolve(strict=False)
     release_root = release_dir.resolve(strict=False)
     try:
         resolved.relative_to(release_root)

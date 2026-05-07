@@ -195,7 +195,8 @@ def test_build_current_release_context_reads_only_current_release_artifacts(monk
     assert (project_root / 'Scripts' / 'CombatResolver.cs').resolve(strict=False) not in normalized_reads
 
 
-def test_build_current_release_context_rejects_manifest_index_path_escape(monkeypatch, tmp_path):
+@pytest.mark.parametrize('index_path', ['../outside-doc.jsonl', '..\\outside-doc.jsonl', 'C:/outside-doc.jsonl'])
+def test_build_current_release_context_rejects_manifest_index_path_escape(monkeypatch, tmp_path, index_path):
     working_root = tmp_path / 'ltclaw-data'
     project_root = tmp_path / 'project-root'
     monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
@@ -208,10 +209,10 @@ def test_build_current_release_context_rejects_manifest_index_path_escape(monkey
 
     manifest_path = get_release_dir(project_root, 'release-escape') / 'manifest.json'
     manifest_payload = json.loads(manifest_path.read_text(encoding='utf-8'))
-    manifest_payload['indexes']['doc_knowledge']['path'] = '../outside-doc.jsonl'
+    manifest_payload['indexes']['doc_knowledge']['path'] = index_path
     manifest_path.write_text(json.dumps(manifest_payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
-    with pytest.raises(KnowledgeReleaseContextPathError, match=r"Invalid release artifact path: '\.\./outside-doc\.jsonl'"):
+    with pytest.raises(KnowledgeReleaseContextPathError, match='Invalid release artifact path'):
         build_current_release_context(project_root, 'combat damage')
 
 

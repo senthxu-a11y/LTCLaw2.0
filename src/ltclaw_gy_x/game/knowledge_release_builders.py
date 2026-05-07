@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from .local_project_paths import normalize_local_project_relative_path
 from .models import (
     CodeFileIndex,
     DocIndex,
@@ -182,6 +183,12 @@ def validate_release_id(release_id: str) -> str:
 
 def validate_knowledge_map(knowledge_map: KnowledgeMap) -> None:
     validate_release_id(knowledge_map.release_id)
+    for table in knowledge_map.tables:
+        _normalize_local_project_relative_path(table.source_path)
+    for doc in knowledge_map.docs:
+        _normalize_local_project_relative_path(doc.source_path)
+    for script in knowledge_map.scripts:
+        _normalize_local_project_relative_path(script.source_path)
     refs = _collect_map_refs(knowledge_map)
     for relationship in knowledge_map.relationships:
         if relationship.from_ref not in refs:
@@ -344,13 +351,7 @@ def _collect_map_refs(knowledge_map: KnowledgeMap) -> set[str]:
 
 
 def _normalize_local_project_relative_path(source_path: str) -> str:
-    candidate = Path(str(source_path or "").strip())
-    if not candidate.parts or candidate.is_absolute():
-        raise ValueError(f"Invalid local project relative path: {source_path!r}")
-    normalized_parts = [part for part in candidate.parts if part not in ("", ".")]
-    if not normalized_parts or any(part == ".." for part in normalized_parts):
-        raise ValueError(f"Invalid local project relative path: {source_path!r}")
-    return Path(*normalized_parts).as_posix()
+    return normalize_local_project_relative_path(source_path)
 
 
 def _normalize_relative_release_path(path: str) -> str:

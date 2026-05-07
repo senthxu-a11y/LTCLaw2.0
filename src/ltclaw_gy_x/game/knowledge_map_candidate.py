@@ -7,6 +7,7 @@ from typing import Any, Iterable
 
 from .knowledge_rag_context import KnowledgeReleaseContextPathError, _resolve_release_artifact_path
 from .knowledge_release_builders import build_minimal_map
+from .local_project_paths import normalize_local_project_relative_path
 from .knowledge_release_store import get_current_release, load_knowledge_map, load_manifest
 from .models import (
     KnowledgeDocRef,
@@ -351,13 +352,7 @@ def _namespace_head(namespace: Any) -> str:
 
 
 def _normalize_source_path(value: Any) -> str:
-    candidate = Path(str(value or '').strip())
-    if not candidate.parts or candidate.is_absolute():
-        raise ValueError(f'Invalid local project relative path: {value!r}')
-    normalized_parts = [part for part in candidate.parts if part not in ('', '.')]
-    if not normalized_parts or any(part == '..' for part in normalized_parts):
-        raise ValueError(f'Invalid local project relative path: {value!r}')
-    return Path(*normalized_parts).as_posix()
+    return normalize_local_project_relative_path(value)
 
 
 def _normalize_identifier(value: Any) -> str | None:

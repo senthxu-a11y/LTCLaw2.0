@@ -74,6 +74,7 @@ def test_user_config_operations(tmp_path, monkeypatch):
     """Test user config save and load"""
     user_config_path = tmp_path / "game_user.yaml"
     monkeypatch.setattr("ltclaw_gy_x.game.paths.get_user_config_path", lambda: user_config_path)
+    monkeypatch.setattr("ltclaw_gy_x.game.config.get_user_config_path", lambda: user_config_path)
     user_config = UserGameConfig(
         my_role="maintainer",
         svn_local_root="C:/workspace/game",

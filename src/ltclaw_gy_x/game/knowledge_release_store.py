@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .knowledge_release_builders import validate_knowledge_manifest, validate_knowledge_map, validate_release_id
+from .local_project_paths import normalize_local_project_relative_path
 from .models import KnowledgeManifest, KnowledgeMap, KnowledgeReleasePointer
 from .paths import get_current_release_path, get_knowledge_releases_dir, get_release_dir
 
@@ -139,13 +140,10 @@ def _write_indexes(indexes_dir: Path, indexes: Mapping[str, IndexPayload]) -> No
 
 
 def _normalize_relative_path(relative_path: str) -> Path:
-    candidate = Path(str(relative_path or '').strip())
-    if not candidate.parts or candidate.is_absolute():
-        raise ValueError(f'Invalid release asset path: {relative_path!r}')
-    normalized_parts = [part for part in candidate.parts if part not in ('', '.')]
-    if not normalized_parts or any(part == '..' for part in normalized_parts):
-        raise ValueError(f'Invalid release asset path: {relative_path!r}')
-    return Path(*normalized_parts)
+    try:
+        return Path(normalize_local_project_relative_path(relative_path, error_label='release asset path'))
+    except ValueError as exc:
+        raise ValueError(f'Invalid release asset path: {relative_path!r}') from exc
 
 
 def _atomic_write_json(path: Path, payload: Any) -> None:
