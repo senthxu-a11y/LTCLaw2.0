@@ -94,6 +94,42 @@ export interface CommitResult {
   skipped_reason?: string | null;
 }
 
+export interface KnowledgeIndexArtifact {
+  path: string;
+  hash?: string | null;
+  count: number;
+}
+
+export interface KnowledgeManifest {
+  schema_version?: "knowledge-manifest.v1";
+  release_id: string;
+  created_at: string;
+  created_by?: string | null;
+  project_root_hash?: string | null;
+  source_snapshot?: string | null;
+  source_snapshot_hash?: string | null;
+  map_hash?: string | null;
+  indexes: Record<string, KnowledgeIndexArtifact>;
+}
+
+export interface KnowledgeReleasePointer {
+  schema_version?: "knowledge-release-pointer.v1";
+  release_id: string;
+  manifest_path: string;
+  map_path: string;
+  updated_at: string;
+}
+
+export interface ReleaseCandidateListItem {
+  candidate_id: string;
+  test_plan_id: string;
+  title: string;
+  status: "pending" | "accepted" | "rejected";
+  selected: boolean;
+  source_refs: string[];
+  created_at: string;
+}
+
 export type FieldConfidence = "confirmed" | "high_ai" | "low_ai";
 
 export interface FieldInfo {

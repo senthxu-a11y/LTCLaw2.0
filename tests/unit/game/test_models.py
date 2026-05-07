@@ -1,4 +1,4 @@
-"""单元测试: game.models 序列化往返。"""
+"""????: game.models ??????"""
 from datetime import datetime
 
 import pytest
@@ -13,9 +13,20 @@ from ltclaw_gy_x.game.models import (
     FieldConfidence,
     FieldInfo,
     FieldPatch,
+    KnowledgeDocRef,
+    KnowledgeManifest,
+    KnowledgeMap,
+    KnowledgeRelationship,
+    KnowledgeReleasePointer,
+    KnowledgeScriptRef,
+    KnowledgeSystem,
+    KnowledgeTableRef,
+    ReleaseCandidate,
     SystemGroup,
     TableIndex,
     TablePage,
+    WorkbenchTestPlan,
+    WorkbenchTestPlanChange,
 )
 
 
@@ -137,3 +148,96 @@ def test_dependency_snapshot_default_empty():
     snap = DependencySnapshot()
     assert snap.upstream == []
     assert snap.downstream == []
+
+
+def test_knowledge_release_models_roundtrip():
+    system = KnowledgeSystem(system_id="combat", title="Combat")
+    table = KnowledgeTableRef(
+        table_id="SkillTable",
+        title="SkillTable",
+        source_path="Tables/SkillTable.xlsx",
+        source_hash="sha256:table",
+        system_id="combat",
+    )
+    doc = KnowledgeDocRef(
+        doc_id="combat-doc",
+        title="Combat Design",
+        source_path="Docs/combat.md",
+        source_hash="sha256:doc",
+        system_id="combat",
+    )
+    script = KnowledgeScriptRef(
+        script_id="combat-script",
+        title="CombatFormula",
+        source_path="Scripts/CombatFormula.cs",
+        source_hash="sha256:script",
+        system_id="combat",
+    )
+    manifest = KnowledgeManifest(
+        release_id="release-001",
+        created_at=_now(),
+        source_snapshot="snapshot-001",
+        systems=[system],
+        tables=[table],
+        docs=[doc],
+        scripts=[script],
+    )
+    relationship = KnowledgeRelationship(
+        relationship_id="rel-1",
+        from_ref="table:SkillTable",
+        to_ref="doc:combat-doc",
+        relation_type="documented_by",
+        source_hash="sha256:rel",
+    )
+    knowledge_map = KnowledgeMap(
+        release_id="release-001",
+        relationships=[relationship],
+        source_hash="sha256:map",
+    )
+    pointer = KnowledgeReleasePointer(
+        release_id="release-001",
+        updated_at=_now(),
+    )
+
+    manifest_back = KnowledgeManifest.model_validate(manifest.model_dump(mode="json"))
+    map_back = KnowledgeMap.model_validate(knowledge_map.model_dump(mode="json"))
+    pointer_back = KnowledgeReleasePointer.model_validate(pointer.model_dump(mode="json"))
+
+    assert manifest_back.schema_version == "knowledge-manifest.v1"
+    assert manifest_back.tables[0].source_path == "Tables/SkillTable.xlsx"
+    assert map_back.relationships[0].source_hash == "sha256:rel"
+    assert pointer_back.map_path == "map.json"
+
+
+def test_workbench_test_plan_and_release_candidate_roundtrip():
+    change = WorkbenchTestPlanChange(
+        table="SkillTable",
+        primary_key={"field": "id", "value": "1029"},
+        field="damage",
+        before="100",
+        after="120",
+        source_path="Tables/SkillTable.xlsx",
+    )
+    test_plan = WorkbenchTestPlan(
+        id="test-plan-001",
+        status="draft",
+        title="Skill damage tuning test",
+        changes=[change],
+        created_at=_now(),
+        created_by="user",
+    )
+    candidate = ReleaseCandidate(
+        candidate_id="candidate-001",
+        test_plan_id="test-plan-001",
+        title="Skill damage tuning test",
+        source_hash="sha256:test-plan",
+        created_at=_now(),
+    )
+
+    test_plan_back = WorkbenchTestPlan.model_validate(test_plan.model_dump(mode="json"))
+    candidate_back = ReleaseCandidate.model_validate(candidate.model_dump(mode="json"))
+
+    assert test_plan_back.schema_version == "workbench-test-plan.v1"
+    assert test_plan_back.changes[0].source_path == "Tables/SkillTable.xlsx"
+    assert candidate_back.schema_version == "release-candidate.v1"
+    assert candidate_back.selected is False

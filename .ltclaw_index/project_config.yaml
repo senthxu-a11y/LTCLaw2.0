@@ -1,0 +1,32 @@
+doc_templates: {}
+filters:
+  exclude_glob:
+  - '**/temp/**'
+  - '**/.svn/**'
+  - '**/~$*'
+  include_ext:
+  - .md
+  - .txt
+  - .docx
+  - .html
+models: {}
+paths:
+- path: docs
+  semantic: doc
+  system: null
+project:
+  engine: Unity
+  language: zh
+  name: LTClaw2.0
+schema_version: project-config.v1
+svn:
+  jitter_seconds: 30
+  poll_interval_seconds: 300
+  root: C:/dev/LTClaw2.0
+table_convention:
+  auto_detect_primary_key: true
+  comment_row: null
+  header_row: 1
+  id_ranges: []
+  per_table_primary_keys: {}
+  primary_key_field: ID

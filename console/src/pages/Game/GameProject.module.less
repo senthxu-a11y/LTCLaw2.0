@@ -79,6 +79,186 @@
           line-height: 1.6;
         }
 
+        .releaseHint {
+          margin-bottom: 16px;
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+          line-height: 1.6;
+        }
+
+        .releaseActions {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+
+        .releaseAlert {
+          margin-bottom: 16px;
+        }
+
+        .releaseCandidateSection {
+          margin-top: 16px;
+          padding-top: 16px;
+          border-top: 1px solid var(--ant-color-border-secondary);
+        }
+
+        .releaseCandidateHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 8px;
+        }
+
+        .releaseCandidateHint {
+          margin-bottom: 12px;
+          color: var(--ant-color-text-secondary);
+          font-size: 12px;
+          line-height: 1.6;
+        }
+
+        .releaseCandidateAlert {
+          margin-bottom: 12px;
+        }
+
+        .releaseCandidateList {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .releaseCandidateRow {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          padding: 10px 12px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-bg-container);
+          cursor: pointer;
+        }
+
+        .releaseCandidateMain {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .releaseCandidateTitleRow {
+          margin-bottom: 6px;
+        }
+
+        .releaseCandidateMeta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px 16px;
+          color: var(--ant-color-text-secondary);
+          font-size: 12px;
+          line-height: 1.6;
+          word-break: break-word;
+        }
+
+        .releaseCandidateEmpty {
+          padding: 12px 0;
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+        }
+
+        .releaseSummary {
+          margin-bottom: 16px;
+          padding: 12px 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-fill-quaternary);
+        }
+
+        .releaseSummaryRow {
+          display: grid;
+          grid-template-columns: 180px minmax(0, 1fr);
+          gap: 12px;
+          padding: 6px 0;
+        }
+
+        .releaseSummaryLabel {
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+        }
+
+        .releaseSummaryValue {
+          color: var(--ant-color-text);
+          font-size: 13px;
+          word-break: break-word;
+        }
+
+        .releaseCounters {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 12px;
+        }
+
+        .releaseListBlock {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .releaseListHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+
+        .releaseActions {
+          align-items: flex-start;
+        }
+        }
+
+        .releaseList {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .releaseRow {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 12px 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-bg-container);
+        }
+
+        .releaseRowMain {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .releaseRowTop {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+
+        .releaseRowMeta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px 16px;
+          color: var(--ant-color-text-secondary);
+          font-size: 12px;
+          line-height: 1.6;
+        }
+
+        .releaseEmpty {
+          padding: 16px 0;
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+        }
+
         .storageGroup {
           margin-bottom: 16px;
 
@@ -147,6 +327,19 @@
       .storageRow {
         grid-template-columns: 1fr;
         gap: 4px;
+      }
+
+      .releaseSummaryRow {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      .releaseListHeader,
+      .releaseRow,
+      .releaseCandidateHeader,
+      .releaseCandidateRow {
+        flex-direction: column;
+        align-items: stretch;
       }
     }
   }

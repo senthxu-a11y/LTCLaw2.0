@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
 import { Form, Input, Switch, Button, Card } from "@agentscope-ai/design";
-import { Modal, Space } from "antd";
+import { Alert, Checkbox, Modal, Space, Tag, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
 import { gameApi } from "../../api/modules/game";
+import { gameKnowledgeReleaseApi } from "../../api/modules/gameKnowledgeRelease";
 import { agentsApi } from "../../api/modules/agents";
-import type { GameStorageSummary, ProjectConfig, ValidationIssue } from "../../api/types/game";
+import type { GameStorageSummary, KnowledgeManifest, ProjectConfig, ReleaseCandidateListItem, ValidationIssue } from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
 import styles from "./GameProject.module.less";
 
 const { TextArea } = Input;
+const { Text } = Typography;
 
 interface GameProjectFormData {
   name: string;
@@ -30,6 +32,19 @@ interface GameProjectFormData {
   index_commit_message_template: string;
 }
 
+interface BuildReleaseFormData {
+  release_id: string;
+  release_notes?: string;
+}
+
+const LOCAL_PROJECT_DIRECTORY_LABEL = "local project directory";
+
+function createDefaultReleaseId(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `v${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())}.${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+}
+
 export default function GameProject() {
   const { t } = useTranslation();
   const { message } = useAppMessage();
@@ -39,17 +54,84 @@ export default function GameProject() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [storageSummary, setStorageSummary] = useState<GameStorageSummary | null>(null);
+  const [releaseLoading, setReleaseLoading] = useState(true);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+  const [releases, setReleases] = useState<KnowledgeManifest[]>([]);
+  const [currentRelease, setCurrentRelease] = useState<KnowledgeManifest | null>(null);
+  const [settingCurrentId, setSettingCurrentId] = useState<string | null>(null);
+  const [buildModalOpen, setBuildModalOpen] = useState(false);
+  const [buildingRelease, setBuildingRelease] = useState(false);
+  const [buildCandidatesLoading, setBuildCandidatesLoading] = useState(false);
+  const [buildCandidatesError, setBuildCandidatesError] = useState<string | null>(null);
+  const [buildCandidates, setBuildCandidates] = useState<ReleaseCandidateListItem[]>([]);
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSaving, setWizardSaving] = useState(false);
+  const [buildForm] = Form.useForm<BuildReleaseFormData>();
   const [wizardForm] = Form.useForm<{ id?: string; name: string }>();
+
+  const getIndexCount = (manifest: KnowledgeManifest | null, indexName: string) => manifest?.indexes?.[indexName]?.count ?? 0;
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) {
+      return "-";
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value;
+    }
+    return parsed.toLocaleString();
+  };
+
+  const fetchKnowledgeReleases = async (agentId: string) => {
+    setReleaseLoading(true);
+    setReleaseError(null);
+    try {
+      const [releaseList, current] = await Promise.all([
+        gameKnowledgeReleaseApi.listReleases(agentId),
+        gameKnowledgeReleaseApi.getCurrentRelease(agentId),
+      ]);
+      setReleases(releaseList);
+      setCurrentRelease(current);
+    } catch (err) {
+      setReleaseError(err instanceof Error ? err.message : t("gameProject.releaseLoadFailed", { defaultValue: "Failed to load knowledge release status" }));
+      setReleases([]);
+      setCurrentRelease(null);
+    } finally {
+      setReleaseLoading(false);
+    }
+  };
+
+  const fetchBuildCandidates = async (agentId: string) => {
+    setBuildCandidatesLoading(true);
+    setBuildCandidatesError(null);
+    try {
+      const items = await gameKnowledgeReleaseApi.listBuildCandidates(agentId);
+      setBuildCandidates(items);
+    } catch (err) {
+      setBuildCandidates([]);
+      setBuildCandidatesError(
+        err instanceof Error
+          ? err.message
+          : t("gameProject.releaseCandidatesLoadFailed", { defaultValue: "Failed to load release candidates" }),
+      );
+    } finally {
+      setBuildCandidatesLoading(false);
+    }
+  };
 
   const fetchConfig = async () => {
     if (!selectedAgent) {
       setLoading(false);
+      setReleaseLoading(false);
+      setReleaseError(null);
+      setReleases([]);
+      setCurrentRelease(null);
       return;
     }
     setLoading(true);
     setError(null);
+    void fetchKnowledgeReleases(selectedAgent);
     try {
       const [projectConfig, userConfig, storage] = await Promise.all([
         gameApi.getProjectConfig(selectedAgent),
@@ -118,7 +200,10 @@ export default function GameProject() {
         {
           title: t("gameProject.storageProjectTitle", { defaultValue: "项目级" }),
           items: [
-            [t("gameProject.storageSvnRoot", { defaultValue: "工程根目录" }), storageSummary.svn_root || "-"],
+            [
+              t("gameProject.storageSvnRoot", { defaultValue: "local project directory" }),
+              storageSummary.svn_root || "-",
+            ],
             [t("gameProject.storageProjectStore", { defaultValue: "项目存储目录" }), storageSummary.project_store_dir || "-"],
             [t("gameProject.storageProjectConfig", { defaultValue: "项目配置文件" }), storageSummary.project_config_path || "-"],
             [t("gameProject.storageProjectIndexes", { defaultValue: "项目索引目录" }), storageSummary.project_index_dir || "-"],
@@ -179,7 +264,7 @@ export default function GameProject() {
     if (!workingCopyPath) {
       throw new Error(
         t("gameProject.svnWorkingCopyPathRequired", {
-          defaultValue: "请填写本地SVN工作副本路径（先 svn checkout 到本地）",
+          defaultValue: "请填写 local project directory",
         }),
       );
     }
@@ -305,6 +390,100 @@ export default function GameProject() {
     fetchConfig();
   };
 
+  const handleSetCurrentRelease = async (releaseId: string) => {
+    if (!selectedAgent) {
+      return;
+    }
+    try {
+      setSettingCurrentId(releaseId);
+      await gameKnowledgeReleaseApi.setCurrentRelease(selectedAgent, releaseId);
+      await fetchKnowledgeReleases(selectedAgent);
+      message.success(
+        t("gameProject.releaseSetCurrentSuccess", {
+          defaultValue: `Current knowledge release updated: ${releaseId}`,
+        }),
+      );
+    } catch (err) {
+      message.warning(
+        err instanceof Error
+          ? err.message
+          : t("gameProject.releaseSetCurrentFailed", { defaultValue: "Failed to set current knowledge release" }),
+      );
+    } finally {
+      setSettingCurrentId(null);
+    }
+  };
+
+  const openBuildReleaseModal = () => {
+    buildForm.setFieldsValue({
+      release_id: createDefaultReleaseId(),
+      release_notes: currentRelease ? `Build from current indexes based on ${currentRelease.release_id}` : "",
+    });
+    setSelectedCandidateIds([]);
+    setBuildCandidates([]);
+    setBuildCandidatesError(null);
+    setBuildModalOpen(true);
+    if (selectedAgent) {
+      void fetchBuildCandidates(selectedAgent);
+    }
+  };
+
+  const closeBuildReleaseModal = () => {
+    if (buildingRelease) {
+      return;
+    }
+    setBuildModalOpen(false);
+    setBuildCandidatesError(null);
+    setBuildCandidates([]);
+    setSelectedCandidateIds([]);
+  };
+
+  const refreshBuildCandidates = async () => {
+    if (!selectedAgent) {
+      return;
+    }
+    await fetchBuildCandidates(selectedAgent);
+  };
+
+  const handleBuildRelease = async () => {
+    if (!selectedAgent) {
+      return;
+    }
+    try {
+      const values = await buildForm.validateFields();
+      setBuildingRelease(true);
+      const result = await gameKnowledgeReleaseApi.buildReleaseFromCurrentIndexes(selectedAgent, {
+        release_id: values.release_id.trim(),
+        release_notes: values.release_notes?.trim() || "",
+        candidate_ids: selectedCandidateIds,
+      });
+      await fetchKnowledgeReleases(selectedAgent);
+      setBuildModalOpen(false);
+      buildForm.resetFields();
+      setBuildCandidatesError(null);
+      setBuildCandidates([]);
+      setSelectedCandidateIds([]);
+      message.success(
+        t("gameProject.releaseBuildSuccess", {
+          defaultValue: `Knowledge release built: ${result.manifest.release_id}`,
+        }),
+      );
+    } catch (err) {
+      setBuildCandidatesError(
+        err instanceof Error
+          ? err.message
+          : t("gameProject.releaseBuildFailed", { defaultValue: "Failed to build knowledge release" }),
+      );
+      message.warning(
+        err instanceof Error
+          ? err.message
+          : t("gameProject.releaseBuildFailed", { defaultValue: "Failed to build knowledge release" }),
+      );
+    } finally {
+      setBuildingRelease(false);
+    }
+  };
+
   useEffect(() => {
     fetchConfig();
   }, [selectedAgent]);
@@ -338,6 +517,110 @@ export default function GameProject() {
 
       <div className={styles.content}>
         <Form form={form} layout="vertical" className={styles.form}>
+          <Card
+            title={t("gameProject.knowledgeReleaseTitle", { defaultValue: "Knowledge Release Status" })}
+            className={styles.section}
+          >
+            <div className={styles.releaseHint}>
+              {t("gameProject.knowledgeReleaseHint", {
+                defaultValue:
+                  "This panel shows knowledge release assets for the current local project directory. You can build a release from current server-side indexes, view the current release, and switch the current release from the existing release list.",
+              })}
+            </div>
+
+            <div className={styles.releaseActions}>
+              <Button size="small" type="primary" onClick={openBuildReleaseModal} disabled={!selectedAgent}>
+                {t("gameProject.releaseBuildButton", { defaultValue: "Build release" })}
+              </Button>
+              <Text type="secondary">
+                {t("gameProject.releaseBuildHint", {
+                  defaultValue: "Build uses the safe server-side endpoint and does not auto-set current.",
+                })}
+              </Text>
+            </div>
+
+            {releaseError ? (
+              <Alert
+                type="warning"
+                showIcon
+                message={t("gameProject.releaseLoadWarning", { defaultValue: "Knowledge release status is temporarily unavailable" })}
+                description={releaseError}
+                className={styles.releaseAlert}
+              />
+            ) : null}
+
+            <div className={styles.releaseSummary}>
+              <div className={styles.releaseSummaryRow}>
+                <div className={styles.releaseSummaryLabel}>
+                  {t("gameProject.releaseCurrentLabel", { defaultValue: "current release id" })}
+                </div>
+                <div className={styles.releaseSummaryValue}>
+                  {releaseLoading ? t("common.loading") : currentRelease?.release_id || "No current knowledge release"}
+                </div>
+              </div>
+              <div className={styles.releaseSummaryRow}>
+                <div className={styles.releaseSummaryLabel}>
+                  {t("gameProject.releaseBuiltAtLabel", { defaultValue: "built_at / created_at" })}
+                </div>
+                <div className={styles.releaseSummaryValue}>{releaseLoading ? t("common.loading") : formatDateTime(currentRelease?.created_at)}</div>
+              </div>
+              <div className={styles.releaseCounters}>
+                <Tag color="blue">table_schema {getIndexCount(currentRelease, "table_schema")}</Tag>
+                <Tag color="gold">doc_knowledge {getIndexCount(currentRelease, "doc_knowledge")}</Tag>
+                <Tag color="green">script_evidence {getIndexCount(currentRelease, "script_evidence")}</Tag>
+              </div>
+            </div>
+
+            <div className={styles.releaseListBlock}>
+              <div className={styles.releaseListHeader}>
+                <Text strong>{t("gameProject.releaseListTitle", { defaultValue: "release list" })}</Text>
+                <Space size={8}>
+                  <Button size="small" onClick={() => selectedAgent && fetchKnowledgeReleases(selectedAgent)} loading={releaseLoading}>
+                    {t("common.refresh")}
+                  </Button>
+                </Space>
+              </div>
+
+              {releaseLoading ? (
+                <div className={styles.releaseEmpty}>{t("common.loading")}</div>
+              ) : releases.length === 0 ? (
+                <div className={styles.releaseEmpty}>{t("gameProject.releaseEmpty", { defaultValue: "No knowledge release found for this local project directory" })}</div>
+              ) : (
+                <div className={styles.releaseList}>
+                  {releases.map((release) => {
+                    const isCurrent = release.release_id === currentRelease?.release_id;
+                    return (
+                      <div key={release.release_id} className={styles.releaseRow}>
+                        <div className={styles.releaseRowMain}>
+                          <div className={styles.releaseRowTop}>
+                            <Text strong>{release.release_id}</Text>
+                            {isCurrent ? <Tag color="success">current</Tag> : null}
+                          </div>
+                          <div className={styles.releaseRowMeta}>
+                            <span>built_at / created_at: {formatDateTime(release.created_at)}</span>
+                            <span>table_schema: {getIndexCount(release, "table_schema")}</span>
+                            <span>doc_knowledge: {getIndexCount(release, "doc_knowledge")}</span>
+                            <span>script_evidence: {getIndexCount(release, "script_evidence")}</span>
+                          </div>
+                        </div>
+                        <Button
+                          size="small"
+                          onClick={() => handleSetCurrentRelease(release.release_id)}
+                          loading={settingCurrentId === release.release_id}
+                          disabled={isCurrent}
+                        >
+                          {isCurrent
+                            ? t("gameProject.releaseCurrentButton", { defaultValue: "Current" })
+                            : t("gameProject.releaseSetCurrentButton", { defaultValue: "Set current" })}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </Card>
+
           <Card
             title={t("gameProject.storageTitle", { defaultValue: "当前实际数据落盘目录" })}
             className={styles.section}
@@ -385,10 +668,10 @@ export default function GameProject() {
           {/* SVN Configuration Section */}
           <Card title={t("gameProject.svnConfig")} className={styles.section}>
             <Form.Item
-              label="我是维护者 (允许提交索引到 SVN)"
+              label="我是维护者（允许维护项目索引）"
               name="is_maintainer"
               valuePropName="checked"
-              tooltip="开启=维护者maintainer (可写回索引/提案)；关闭=使用者consumer (只读)"
+              tooltip="开启=维护者 maintainer；关闭=使用者 consumer。此开关不改变现有接口行为。"
             >
               <Switch />
             </Form.Item>
@@ -409,7 +692,7 @@ export default function GameProject() {
             </Form.Item>
             
             <Form.Item label={t("gameProject.svnWorkingCopyPath")} name="svn_working_copy_path">
-              <Input placeholder={t("gameProject.svnWorkingCopyPathPlaceholder")} />
+              <Input placeholder={t("gameProject.svnWorkingCopyPathPlaceholder", { defaultValue: LOCAL_PROJECT_DIRECTORY_LABEL })} />
             </Form.Item>
             
             <Form.Item name="svn_trust_cert" valuePropName="checked">
@@ -528,6 +811,99 @@ export default function GameProject() {
           >
             <Input placeholder="guildwar_proj" />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("gameProject.releaseBuildModalTitle", { defaultValue: "Build knowledge release" })}
+        open={buildModalOpen}
+        onCancel={closeBuildReleaseModal}
+        onOk={handleBuildRelease}
+        okText={t("gameProject.releaseBuildConfirm", { defaultValue: "Build" })}
+        cancelText={t("common.cancel")}
+        confirmLoading={buildingRelease}
+        destroyOnHidden
+      >
+        <Form form={buildForm} layout="vertical" autoComplete="off">
+          <Form.Item
+            name="release_id"
+            label={t("gameProject.releaseIdLabel", { defaultValue: "release id" })}
+            rules={[
+              {
+                required: true,
+                message: t("gameProject.releaseIdRequired", { defaultValue: "Please enter a release id" }),
+              },
+            ]}
+          >
+            <Input placeholder="v2026.05.07.001" />
+          </Form.Item>
+          <Form.Item
+            name="release_notes"
+            label={t("gameProject.releaseNotesLabel", { defaultValue: "release notes" })}
+          >
+            <TextArea
+              rows={4}
+              placeholder={t("gameProject.releaseNotesPlaceholder", {
+                defaultValue: "Build from current local indexes",
+              })}
+            />
+          </Form.Item>
+
+          <div className={styles.releaseCandidateSection}>
+            <div className={styles.releaseCandidateHeader}>
+              <Text strong>{t("gameProject.releaseCandidateSectionTitle", { defaultValue: "Release candidates" })}</Text>
+              <Button size="small" onClick={() => void refreshBuildCandidates()} loading={buildCandidatesLoading}>
+                {t("common.refresh")}
+              </Button>
+            </div>
+
+            <div className={styles.releaseCandidateHint}>
+              {t("gameProject.releaseCandidateHint", {
+                defaultValue:
+                  "Only accepted and selected candidates are shown here. Leaving all items unchecked keeps the existing build behavior.",
+              })}
+            </div>
+
+            {buildCandidatesError ? (
+              <Alert
+                type="warning"
+                showIcon
+                message={t("gameProject.releaseCandidateWarning", { defaultValue: "Release candidate list is temporarily unavailable" })}
+                description={buildCandidatesError}
+                className={styles.releaseCandidateAlert}
+              />
+            ) : null}
+
+            {buildCandidatesLoading ? (
+              <div className={styles.releaseCandidateEmpty}>{t("common.loading")}</div>
+            ) : buildCandidates.length === 0 ? (
+              <div className={styles.releaseCandidateEmpty}>
+                {t("gameProject.releaseCandidateEmpty", {
+                  defaultValue: "No accepted and selected release candidates are currently available.",
+                })}
+              </div>
+            ) : (
+              <Checkbox.Group value={selectedCandidateIds} onChange={(values) => setSelectedCandidateIds(values as string[])}>
+                <div className={styles.releaseCandidateList}>
+                  {buildCandidates.map((candidate) => (
+                    <label key={candidate.candidate_id} className={styles.releaseCandidateRow}>
+                      <Checkbox value={candidate.candidate_id} />
+                      <div className={styles.releaseCandidateMain}>
+                        <div className={styles.releaseCandidateTitleRow}>
+                          <Text strong>{candidate.title}</Text>
+                        </div>
+                        <div className={styles.releaseCandidateMeta}>
+                          <span>candidate_id: {candidate.candidate_id}</span>
+                          <span>test_plan_id: {candidate.test_plan_id}</span>
+                          <span>created_at: {formatDateTime(candidate.created_at)}</span>
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </Checkbox.Group>
+            )}
+          </div>
         </Form>
       </Modal>
     </div>

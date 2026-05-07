@@ -10,8 +10,14 @@ from ltclaw_gy_x.game.config import (
     load_user_config, save_user_config
 )
 from ltclaw_gy_x.game.paths import (
+    get_current_release_path,
+    get_knowledge_releases_dir,
+    get_knowledge_working_dir,
     get_legacy_user_config_path,
+    get_pending_test_plans_path,
     get_project_config_path,
+    get_release_candidates_path,
+    get_release_dir,
     get_storage_summary,
     get_user_config_path,
 )
@@ -116,3 +122,25 @@ def test_storage_summary_uses_unified_game_data_tree(monkeypatch, tmp_path):
     assert Path(summary["workbench_dir"]).parts[-3:] == ("sessions", "chat-42", "workbench")
     assert Path(summary["llm_cache_dir"]).parts[-3:] == ("chat-42", "caches", "llm")
     assert Path(summary["code_index_dir"]).parts[-3:] == ("chat-42", "databases", "code_index")
+
+
+def test_knowledge_release_paths_stay_under_project_store(monkeypatch, tmp_path):
+    working_root = tmp_path / "ltclaw-data"
+    project_root = tmp_path / "projects" / "demo-project"
+    monkeypatch.setenv("LTCLAW_WORKING_DIR", str(working_root))
+
+    working_dir = get_knowledge_working_dir(project_root)
+    releases_dir = get_knowledge_releases_dir(project_root)
+    current_path = get_current_release_path(project_root)
+    release_dir = get_release_dir(project_root, "release-001")
+    test_plans_path = get_pending_test_plans_path(project_root)
+    candidates_path = get_release_candidates_path(project_root)
+
+    assert not working_dir.exists()
+    assert str(working_dir).startswith(str(working_root / "game_data" / "projects"))
+    assert releases_dir.parent == working_dir.parent
+    assert current_path == releases_dir / "current.json"
+    assert release_dir == releases_dir / "release-001"
+    assert test_plans_path.name == "test_plans.jsonl"
+    assert candidates_path.name == "release_candidates.jsonl"
+    assert str(test_plans_path).startswith(str(working_root / "game_data" / "projects"))
