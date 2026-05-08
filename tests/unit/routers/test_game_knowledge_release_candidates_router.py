@@ -12,8 +12,13 @@ from ltclaw_gy_x.app.routers.game_knowledge_release_candidates import router
 from ltclaw_gy_x.game.models import ReleaseCandidate
 
 
-def _build_app(workspace):
+_CAPABILITY_UNSET = object()
+
+
+def _build_app(workspace, capabilities=_CAPABILITY_UNSET):
     app = FastAPI()
+    if capabilities is not _CAPABILITY_UNSET:
+        app.state.capabilities = capabilities
     app.include_router(router, prefix='/api')
     return app
 
@@ -147,3 +152,103 @@ def test_release_candidate_router_requires_game_service(monkeypatch):
 
     assert response.status_code == 404
     assert response.json()['detail'] == 'Game service not available'
+
+
+
+def test_list_release_candidates_requires_candidate_read_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _list(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('candidate list should be blocked before store call')
+
+    monkeypatch.setattr(candidate_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(candidate_router_module, 'list_release_candidates', _list)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.candidate.write'})) as client:
+        response = client.get('/api/game/knowledge/release-candidates')
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.candidate.read'
+    assert called is False
+
+
+def test_list_release_candidates_allows_candidate_read_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {}
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _list(project_root, *, status=None, selected=None, test_plan_id=None):
+        captured['project_root'] = project_root
+        captured['status'] = status
+        captured['selected'] = selected
+        captured['test_plan_id'] = test_plan_id
+        return [_candidate()]
+
+    monkeypatch.setattr(candidate_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(candidate_router_module, 'list_release_candidates', _list)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.candidate.read'})) as client:
+        response = client.get('/api/game/knowledge/release-candidates')
+
+    assert response.status_code == 200
+    assert captured == {
+        'project_root': tmp_path / 'project-root',
+        'status': None,
+        'selected': None,
+        'test_plan_id': None,
+    }
+
+
+def test_create_release_candidate_requires_candidate_write_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _append(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('candidate append should be blocked before store call')
+
+    monkeypatch.setattr(candidate_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(candidate_router_module, 'append_release_candidate', _append)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.candidate.read'})) as client:
+        response = client.post('/api/game/knowledge/release-candidates', json=_candidate().model_dump(mode='json'))
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.candidate.write'
+    assert called is False
+
+
+def test_create_release_candidate_allows_candidate_write_without_build_or_publish(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {}
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _append(project_root, candidate):
+        captured['project_root'] = project_root
+        captured['candidate'] = candidate
+        return _candidate('candidate-002')
+
+    monkeypatch.setattr(candidate_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(candidate_router_module, 'append_release_candidate', _append)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.candidate.write'})) as client:
+        response = client.post('/api/game/knowledge/release-candidates', json=_candidate().model_dump(mode='json'))
+
+    assert response.status_code == 200
+    assert response.json()['candidate_id'] == 'candidate-002'
+    assert captured['project_root'] == tmp_path / 'project-root'
+    assert captured['candidate'].candidate_id == 'candidate-001'

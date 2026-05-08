@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from ...game.knowledge_rag_answer import build_rag_answer
 from ...game.knowledge_rag_context import build_current_release_context
+from ..capabilities import require_capability
 from ..agent_context import get_agent_for_request
 
 
@@ -67,6 +68,7 @@ def _project_root_or_400(game_service) -> Path:
 
 @router.post('/context', response_model=RagContextResponse)
 async def rag_context(request: Request, body: RagRequest) -> RagContextResponse:
+    require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
     payload = build_current_release_context(
         _project_root_or_400(_game_service_or_404(workspace)),
@@ -79,6 +81,7 @@ async def rag_context(request: Request, body: RagRequest) -> RagContextResponse:
 
 @router.post('/answer', response_model=RagAnswerResponse)
 async def rag_answer(request: Request, body: RagRequest) -> RagAnswerResponse:
+    require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
     context = build_current_release_context(
         _project_root_or_400(_game_service_or_404(workspace)),

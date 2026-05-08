@@ -1,6 +1,7 @@
 // Multi-agent management types
 
 import type { ModelSlotConfig } from "./provider";
+import type { FrontendCapabilityToken } from "./permissions";
 
 export interface AgentSummary {
   id: string;
@@ -9,6 +10,7 @@ export interface AgentSummary {
   workspace_dir: string;
   enabled: boolean;
   active_model?: ModelSlotConfig | null;
+  capabilities?: FrontendCapabilityToken[];
 }
 
 export interface AgentListResponse {
@@ -25,6 +27,7 @@ export interface AgentProfileConfig {
   name: string;
   description?: string;
   workspace_dir?: string;
+  capabilities?: FrontendCapabilityToken[];
   approval_level?: string;
   active_model?: ModelSlotConfig | null;
   channels?: unknown;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Button,
   Card,
   Empty,
@@ -27,6 +28,8 @@ import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
+import type { FrontendCapabilityToken } from "@/api/types/permissions";
+import { canUseGovernanceAction, hasCapabilityContext, isPermissionDeniedError } from "@/utils/permissions";
 import { useAgentStore } from "../../stores/agentStore";
 import { gameApi } from "../../api/modules/game";
 import { gameChangeApi } from "../../api/modules/gameChange";
@@ -83,8 +86,39 @@ const isNumericType = (t?: string): boolean => {
 export default function NumericWorkbench() {
   const { t } = useTranslation();
   const { message } = useAppMessage();
-  const { selectedAgent } = useAgentStore();
+  const { selectedAgent, agents } = useAgentStore();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const selectedAgentSummary = agents.find((agent) => agent.id === selectedAgent);
+  const capabilities: FrontendCapabilityToken[] | undefined = selectedAgentSummary?.capabilities;
+  const hasExplicitCapabilityContext = hasCapabilityContext(capabilities);
+  const canReadWorkbench = canUseGovernanceAction(capabilities, "workbench.read");
+  const canWriteWorkbench = canUseGovernanceAction(capabilities, "workbench.test.write");
+  const permissionDeniedMessage = t("gameProject.permissionDenied", {
+    defaultValue: "You do not have permission to perform this action.",
+  });
+  const workbenchReadReason =
+    hasExplicitCapabilityContext && !canReadWorkbench
+      ? t("gameWorkbench.permissionReadRequired", {
+          defaultValue: "Requires workbench.read permission.",
+        })
+      : null;
+  const workbenchWriteReason =
+    hasExplicitCapabilityContext && !canWriteWorkbench
+      ? t("gameWorkbench.permissionWriteRequired", {
+          defaultValue: "Requires workbench.test.write permission.",
+        })
+      : null;
+
+  const formatPermissionError = useCallback(
+    (error: unknown, fallbackMessage: string) => {
+      if (isPermissionDeniedError(error)) {
+        return permissionDeniedMessage;
+      }
+      return error instanceof Error ? error.message : fallbackMessage;
+    },
+    [permissionDeniedMessage],
+  );
 
   // Deep-link
   const dlTable = searchParams.get("table") || searchParams.get("tableId") || "";
@@ -146,7 +180,6 @@ export default function NumericWorkbench() {
       /* ignore */
     }
   }, [workbenchAgentOverride]);
-  const agents = useAgentStore((s) => s.agents);
   /** 发送 AI 请求使用的 agent id（能定制主模型） */
   const aiAgentId = workbenchAgentOverride || selectedAgent;
 
@@ -327,6 +360,10 @@ export default function NumericWorkbench() {
       setTableNames([]);
       return;
     }
+    if (hasExplicitCapabilityContext && !canReadWorkbench) {
+      setTableNames([]);
+      return;
+    }
     setTablesLoading(true);
     try {
       const resp = await gameApi.listTables(selectedAgent, { page: 1, size: 200 });
@@ -336,11 +373,12 @@ export default function NumericWorkbench() {
     } finally {
       setTablesLoading(false);
     }
-  }, [selectedAgent, message, t]);
+  }, [selectedAgent, message, t, hasExplicitCapabilityContext, canReadWorkbench]);
 
   const loadTableDetail = useCallback(
     async (name: string) => {
       if (!selectedAgent) return;
+      if (hasExplicitCapabilityContext && !canReadWorkbench) return;
       try {
         const detail = await gameApi.getTable(selectedAgent, name);
         setDetailsByTable((prev) => ({ ...prev, [name]: detail }));
@@ -348,12 +386,16 @@ export default function NumericWorkbench() {
         /* ignore */
       }
     },
-    [selectedAgent],
+    [selectedAgent, hasExplicitCapabilityContext, canReadWorkbench],
   );
 
   const loadRowsForTable = useCallback(
     async (name: string) => {
       if (!selectedAgent) return;
+      if (hasExplicitCapabilityContext && !canReadWorkbench) {
+        setRowsByTable((prev) => ({ ...prev, [name]: { headers: [], rows: [], total: 0 } }));
+        return;
+      }
       setRowsLoading(true);
       try {
         const resp = await gameApi.getTableRows(selectedAgent, name, 0, 500);
@@ -367,7 +409,7 @@ export default function NumericWorkbench() {
         setRowsLoading(false);
       }
     },
-    [selectedAgent],
+    [selectedAgent, hasExplicitCapabilityContext, canReadWorkbench],
   );
 
   useEffect(() => { loadTables(); }, [loadTables]);
@@ -412,18 +454,29 @@ export default function NumericWorkbench() {
       setAiPanel(null);
       return;
     }
+    if (hasExplicitCapabilityContext && !canReadWorkbench) {
+      setAiPanel(null);
+      return;
+    }
     let cancelled = false;
     gameWorkbenchApi
       .aiSuggestPanel(selectedAgent, activeTab, undefined)
       .then((p) => { if (!cancelled) setAiPanel(p); })
       .catch(() => { if (!cancelled) setAiPanel(null); });
     return () => { cancelled = true; };
-  }, [selectedAgent, activeTab]);
+  }, [selectedAgent, activeTab, hasExplicitCapabilityContext, canReadWorkbench]);
 
   // dirty → debounced preview + reverse-impact
   const validChanges = dirty.validChanges;
   const runPreview = useCallback(async () => {
     if (!selectedAgent) return;
+    if (hasExplicitCapabilityContext && !canReadWorkbench) {
+      setPreview([]);
+      setDamageChain(null);
+      setAffectedTables([]);
+      setImpacts([]);
+      return;
+    }
     if (validChanges.length === 0) {
       setPreview([]);
       setDamageChain(null);
@@ -450,7 +503,7 @@ export default function NumericWorkbench() {
       setPreviewLoading(false);
       setDamageChainLoading(false);
     }
-  }, [selectedAgent, validChanges, message, t]);
+  }, [selectedAgent, validChanges, message, t, hasExplicitCapabilityContext, canReadWorkbench]);
 
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
@@ -767,6 +820,10 @@ export default function NumericWorkbench() {
   const sendChat = useCallback(async () => {
     const text = chatInput.trim();
     if (!text || !aiAgentId) return;
+    if (hasExplicitCapabilityContext && !canReadWorkbench) {
+      message.warning(workbenchReadReason || permissionDeniedMessage);
+      return;
+    }
     const userMsg: ChatMessage = { role: "user", content: text, ts: Date.now() };
     setChatMessages((prev) => [...prev, userMsg]);
     setChatInput("");
@@ -852,19 +909,24 @@ export default function NumericWorkbench() {
         /* ignore */
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = formatPermissionError(
+        err,
+        t("gameWorkbench.aiFailed", { defaultValue: "AI 调用失败" }),
+      );
       setChatMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: t("gameWorkbench.aiFailed", { defaultValue: "AI 调用失败: " }) + msg,
+          content: isPermissionDeniedError(err)
+            ? msg
+            : t("gameWorkbench.aiFailed", { defaultValue: "AI 调用失败: " }) + msg,
           ts: Date.now(),
         },
       ]);
     } finally {
       setChatSending(false);
     }
-  }, [chatInput, chatMessages, aiAgentId, openTables, validChanges, setChatMessages, t, selectedAgent, sessionStore.currentId, syncWorkbenchRoute]);
+  }, [chatInput, chatMessages, aiAgentId, openTables, validChanges, setChatMessages, t, selectedAgent, sessionStore.currentId, syncWorkbenchRoute, hasExplicitCapabilityContext, canReadWorkbench, message, workbenchReadReason, permissionDeniedMessage, formatPermissionError]);
 
   // ── 接受 AI 建议（写入 dirty） ────────────────────────
   const jumpToCell = useCallback(
@@ -980,6 +1042,9 @@ export default function NumericWorkbench() {
 
   // ── 提交草稿 ─────────────────────────────────────────
   const openDraft = () => {
+    if (!canWriteWorkbench) {
+      return;
+    }
     if (validChanges.length === 0) {
       message.warning(t("gameWorkbench.noChangesToSubmit", { defaultValue: "没有可提交的修改" }));
       return;
@@ -998,6 +1063,10 @@ export default function NumericWorkbench() {
 
   const submitDraft = async () => {
     if (!selectedAgent) return;
+    if (!canWriteWorkbench) {
+      message.warning(workbenchWriteReason || permissionDeniedMessage);
+      return;
+    }
     setSubmitting(true);
     try {
       const ops = validChanges.map((c) => ({
@@ -1052,8 +1121,13 @@ export default function NumericWorkbench() {
         /* ignore */
       }
       setDraftOpen(false);
-    } catch {
-      message.error(t("gameWorkbench.draftCreateFailed", { defaultValue: "草案生成失败" }));
+    } catch (err) {
+      message.error(
+        formatPermissionError(
+          err,
+          t("gameWorkbench.draftCreateFailed", { defaultValue: "草案生成失败" }),
+        ),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -1120,6 +1194,19 @@ export default function NumericWorkbench() {
   );
 
   if (!isWorkbenchView) {
+    if (workbenchReadReason) {
+      return (
+        <div className={styles.sessionListPage}>
+          <PageHeader
+            parent={t("nav.game", { defaultValue: "Game Development" })}
+            current={t("nav.gameWorkbench", { defaultValue: "数值工作台" })}
+          />
+          <Card className={styles.sessionHero}>
+            <Alert type="info" showIcon message={workbenchReadReason} />
+          </Card>
+        </div>
+      );
+    }
     return (
       <div className={styles.sessionListPage}>
         <PageHeader
@@ -1282,6 +1369,12 @@ export default function NumericWorkbench() {
         }
       />
 
+      {workbenchReadReason ? (
+        <Card>
+          <Alert type="info" showIcon message={workbenchReadReason} />
+        </Card>
+      ) : null}
+
       <div className={styles.workbenchShell}>
         <div className={styles.editorArea}>
           <div className={styles.toolbar}>
@@ -1312,9 +1405,10 @@ export default function NumericWorkbench() {
               style={{ minWidth: 360 }}
               showSearch
               allowClear
+              disabled={!canReadWorkbench}
               options={tableNames.map((n) => ({ label: n, value: n }))}
             />
-            <Button icon={<ReloadOutlined />} onClick={loadTables} loading={tablesLoading}>
+            <Button icon={<ReloadOutlined />} onClick={loadTables} loading={tablesLoading} disabled={!canReadWorkbench}>
               {t("gameWorkbench.refresh", { defaultValue: "刷新" })}
             </Button>
             <Tag color="blue">
@@ -1437,6 +1531,8 @@ export default function NumericWorkbench() {
                 messages={chatMessages}
                 input={chatInput}
                 sending={chatSending}
+                disabled={!canReadWorkbench}
+                placeholder={workbenchReadReason || undefined}
                 onInputChange={setChatInput}
                 onSend={sendChat}
                 onAcceptSuggestion={(sug) => {
@@ -1517,7 +1613,8 @@ export default function NumericWorkbench() {
             saveSessionDisabled={!sessionStore.isCurrentDirtySinceSave}
             onExportDraft={openDraft}
             exporting={submitting}
-            exportDisabled={validChanges.length === 0}
+            exportDisabled={validChanges.length === 0 || !canWriteWorkbench}
+            exportDisabledReason={workbenchWriteReason || undefined}
           />
           <ImpactPanel
             preview={preview}
@@ -1538,9 +1635,11 @@ export default function NumericWorkbench() {
         onOk={submitDraft}
         onCancel={() => setDraftOpen(false)}
         confirmLoading={submitting}
+        okButtonProps={{ disabled: !canWriteWorkbench }}
         okText={t("gameWorkbench.export", { defaultValue: "导出" })}
         cancelText={t("gameWorkbench.cancel", { defaultValue: "取消" })}
       >
+        {workbenchWriteReason ? <Alert type="info" showIcon message={workbenchWriteReason} style={{ marginBottom: 16 }} /> : null}
         <Space direction="vertical" style={{ width: "100%" }}>
           <Text>{t("gameWorkbench.draftTitleLabel", { defaultValue: "标题" })}</Text>
           <Input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} />

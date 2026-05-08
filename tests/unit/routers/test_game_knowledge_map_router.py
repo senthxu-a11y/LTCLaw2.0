@@ -12,8 +12,13 @@ from ltclaw_gy_x.app.routers.game_knowledge_map import router
 from ltclaw_gy_x.game.models import KnowledgeMap, KnowledgeRelationship, KnowledgeTableRef
 
 
-def _build_app():
+_CAPABILITY_UNSET = object()
+
+
+def _build_app(capabilities=_CAPABILITY_UNSET):
     app = FastAPI()
+    if capabilities is not _CAPABILITY_UNSET:
+        app.state.capabilities = capabilities
     app.include_router(router, prefix='/api')
     return app
 
@@ -225,3 +230,152 @@ def test_formal_map_router_requires_project_root(monkeypatch):
 
     assert response.status_code == 400
     assert response.json()['detail'] == 'Local project directory not configured'
+
+
+def test_candidate_map_router_requires_knowledge_map_read_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _build_candidate(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('candidate map read should be blocked before builder call')
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(map_router_module, 'build_map_candidate_from_release', _build_candidate)
+
+    with TestClient(_build_app(capabilities=set())) as client:
+        response = client.get('/api/game/knowledge/map/candidate')
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.map.read'
+    assert called is False
+
+
+def test_candidate_map_router_allows_knowledge_map_read_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {}
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _build_candidate(project_root, release_id=None):
+        captured['project_root'] = project_root
+        captured['release_id'] = release_id
+        return _map()
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(map_router_module, 'build_map_candidate_from_release', _build_candidate)
+
+    with TestClient(_build_app(capabilities={'knowledge.map.read'})) as client:
+        response = client.get('/api/game/knowledge/map/candidate')
+
+    assert response.status_code == 200
+    assert captured == {'project_root': tmp_path / 'project-root', 'release_id': None}
+
+
+def test_formal_map_router_requires_knowledge_map_read_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _load(_root):
+        nonlocal called
+        called = True
+        raise AssertionError('formal map read should be blocked before store call')
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(map_router_module, 'load_formal_knowledge_map', _load)
+
+    with TestClient(_build_app(capabilities=set())) as client:
+        response = client.get('/api/game/knowledge/map')
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.map.read'
+    assert called is False
+
+
+def test_formal_map_router_allows_knowledge_map_read_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    record = SimpleNamespace(
+        knowledge_map=_map(),
+        map_hash='sha256:formal',
+        updated_at=datetime(2026, 5, 7, tzinfo=timezone.utc),
+        updated_by='lead',
+    )
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(map_router_module, 'load_formal_knowledge_map', lambda _root: record)
+
+    with TestClient(_build_app(capabilities={'knowledge.map.read'})) as client:
+        response = client.get('/api/game/knowledge/map')
+
+    assert response.status_code == 200
+    assert response.json()['mode'] == 'formal_map'
+    assert response.json()['map_hash'] == 'sha256:formal'
+
+
+def test_save_formal_map_router_requires_knowledge_map_edit_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _save(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('formal map save should be blocked before store call')
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(map_router_module, 'save_formal_knowledge_map', _save)
+
+    with TestClient(_build_app(capabilities=set())) as client:
+        response = client.put('/api/game/knowledge/map', json={'map': _map().model_dump(mode='json')})
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.map.edit'
+    assert called is False
+
+
+def test_save_formal_map_router_allows_knowledge_map_edit_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {}
+    record = SimpleNamespace(
+        knowledge_map=_map(),
+        map_hash='sha256:saved',
+        updated_at=datetime(2026, 5, 7, tzinfo=timezone.utc),
+        updated_by='designer-1',
+    )
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _save(project_root, knowledge_map, *, updated_by=None):
+        captured['project_root'] = project_root
+        captured['knowledge_map'] = knowledge_map
+        captured['updated_by'] = updated_by
+        return record
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(map_router_module, 'save_formal_knowledge_map', _save)
+
+    with TestClient(_build_app(capabilities={'knowledge.map.edit'})) as client:
+        response = client.put(
+            '/api/game/knowledge/map',
+            json={'map': _map().model_dump(mode='json'), 'updated_by': 'designer-1'},
+        )
+
+    assert response.status_code == 200
+    assert response.json()['mode'] == 'formal_map_saved'
+    assert captured['project_root'] == tmp_path / 'project-root'
+    assert captured['knowledge_map'].release_id == 'release-001'
+    assert captured['updated_by'] == 'designer-1'

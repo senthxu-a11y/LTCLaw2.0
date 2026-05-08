@@ -11,8 +11,13 @@ from ltclaw_gy_x.app.routers import game_knowledge_query as query_router_module
 from ltclaw_gy_x.app.routers.game_knowledge_query import router
 
 
-def _build_app():
+_CAPABILITY_UNSET = object()
+
+
+def _build_app(capabilities=_CAPABILITY_UNSET):
     app = FastAPI()
+    if capabilities is not _CAPABILITY_UNSET:
+        app.state.capabilities = capabilities
     app.include_router(router, prefix='/api')
     return app
 
@@ -127,3 +132,59 @@ def test_query_router_requires_game_service(monkeypatch):
 
     assert response.status_code == 404
     assert response.json()['detail'] == 'Game service not available'
+
+
+def test_query_router_requires_knowledge_read_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _query(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('query should be blocked before service call')
+
+    monkeypatch.setattr(query_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(query_router_module, 'query_current_release', _query)
+
+    with TestClient(_build_app(capabilities=set())) as client:
+        response = client.post('/api/game/knowledge/query', json={'query': 'damage'})
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.read'
+    assert called is False
+
+
+def test_query_router_allows_knowledge_read_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {}
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _query(project_root, query, *, top_k, mode):
+        captured['project_root'] = project_root
+        captured['query'] = query
+        captured['top_k'] = top_k
+        captured['mode'] = mode
+        return {
+            'mode': 'current_release_keyword',
+            'query': query,
+            'top_k': top_k,
+            'release_id': 'release-001',
+            'built_at': datetime(2026, 1, 1, tzinfo=timezone.utc),
+            'results': [],
+            'count': 0,
+        }
+
+    monkeypatch.setattr(query_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(query_router_module, 'query_current_release', _query)
+
+    with TestClient(_build_app(capabilities={'knowledge.read'})) as client:
+        response = client.post('/api/game/knowledge/query', json={'query': 'damage'})
+
+    assert response.status_code == 200
+    assert captured['project_root'] == tmp_path / 'project-root'
+    assert captured['query'] == 'damage'

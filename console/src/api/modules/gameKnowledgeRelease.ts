@@ -1,5 +1,8 @@
 import { request } from '../request';
 import type {
+  FormalKnowledgeMapResponse,
+  KnowledgeMap,
+  KnowledgeMapCandidateResponse,
   KnowledgeIndexArtifact,
   KnowledgeManifest,
   KnowledgeReleasePointer,
@@ -62,6 +65,21 @@ export const gameKnowledgeReleaseApi = {
     return request<BuildKnowledgeReleaseResponse>(`/agents/${agentId}/game/knowledge/releases/build-from-current-indexes`, {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  },
+
+  async getMapCandidate(agentId: string): Promise<KnowledgeMapCandidateResponse> {
+    return request<KnowledgeMapCandidateResponse>(`/agents/${agentId}/game/knowledge/map/candidate`);
+  },
+
+  async getFormalMap(agentId: string): Promise<FormalKnowledgeMapResponse> {
+    return request<FormalKnowledgeMapResponse>(`/agents/${agentId}/game/knowledge/map`);
+  },
+
+  async saveFormalMap(agentId: string, map: KnowledgeMap, updatedBy?: string): Promise<FormalKnowledgeMapResponse> {
+    return request<FormalKnowledgeMapResponse>(`/agents/${agentId}/game/knowledge/map`, {
+      method: 'PUT',
+      body: JSON.stringify({ map, updated_by: updatedBy ?? null }),
     });
   },
 };

@@ -1,13 +1,29 @@
 import { useEffect, useState } from "react";
 import { Form, Input, Switch, Button, Card } from "@agentscope-ai/design";
-import { Alert, Checkbox, Modal, Space, Tag, Typography } from "antd";
+import { Alert, Checkbox, Modal, Select, Space, Tag, Tooltip, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
+import type { FrontendCapabilityToken } from "@/api/types/permissions";
+import { canUseGovernanceAction, hasCapabilityContext, isPermissionDeniedError } from "@/utils/permissions";
 import { gameApi } from "../../api/modules/game";
 import { gameKnowledgeReleaseApi } from "../../api/modules/gameKnowledgeRelease";
 import { agentsApi } from "../../api/modules/agents";
-import type { GameStorageSummary, KnowledgeManifest, ProjectConfig, ReleaseCandidateListItem, ValidationIssue } from "../../api/types/game";
+import type {
+  FormalKnowledgeMapResponse,
+  GameStorageSummary,
+  KnowledgeDocRef,
+  KnowledgeManifest,
+  KnowledgeMap,
+  KnowledgeRelationship,
+  KnowledgeScriptRef,
+  KnowledgeStatus,
+  KnowledgeSystem,
+  KnowledgeTableRef,
+  ProjectConfig,
+  ReleaseCandidateListItem,
+  ValidationIssue,
+} from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
 import styles from "./GameProject.module.less";
 
@@ -38,6 +54,52 @@ interface BuildReleaseFormData {
 }
 
 const LOCAL_PROJECT_DIRECTORY_LABEL = "local project directory";
+const NO_CURRENT_RELEASE_DETAIL = "No current knowledge release is set";
+const LOCAL_PROJECT_DIRECTORY_ERROR = "Local project directory not configured";
+const NO_FORMAL_MAP_MODE = "no_formal_map";
+const FORMAL_MAP_STATUS_OPTIONS: Array<{ label: KnowledgeStatus; value: KnowledgeStatus }> = [
+  { label: "active", value: "active" },
+  { label: "deprecated", value: "deprecated" },
+  { label: "ignored", value: "ignored" },
+];
+
+function cloneKnowledgeMap(map: KnowledgeMap): KnowledgeMap {
+  return JSON.parse(JSON.stringify(map)) as KnowledgeMap;
+}
+
+function buildRelationshipWarningMessages(map: KnowledgeMap | null): string[] {
+  if (!map) {
+    return [];
+  }
+
+  const referencedRefs = new Set<string>();
+  for (const relationship of map.relationships) {
+    referencedRefs.add(relationship.from_ref);
+    referencedRefs.add(relationship.to_ref);
+  }
+
+  const warnings: string[] = [];
+  const appendWarning = (ref: string, title: string, status: KnowledgeStatus) => {
+    if ((status === "deprecated" || status === "ignored") && referencedRefs.has(ref)) {
+      warnings.push(`${title} (${ref}) is ${status} but is still referenced by relationships.`);
+    }
+  };
+
+  for (const item of map.systems) {
+    appendWarning(`system:${item.system_id}`, item.title, item.status);
+  }
+  for (const item of map.tables) {
+    appendWarning(`table:${item.table_id}`, item.title, item.status);
+  }
+  for (const item of map.docs) {
+    appendWarning(`doc:${item.doc_id}`, item.title, item.status);
+  }
+  for (const item of map.scripts) {
+    appendWarning(`script:${item.script_id}`, item.title, item.status);
+  }
+
+  return warnings;
+}
 
 function createDefaultReleaseId(): string {
   const now = new Date();
@@ -48,7 +110,7 @@ function createDefaultReleaseId(): string {
 export default function GameProject() {
   const { t } = useTranslation();
   const { message } = useAppMessage();
-  const { selectedAgent, addAgent, setSelectedAgent } = useAgentStore();
+  const { selectedAgent, agents, addAgent, setSelectedAgent } = useAgentStore();
   const [form] = Form.useForm<GameProjectFormData>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -65,12 +127,98 @@ export default function GameProject() {
   const [buildCandidatesError, setBuildCandidatesError] = useState<string | null>(null);
   const [buildCandidates, setBuildCandidates] = useState<ReleaseCandidateListItem[]>([]);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
+  const [candidateMapLoading, setCandidateMapLoading] = useState(false);
+  const [candidateMapError, setCandidateMapError] = useState<string | null>(null);
+  const [candidateMap, setCandidateMap] = useState<KnowledgeMap | null>(null);
+  const [candidateMapReleaseId, setCandidateMapReleaseId] = useState<string | null>(null);
+  const [formalMapLoading, setFormalMapLoading] = useState(false);
+  const [formalMapError, setFormalMapError] = useState<string | null>(null);
+  const [formalMap, setFormalMap] = useState<FormalKnowledgeMapResponse | null>(null);
+  const [formalMapDraft, setFormalMapDraft] = useState<KnowledgeMap | null>(null);
+  const [savingFormalMap, setSavingFormalMap] = useState(false);
+  const [savingFormalMapDraft, setSavingFormalMapDraft] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSaving, setWizardSaving] = useState(false);
   const [buildForm] = Form.useForm<BuildReleaseFormData>();
   const [wizardForm] = Form.useForm<{ id?: string; name: string }>();
 
+  const selectedAgentSummary = agents.find((agent) => agent.id === selectedAgent);
+  const capabilities: FrontendCapabilityToken[] | undefined = selectedAgentSummary?.capabilities;
+  const hasExplicitCapabilityContext = hasCapabilityContext(capabilities);
+  const canBuildRelease = canUseGovernanceAction(capabilities, "knowledge.build");
+  const canPublishRelease = canUseGovernanceAction(capabilities, "knowledge.publish");
+  const canReadReleaseCandidates = canUseGovernanceAction(capabilities, "knowledge.candidate.read");
+  const canReadMap = canUseGovernanceAction(capabilities, "knowledge.map.read");
+  const canEditMap = canUseGovernanceAction(capabilities, "knowledge.map.edit");
+
+  const permissionDeniedMessage = t("gameProject.permissionDenied", {
+    defaultValue: "You do not have permission to perform this action.",
+  });
+
+  const buildDisabledReason =
+    hasExplicitCapabilityContext && !canBuildRelease
+      ? t("gameProject.releaseBuildPermissionRequired", {
+          defaultValue: "Requires knowledge.build permission.",
+        })
+      : null;
+  const publishDisabledReason =
+    hasExplicitCapabilityContext && !canPublishRelease
+      ? t("gameProject.releasePublishPermissionRequired", {
+          defaultValue: "Requires knowledge.publish permission.",
+        })
+      : null;
+  const releaseCandidateReadReason =
+    hasExplicitCapabilityContext && !canReadReleaseCandidates
+      ? t("gameProject.releaseCandidatePermissionRequired", {
+          defaultValue: "Requires knowledge.candidate.read permission.",
+        })
+      : null;
+  const mapReadReason =
+    hasExplicitCapabilityContext && !canReadMap
+      ? t("gameProject.mapReadPermissionRequired", {
+          defaultValue: "Requires knowledge.map.read permission.",
+        })
+      : null;
+  const mapEditReason =
+    hasExplicitCapabilityContext && !canEditMap
+      ? t("gameProject.mapEditPermissionRequired", {
+          defaultValue: "Requires knowledge.map.edit permission.",
+        })
+      : null;
+
+  const formatGovernanceError = (error: unknown, fallbackMessage: string) => {
+    if (isPermissionDeniedError(error)) {
+      return permissionDeniedMessage;
+    }
+    return error instanceof Error ? error.message : fallbackMessage;
+  };
+
   const getIndexCount = (manifest: KnowledgeManifest | null, indexName: string) => manifest?.indexes?.[indexName]?.count ?? 0;
+
+  const getErrorText = (error: unknown, fallbackMessage: string) =>
+    error instanceof Error ? error.message : fallbackMessage;
+
+  const resolveMapLoadError = (error: unknown, fallbackMessage: string) => {
+    if (isPermissionDeniedError(error)) {
+      return permissionDeniedMessage;
+    }
+    const messageText = getErrorText(error, fallbackMessage);
+    if (messageText.includes(NO_CURRENT_RELEASE_DETAIL)) {
+      return NO_CURRENT_RELEASE_DETAIL;
+    }
+    if (messageText.includes(LOCAL_PROJECT_DIRECTORY_ERROR)) {
+      return LOCAL_PROJECT_DIRECTORY_ERROR;
+    }
+    return messageText;
+  };
+
+  const summarizeMap = (map: KnowledgeMap | null) => ({
+    systems: map?.systems ?? [],
+    tables: map?.tables ?? [],
+    docs: map?.docs ?? [],
+    scripts: map?.scripts ?? [],
+    relationships: map?.relationships ?? [],
+  });
 
   const formatDateTime = (value?: string | null) => {
     if (!value) {
@@ -102,7 +250,56 @@ export default function GameProject() {
     }
   };
 
+  const fetchCandidateMap = async (agentId: string) => {
+    setCandidateMapLoading(true);
+    setCandidateMapError(null);
+    try {
+      const response = await gameKnowledgeReleaseApi.getMapCandidate(agentId);
+      setCandidateMap(response.map);
+      setCandidateMapReleaseId(response.release_id);
+    } catch (err) {
+      setCandidateMap(null);
+      setCandidateMapReleaseId(null);
+      setCandidateMapError(
+        resolveMapLoadError(
+          err,
+          t("gameProject.mapCandidateLoadFailed", { defaultValue: "Failed to load candidate map" }),
+        ),
+      );
+    } finally {
+      setCandidateMapLoading(false);
+    }
+  };
+
+  const fetchFormalMap = async (agentId: string) => {
+    setFormalMapLoading(true);
+    setFormalMapError(null);
+    try {
+      const response = await gameKnowledgeReleaseApi.getFormalMap(agentId);
+      setFormalMap(response);
+    } catch (err) {
+      setFormalMap(null);
+      setFormalMapError(
+        resolveMapLoadError(
+          err,
+          t("gameProject.formalMapLoadFailed", { defaultValue: "Failed to load formal map" }),
+        ),
+      );
+    } finally {
+      setFormalMapLoading(false);
+    }
+  };
+
+  const fetchMapReviewData = async (agentId: string) => {
+    await Promise.all([fetchCandidateMap(agentId), fetchFormalMap(agentId)]);
+  };
+
   const fetchBuildCandidates = async (agentId: string) => {
+    if (hasExplicitCapabilityContext && !canReadReleaseCandidates) {
+      setBuildCandidates([]);
+      setBuildCandidatesError(null);
+      return;
+    }
     setBuildCandidatesLoading(true);
     setBuildCandidatesError(null);
     try {
@@ -111,9 +308,10 @@ export default function GameProject() {
     } catch (err) {
       setBuildCandidates([]);
       setBuildCandidatesError(
-        err instanceof Error
-          ? err.message
-          : t("gameProject.releaseCandidatesLoadFailed", { defaultValue: "Failed to load release candidates" }),
+        formatGovernanceError(
+          err,
+          t("gameProject.releaseCandidatesLoadFailed", { defaultValue: "Failed to load release candidates" }),
+        ),
       );
     } finally {
       setBuildCandidatesLoading(false);
@@ -127,11 +325,29 @@ export default function GameProject() {
       setReleaseError(null);
       setReleases([]);
       setCurrentRelease(null);
+      setCandidateMap(null);
+      setCandidateMapReleaseId(null);
+      setCandidateMapError(null);
+      setFormalMap(null);
+      setFormalMapDraft(null);
+      setFormalMapError(null);
       return;
     }
     setLoading(true);
     setError(null);
     void fetchKnowledgeReleases(selectedAgent);
+    if (hasExplicitCapabilityContext && !canReadMap) {
+      setCandidateMap(null);
+      setCandidateMapReleaseId(null);
+      setCandidateMapError(null);
+      setFormalMap(null);
+      setFormalMapDraft(null);
+      setFormalMapError(null);
+      setCandidateMapLoading(false);
+      setFormalMapLoading(false);
+    } else {
+      void fetchMapReviewData(selectedAgent);
+    }
     try {
       const [projectConfig, userConfig, storage] = await Promise.all([
         gameApi.getProjectConfig(selectedAgent),
@@ -405,9 +621,10 @@ export default function GameProject() {
       );
     } catch (err) {
       message.warning(
-        err instanceof Error
-          ? err.message
-          : t("gameProject.releaseSetCurrentFailed", { defaultValue: "Failed to set current knowledge release" }),
+        formatGovernanceError(
+          err,
+          t("gameProject.releaseSetCurrentFailed", { defaultValue: "Failed to set current knowledge release" }),
+        ),
       );
     } finally {
       setSettingCurrentId(null);
@@ -415,6 +632,9 @@ export default function GameProject() {
   };
 
   const openBuildReleaseModal = () => {
+    if (!canBuildRelease) {
+      return;
+    }
     buildForm.setFieldsValue({
       release_id: createDefaultReleaseId(),
       release_notes: currentRelease ? `Build from current indexes based on ${currentRelease.release_id}` : "",
@@ -423,8 +643,13 @@ export default function GameProject() {
     setBuildCandidates([]);
     setBuildCandidatesError(null);
     setBuildModalOpen(true);
-    if (selectedAgent) {
+    if (selectedAgent && canReadReleaseCandidates) {
       void fetchBuildCandidates(selectedAgent);
+    } else {
+      setBuildCandidates([]);
+      if (releaseCandidateReadReason) {
+        setBuildCandidatesError(releaseCandidateReadReason);
+      }
     }
   };
 
@@ -469,24 +694,324 @@ export default function GameProject() {
         }),
       );
     } catch (err) {
-      setBuildCandidatesError(
-        err instanceof Error
-          ? err.message
-          : t("gameProject.releaseBuildFailed", { defaultValue: "Failed to build knowledge release" }),
+      const errorMessage = formatGovernanceError(
+        err,
+        t("gameProject.releaseBuildFailed", { defaultValue: "Failed to build knowledge release" }),
       );
-      message.warning(
-        err instanceof Error
-          ? err.message
-          : t("gameProject.releaseBuildFailed", { defaultValue: "Failed to build knowledge release" }),
-      );
+      setBuildCandidatesError(errorMessage);
+      message.warning(errorMessage);
     } finally {
       setBuildingRelease(false);
     }
   };
 
+  const handleSaveFormalMap = async () => {
+    if (!selectedAgent || !candidateMap) {
+      return;
+    }
+    try {
+      setSavingFormalMap(true);
+      await gameKnowledgeReleaseApi.saveFormalMap(
+        selectedAgent,
+        candidateMap,
+        selectedAgentSummary?.name || selectedAgent,
+      );
+      await fetchFormalMap(selectedAgent);
+      message.success(
+        t("gameProject.formalMapSaveSuccess", {
+          defaultValue: "Saved formal map. It will be used by the next safe build.",
+        }),
+      );
+    } catch (err) {
+      message.warning(
+        isPermissionDeniedError(err)
+          ? permissionDeniedMessage
+          : getErrorText(
+              err,
+              t("gameProject.formalMapSaveFailed", { defaultValue: "Failed to save formal map" }),
+            ),
+      );
+    } finally {
+      setSavingFormalMap(false);
+    }
+  };
+
+  const handleSaveFormalMapDraft = async () => {
+    if (!selectedAgent || !formalMapDraft) {
+      return;
+    }
+    try {
+      setSavingFormalMapDraft(true);
+      await gameKnowledgeReleaseApi.saveFormalMap(
+        selectedAgent,
+        formalMapDraft,
+        selectedAgentSummary?.name || selectedAgent,
+      );
+      await fetchFormalMap(selectedAgent);
+      message.success(
+        t("gameProject.formalMapSaveSuccess", {
+          defaultValue: "Saved formal map. It will be used by the next safe build.",
+        }),
+      );
+    } catch (err) {
+      message.warning(
+        isPermissionDeniedError(err)
+          ? permissionDeniedMessage
+          : getErrorText(
+              err,
+              t("gameProject.formalMapSaveFailed", { defaultValue: "Failed to save formal map" }),
+            ),
+      );
+    } finally {
+      setSavingFormalMapDraft(false);
+    }
+  };
+
+  const updateFormalMapDraftStatus = (
+    section: "systems" | "tables" | "docs" | "scripts",
+    itemId: string,
+    nextStatus: KnowledgeStatus,
+  ) => {
+    setFormalMapDraft((currentDraft) => {
+      if (!currentDraft) {
+        return currentDraft;
+      }
+
+      if (section === "systems") {
+        return {
+          ...currentDraft,
+          systems: currentDraft.systems.map((item) =>
+            item.system_id === itemId ? { ...item, status: nextStatus } : item,
+          ),
+        };
+      }
+
+      if (section === "tables") {
+        return {
+          ...currentDraft,
+          tables: currentDraft.tables.map((item) =>
+            item.table_id === itemId ? { ...item, status: nextStatus } : item,
+          ),
+        };
+      }
+
+      if (section === "docs") {
+        return {
+          ...currentDraft,
+          docs: currentDraft.docs.map((item) =>
+            item.doc_id === itemId ? { ...item, status: nextStatus } : item,
+          ),
+        };
+      }
+
+      return {
+        ...currentDraft,
+        scripts: currentDraft.scripts.map((item) =>
+          item.script_id === itemId ? { ...item, status: nextStatus } : item,
+        ),
+      };
+    });
+  };
+
+  const renderStatusControl = (
+    value: KnowledgeStatus,
+    onChange: (nextStatus: KnowledgeStatus) => void,
+    disabled: boolean,
+    disabledReason: string | null,
+  ) => (
+    <div className={styles.mapReviewItemActions}>
+      <Text type="secondary">{t("gameProject.formalMapStatusLabel", { defaultValue: "status" })}</Text>
+      <Tooltip title={disabledReason || undefined}>
+        <span className={styles.mapReviewStatusControlWrap}>
+          <Select
+            size="small"
+            value={value}
+            options={FORMAL_MAP_STATUS_OPTIONS}
+            onChange={(nextValue) => onChange(nextValue as KnowledgeStatus)}
+            disabled={disabled}
+            className={styles.mapReviewStatusSelect}
+          />
+        </span>
+      </Tooltip>
+    </div>
+  );
+
+  const renderSystemList = (
+    items: KnowledgeSystem[],
+    options?: {
+      editable?: boolean;
+      statusControlDisabled?: boolean;
+      statusControlDisabledReason?: string | null;
+      onStatusChange?: (systemId: string, nextStatus: KnowledgeStatus) => void;
+    },
+  ) => {
+    if (items.length === 0) {
+      return <div className={styles.mapReviewEmpty}>{t("gameProject.mapReviewEmptySystems", { defaultValue: "No systems" })}</div>;
+    }
+    return items.map((item) => (
+      <div key={item.system_id} className={styles.mapReviewItemRow}>
+        <div className={styles.mapReviewItemMain}>
+          <Text strong>{item.title}</Text>
+          <div className={styles.mapReviewItemMeta}>
+            <span>system_id: {item.system_id}</span>
+            {!options?.editable ? <span>status: {item.status}</span> : null}
+          </div>
+          {options?.editable && options.onStatusChange
+            ? renderStatusControl(
+                item.status,
+                (nextStatus) => options.onStatusChange?.(item.system_id, nextStatus),
+                !!options.statusControlDisabled,
+                options.statusControlDisabledReason || null,
+              )
+            : null}
+        </div>
+      </div>
+    ));
+  };
+
+  const renderTableList = (
+    items: KnowledgeTableRef[],
+    options?: {
+      editable?: boolean;
+      statusControlDisabled?: boolean;
+      statusControlDisabledReason?: string | null;
+      onStatusChange?: (tableId: string, nextStatus: KnowledgeStatus) => void;
+    },
+  ) => {
+    if (items.length === 0) {
+      return <div className={styles.mapReviewEmpty}>{t("gameProject.mapReviewEmptyTables", { defaultValue: "No tables" })}</div>;
+    }
+    return items.map((item) => (
+      <div key={item.table_id} className={styles.mapReviewItemRow}>
+        <div className={styles.mapReviewItemMain}>
+          <Text strong>{item.title}</Text>
+          <div className={styles.mapReviewItemMeta}>
+            <span>table_id: {item.table_id}</span>
+            <span>source_path: {item.source_path}</span>
+            {!options?.editable ? <span>status: {item.status}</span> : null}
+          </div>
+          {options?.editable && options.onStatusChange
+            ? renderStatusControl(
+                item.status,
+                (nextStatus) => options.onStatusChange?.(item.table_id, nextStatus),
+                !!options.statusControlDisabled,
+                options.statusControlDisabledReason || null,
+              )
+            : null}
+        </div>
+      </div>
+    ));
+  };
+
+  const renderDocList = (
+    items: KnowledgeDocRef[],
+    options?: {
+      editable?: boolean;
+      statusControlDisabled?: boolean;
+      statusControlDisabledReason?: string | null;
+      onStatusChange?: (docId: string, nextStatus: KnowledgeStatus) => void;
+    },
+  ) => {
+    if (items.length === 0) {
+      return <div className={styles.mapReviewEmpty}>{t("gameProject.mapReviewEmptyDocs", { defaultValue: "No docs" })}</div>;
+    }
+    return items.map((item) => (
+      <div key={item.doc_id} className={styles.mapReviewItemRow}>
+        <div className={styles.mapReviewItemMain}>
+          <Text strong>{item.title}</Text>
+          <div className={styles.mapReviewItemMeta}>
+            <span>doc_id: {item.doc_id}</span>
+            <span>source_path: {item.source_path}</span>
+            {!options?.editable ? <span>status: {item.status}</span> : null}
+          </div>
+          {options?.editable && options.onStatusChange
+            ? renderStatusControl(
+                item.status,
+                (nextStatus) => options.onStatusChange?.(item.doc_id, nextStatus),
+                !!options.statusControlDisabled,
+                options.statusControlDisabledReason || null,
+              )
+            : null}
+        </div>
+      </div>
+    ));
+  };
+
+  const renderScriptList = (
+    items: KnowledgeScriptRef[],
+    options?: {
+      editable?: boolean;
+      statusControlDisabled?: boolean;
+      statusControlDisabledReason?: string | null;
+      onStatusChange?: (scriptId: string, nextStatus: KnowledgeStatus) => void;
+    },
+  ) => {
+    if (items.length === 0) {
+      return <div className={styles.mapReviewEmpty}>{t("gameProject.mapReviewEmptyScripts", { defaultValue: "No scripts" })}</div>;
+    }
+    return items.map((item) => (
+      <div key={item.script_id} className={styles.mapReviewItemRow}>
+        <div className={styles.mapReviewItemMain}>
+          <Text strong>{item.title}</Text>
+          <div className={styles.mapReviewItemMeta}>
+            <span>script_id: {item.script_id}</span>
+            <span>source_path: {item.source_path}</span>
+            {!options?.editable ? <span>status: {item.status}</span> : null}
+          </div>
+          {options?.editable && options.onStatusChange
+            ? renderStatusControl(
+                item.status,
+                (nextStatus) => options.onStatusChange?.(item.script_id, nextStatus),
+                !!options.statusControlDisabled,
+                options.statusControlDisabledReason || null,
+              )
+            : null}
+        </div>
+      </div>
+    ));
+  };
+
+  const renderRelationshipList = (items: KnowledgeRelationship[]) => {
+    if (items.length === 0) {
+      return <div className={styles.mapReviewEmpty}>{t("gameProject.mapReviewEmptyRelationships", { defaultValue: "No relationships" })}</div>;
+    }
+    return items.map((item) => (
+      <div key={item.relationship_id} className={styles.mapReviewItemRow}>
+        <div className={styles.mapReviewItemMain}>
+          <Text strong>{item.relationship_id}</Text>
+          <div className={styles.mapReviewItemMeta}>
+            <span>type: {item.relation_type}</span>
+            <span>from: {item.from_ref}</span>
+            <span>to: {item.to_ref}</span>
+          </div>
+        </div>
+      </div>
+    ));
+  };
+
+  const candidateSummary = summarizeMap(candidateMap);
+  const savedFormalMap = formalMap?.mode === NO_FORMAL_MAP_MODE ? null : formalMap?.map ?? null;
+  const formalSummary = summarizeMap(formalMapDraft);
+  const formalMapDraftDirty = !!savedFormalMap && !!formalMapDraft && JSON.stringify(formalMapDraft) !== JSON.stringify(savedFormalMap);
+  const formalMapRelationshipWarnings = buildRelationshipWarningMessages(formalMapDraft);
+  const saveFormalMapFirstReason = !savedFormalMap
+    ? t("gameProject.formalMapSaveFirstBeforeEdit", {
+        defaultValue: "Save a formal map first before editing statuses.",
+      })
+    : null;
+  const saveFormalMapDisabledReason = mapReadReason || mapEditReason || null;
+  const canSaveFormalMap = !!selectedAgent && !!candidateMap && (!hasExplicitCapabilityContext || (canReadMap && canEditMap));
+  const statusEditDisabledReason = mapEditReason || saveFormalMapFirstReason;
+  const canEditFormalMapStatuses = !!savedFormalMap && (!hasExplicitCapabilityContext || (canReadMap && canEditMap));
+  const canSaveFormalMapDraft = !!selectedAgent && !!formalMapDraft && formalMapDraftDirty && canEditFormalMapStatuses;
+
   useEffect(() => {
     fetchConfig();
-  }, [selectedAgent]);
+  }, [selectedAgent, hasExplicitCapabilityContext, canReadMap]);
+
+  useEffect(() => {
+    setFormalMapDraft(savedFormalMap ? cloneKnowledgeMap(savedFormalMap) : null);
+  }, [formalMap]);
 
   if (loading) {
     return (
@@ -529,14 +1054,19 @@ export default function GameProject() {
             </div>
 
             <div className={styles.releaseActions}>
-              <Button size="small" type="primary" onClick={openBuildReleaseModal} disabled={!selectedAgent}>
-                {t("gameProject.releaseBuildButton", { defaultValue: "Build release" })}
-              </Button>
+              <Tooltip title={buildDisabledReason || undefined}>
+                <span>
+                  <Button size="small" type="primary" onClick={openBuildReleaseModal} disabled={!selectedAgent || !canBuildRelease}>
+                    {t("gameProject.releaseBuildButton", { defaultValue: "Build release" })}
+                  </Button>
+                </span>
+              </Tooltip>
               <Text type="secondary">
                 {t("gameProject.releaseBuildHint", {
                   defaultValue: "Build uses the safe server-side endpoint and does not auto-set current.",
                 })}
               </Text>
+              {buildDisabledReason ? <Text type="secondary">{buildDisabledReason}</Text> : null}
             </div>
 
             {releaseError ? (
@@ -603,21 +1133,266 @@ export default function GameProject() {
                             <span>script_evidence: {getIndexCount(release, "script_evidence")}</span>
                           </div>
                         </div>
-                        <Button
-                          size="small"
-                          onClick={() => handleSetCurrentRelease(release.release_id)}
-                          loading={settingCurrentId === release.release_id}
-                          disabled={isCurrent}
-                        >
-                          {isCurrent
-                            ? t("gameProject.releaseCurrentButton", { defaultValue: "Current" })
-                            : t("gameProject.releaseSetCurrentButton", { defaultValue: "Set current" })}
-                        </Button>
+                        <Tooltip title={!isCurrent ? publishDisabledReason || undefined : undefined}>
+                          <span>
+                            <Button
+                              size="small"
+                              onClick={() => handleSetCurrentRelease(release.release_id)}
+                              loading={settingCurrentId === release.release_id}
+                              disabled={isCurrent || !canPublishRelease}
+                            >
+                              {isCurrent
+                                ? t("gameProject.releaseCurrentButton", { defaultValue: "Current" })
+                                : t("gameProject.releaseSetCurrentButton", { defaultValue: "Set current" })}
+                            </Button>
+                          </span>
+                        </Tooltip>
                       </div>
                     );
                   })}
                 </div>
               )}
+            </div>
+
+            <div className={styles.mapReviewSection}>
+              <div className={styles.mapReviewHeader}>
+                <div>
+                  <Text strong>{t("gameProject.formalMapReviewTitle", { defaultValue: "Formal map review" })}</Text>
+                  <div className={styles.mapReviewHint}>
+                    {t("gameProject.formalMapReviewHint", {
+                      defaultValue:
+                        "Review the current candidate map and the saved formal map. Saving formal map does not build or publish a release.",
+                    })}
+                  </div>
+                </div>
+                <Space size={8}>
+                  <Button
+                    size="small"
+                    onClick={() => selectedAgent && fetchMapReviewData(selectedAgent)}
+                    loading={candidateMapLoading || formalMapLoading}
+                    disabled={!selectedAgent || !!mapReadReason}
+                  >
+                    {t("common.refresh")}
+                  </Button>
+                  <Tooltip title={saveFormalMapDisabledReason || undefined}>
+                    <span>
+                      <Button
+                        size="small"
+                        type="primary"
+                        onClick={handleSaveFormalMap}
+                        loading={savingFormalMap}
+                        disabled={!canSaveFormalMap}
+                      >
+                        {t("gameProject.saveFormalMapButton", { defaultValue: "Save as formal map" })}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </Space>
+              </div>
+
+              {mapReadReason ? (
+                <Alert
+                  type="info"
+                  showIcon
+                  message={mapReadReason}
+                  className={styles.mapReviewAlert}
+                />
+              ) : null}
+
+              {saveFormalMapDisabledReason && !mapReadReason ? (
+                <Text type="secondary">{saveFormalMapDisabledReason}</Text>
+              ) : null}
+
+              <div className={styles.mapReviewGrid}>
+                <div className={styles.mapReviewPanel}>
+                  <div className={styles.mapReviewPanelHeader}>
+                    <Text strong>{t("gameProject.mapCandidateTitle", { defaultValue: "Candidate map" })}</Text>
+                    {candidateMapReleaseId ? <Tag color="blue">release_id {candidateMapReleaseId}</Tag> : null}
+                  </div>
+
+                  {candidateMapLoading ? (
+                    <div className={styles.mapReviewEmpty}>{t("common.loading")}</div>
+                  ) : candidateMapError ? (
+                    <Alert
+                      type={candidateMapError === NO_CURRENT_RELEASE_DETAIL ? "info" : "warning"}
+                      showIcon
+                      message={
+                        candidateMapError === NO_CURRENT_RELEASE_DETAIL
+                          ? t("gameProject.mapCandidateNoCurrentTitle", { defaultValue: "No current knowledge release" })
+                          : t("gameProject.mapCandidateLoadWarning", { defaultValue: "Candidate map is temporarily unavailable" })
+                      }
+                      description={
+                        candidateMapError === NO_CURRENT_RELEASE_DETAIL
+                          ? t("gameProject.mapCandidateNoCurrentDescription", {
+                              defaultValue: "Build a knowledge release first to generate a candidate map.",
+                            })
+                          : candidateMapError
+                      }
+                      className={styles.mapReviewAlert}
+                    />
+                  ) : !candidateMap ? (
+                    <div className={styles.mapReviewEmpty}>{t("gameProject.mapCandidateEmpty", { defaultValue: "No candidate map available" })}</div>
+                  ) : (
+                    <>
+                      <div className={styles.mapReviewCounts}>
+                        <Tag color="blue">systems {candidateSummary.systems.length}</Tag>
+                        <Tag color="gold">tables {candidateSummary.tables.length}</Tag>
+                        <Tag color="green">docs {candidateSummary.docs.length}</Tag>
+                        <Tag color="purple">scripts {candidateSummary.scripts.length}</Tag>
+                        <Tag color="cyan">relationships {candidateSummary.relationships.length}</Tag>
+                      </div>
+                      <div className={styles.mapReviewBlock}>
+                        <Text strong>{t("gameProject.mapSystemsTitle", { defaultValue: "Systems" })}</Text>
+                        <div className={styles.mapReviewList}>{renderSystemList(candidateSummary.systems)}</div>
+                      </div>
+                      <div className={styles.mapReviewBlock}>
+                        <Text strong>{t("gameProject.mapTablesTitle", { defaultValue: "Tables" })}</Text>
+                        <div className={styles.mapReviewList}>{renderTableList(candidateSummary.tables)}</div>
+                      </div>
+                      <div className={styles.mapReviewBlock}>
+                        <Text strong>{t("gameProject.mapDocsTitle", { defaultValue: "Docs" })}</Text>
+                        <div className={styles.mapReviewList}>{renderDocList(candidateSummary.docs)}</div>
+                      </div>
+                      <div className={styles.mapReviewBlock}>
+                        <Text strong>{t("gameProject.mapScriptsTitle", { defaultValue: "Scripts" })}</Text>
+                        <div className={styles.mapReviewList}>{renderScriptList(candidateSummary.scripts)}</div>
+                      </div>
+                      <div className={styles.mapReviewBlock}>
+                        <Text strong>{t("gameProject.mapRelationshipsTitle", { defaultValue: "Relationships" })}</Text>
+                        <div className={styles.mapReviewList}>{renderRelationshipList(candidateSummary.relationships)}</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className={styles.mapReviewPanel}>
+                  <div className={styles.mapReviewPanelHeader}>
+                    <Text strong>{t("gameProject.formalMapTitle", { defaultValue: "Saved formal map" })}</Text>
+                    <Space size={8} wrap>
+                      {formalMapDraftDirty ? <Tag color="warning">{t("gameProject.formalMapDraftDirtyTag", { defaultValue: "unsaved status changes" })}</Tag> : null}
+                      {formalMap?.map_hash ? <Tag color="success">{formalMap.map_hash}</Tag> : null}
+                      <Tooltip title={statusEditDisabledReason || undefined}>
+                        <span>
+                          <Button
+                            size="small"
+                            type="primary"
+                            onClick={handleSaveFormalMapDraft}
+                            loading={savingFormalMapDraft}
+                            disabled={!canSaveFormalMapDraft}
+                          >
+                            {t("gameProject.saveFormalMapStatusButton", { defaultValue: "Save status changes" })}
+                          </Button>
+                        </span>
+                      </Tooltip>
+                    </Space>
+                  </div>
+
+                  {formalMapLoading ? (
+                    <div className={styles.mapReviewEmpty}>{t("common.loading")}</div>
+                  ) : formalMapError ? (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message={t("gameProject.formalMapLoadWarning", { defaultValue: "Formal map is temporarily unavailable" })}
+                      description={formalMapError}
+                      className={styles.mapReviewAlert}
+                    />
+                  ) : formalMap?.mode === NO_FORMAL_MAP_MODE ? (
+                    <Alert
+                      type="info"
+                      showIcon
+                      message={t("gameProject.noSavedFormalMapTitle", { defaultValue: "no saved formal map" })}
+                      description={t("gameProject.noSavedFormalMapDescription", {
+                        defaultValue: "Use Save as formal map first. Status editing is available only on saved formal map.",
+                      })}
+                      className={styles.mapReviewAlert}
+                    />
+                  ) : !savedFormalMap ? (
+                    <div className={styles.mapReviewEmpty}>{t("gameProject.formalMapEmpty", { defaultValue: "No saved formal map" })}</div>
+                  ) : (
+                    <>
+                      {statusEditDisabledReason ? <Text type="secondary">{statusEditDisabledReason}</Text> : null}
+                      {formalMapRelationshipWarnings.length > 0 ? (
+                        <Alert
+                          type="warning"
+                          showIcon
+                          message={t("gameProject.formalMapRelationshipWarningTitle", {
+                            defaultValue: "Deprecated or ignored items may still be referenced by relationships.",
+                          })}
+                          description={
+                            <div className={styles.mapReviewWarningList}>
+                              {formalMapRelationshipWarnings.map((warning) => (
+                                <div key={warning}>{warning}</div>
+                              ))}
+                            </div>
+                          }
+                          className={styles.mapReviewAlert}
+                        />
+                      ) : null}
+                      <div className={styles.mapReviewMetaSummary}>
+                        <div>{t("gameProject.formalMapUpdatedAt", { defaultValue: "updated_at" })}: {formatDateTime(formalMap?.updated_at)}</div>
+                        <div>{t("gameProject.formalMapUpdatedBy", { defaultValue: "updated_by" })}: {formalMap?.updated_by || "-"}</div>
+                        <div>
+                          {formalMapDraftDirty
+                            ? t("gameProject.formalMapDraftDirtyHint", {
+                                defaultValue: "Status changes are local until you save them.",
+                              })
+                            : t("gameProject.formalMapDraftCleanHint", {
+                                defaultValue: "No unsaved status changes.",
+                              })}
+                        </div>
+                      </div>
+                      <div className={styles.mapReviewCounts}>
+                        <Tag color="blue">systems {formalSummary.systems.length}</Tag>
+                        <Tag color="gold">tables {formalSummary.tables.length}</Tag>
+                        <Tag color="green">docs {formalSummary.docs.length}</Tag>
+                        <Tag color="purple">scripts {formalSummary.scripts.length}</Tag>
+                        <Tag color="cyan">relationships {formalSummary.relationships.length}</Tag>
+                      </div>
+                      <div className={styles.mapReviewBlock}>
+                        <Text strong>{t("gameProject.mapSystemsTitle", { defaultValue: "Systems" })}</Text>
+                        <div className={styles.mapReviewList}>{renderSystemList(formalSummary.systems, {
+                          editable: true,
+                          statusControlDisabled: !canEditFormalMapStatuses,
+                          statusControlDisabledReason: statusEditDisabledReason,
+                          onStatusChange: (systemId, nextStatus) => updateFormalMapDraftStatus("systems", systemId, nextStatus),
+                        })}</div>
+                      </div>
+                      <div className={styles.mapReviewBlock}>
+                        <Text strong>{t("gameProject.mapTablesTitle", { defaultValue: "Tables" })}</Text>
+                        <div className={styles.mapReviewList}>{renderTableList(formalSummary.tables, {
+                          editable: true,
+                          statusControlDisabled: !canEditFormalMapStatuses,
+                          statusControlDisabledReason: statusEditDisabledReason,
+                          onStatusChange: (tableId, nextStatus) => updateFormalMapDraftStatus("tables", tableId, nextStatus),
+                        })}</div>
+                      </div>
+                      <div className={styles.mapReviewBlock}>
+                        <Text strong>{t("gameProject.mapDocsTitle", { defaultValue: "Docs" })}</Text>
+                        <div className={styles.mapReviewList}>{renderDocList(formalSummary.docs, {
+                          editable: true,
+                          statusControlDisabled: !canEditFormalMapStatuses,
+                          statusControlDisabledReason: statusEditDisabledReason,
+                          onStatusChange: (docId, nextStatus) => updateFormalMapDraftStatus("docs", docId, nextStatus),
+                        })}</div>
+                      </div>
+                      <div className={styles.mapReviewBlock}>
+                        <Text strong>{t("gameProject.mapScriptsTitle", { defaultValue: "Scripts" })}</Text>
+                        <div className={styles.mapReviewList}>{renderScriptList(formalSummary.scripts, {
+                          editable: true,
+                          statusControlDisabled: !canEditFormalMapStatuses,
+                          statusControlDisabledReason: statusEditDisabledReason,
+                          onStatusChange: (scriptId, nextStatus) => updateFormalMapDraftStatus("scripts", scriptId, nextStatus),
+                        })}</div>
+                      </div>
+                      <div className={styles.mapReviewBlock}>
+                        <Text strong>{t("gameProject.mapRelationshipsTitle", { defaultValue: "Relationships" })}</Text>
+                        <div className={styles.mapReviewList}>{renderRelationshipList(formalSummary.relationships)}</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
           </Card>
 
@@ -852,7 +1627,12 @@ export default function GameProject() {
           <div className={styles.releaseCandidateSection}>
             <div className={styles.releaseCandidateHeader}>
               <Text strong>{t("gameProject.releaseCandidateSectionTitle", { defaultValue: "Release candidates" })}</Text>
-              <Button size="small" onClick={() => void refreshBuildCandidates()} loading={buildCandidatesLoading}>
+              <Button
+                size="small"
+                onClick={() => void refreshBuildCandidates()}
+                loading={buildCandidatesLoading}
+                disabled={!canReadReleaseCandidates}
+              >
                 {t("common.refresh")}
               </Button>
             </div>
@@ -864,6 +1644,18 @@ export default function GameProject() {
               })}
             </div>
 
+            {releaseCandidateReadReason ? (
+              <Alert
+                type="info"
+                showIcon
+                message={t("gameProject.releaseCandidatePermissionMessage", {
+                  defaultValue: "Release candidates are unavailable for this session.",
+                })}
+                description={releaseCandidateReadReason}
+                className={styles.releaseCandidateAlert}
+              />
+            ) : null}
+
             {buildCandidatesError ? (
               <Alert
                 type="warning"
@@ -874,7 +1666,13 @@ export default function GameProject() {
               />
             ) : null}
 
-            {buildCandidatesLoading ? (
+            {releaseCandidateReadReason ? (
+              <div className={styles.releaseCandidateEmpty}>
+                {t("gameProject.releaseCandidatePermissionEmpty", {
+                  defaultValue: "Candidate selection is unavailable without release-candidate read permission.",
+                })}
+              </div>
+            ) : buildCandidatesLoading ? (
               <div className={styles.releaseCandidateEmpty}>{t("common.loading")}</div>
             ) : buildCandidates.length === 0 ? (
               <div className={styles.releaseCandidateEmpty}>

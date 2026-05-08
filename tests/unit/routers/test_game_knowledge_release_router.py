@@ -21,8 +21,13 @@ from ltclaw_gy_x.game.models import (
 )
 
 
-def _build_app(workspace):
+_CAPABILITY_UNSET = object()
+
+
+def _build_app(workspace, capabilities=_CAPABILITY_UNSET):
     app = FastAPI()
+    if capabilities is not _CAPABILITY_UNSET:
+        app.state.capabilities = capabilities
     app.include_router(router, prefix='/api')
     return app
 
@@ -256,3 +261,244 @@ def test_build_release_from_current_indexes_forwards_project_root_and_workspace(
     assert captured['release_id'] == 'release-safe-001'
     assert captured['kwargs']['candidate_ids'] == ['combat-doc']
     assert captured['kwargs']['release_notes'] == '# safe build\n'
+
+
+def test_build_release_requires_knowledge_build_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _build(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('build should be blocked before service call')
+
+    monkeypatch.setattr(release_router_module, 'build_knowledge_release', _build)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace, capabilities=set())) as client:
+        response = client.post(
+            '/api/game/knowledge/releases/build',
+            json={
+                'release_id': 'release-guarded-001',
+                'knowledge_map': _knowledge_map('release-guarded-001').model_dump(mode='json'),
+            },
+        )
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.build'
+    assert called is False
+
+
+def test_build_release_allows_knowledge_build_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {}
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _build(project_root, release_id, knowledge_map, **kwargs):
+        captured['project_root'] = project_root
+        captured['release_id'] = release_id
+        captured['knowledge_map'] = knowledge_map
+        return KnowledgeReleaseBuildResult(
+            release_dir=tmp_path / 'release-guarded-001',
+            manifest=_manifest('release-guarded-001'),
+            knowledge_map=knowledge_map,
+            artifacts={},
+        )
+
+    monkeypatch.setattr(release_router_module, 'build_knowledge_release', _build)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.build'})) as client:
+        response = client.post(
+            '/api/game/knowledge/releases/build',
+            json={
+                'release_id': 'release-guarded-001',
+                'knowledge_map': _knowledge_map('release-guarded-001').model_dump(mode='json'),
+            },
+        )
+
+    assert response.status_code == 200
+    assert captured['project_root'] == tmp_path / 'project-root'
+    assert captured['release_id'] == 'release-guarded-001'
+
+
+def test_build_release_from_current_indexes_requires_knowledge_build_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _build(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('build should be blocked before service call')
+
+    monkeypatch.setattr(release_router_module, 'build_knowledge_release_from_current_indexes', _build)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace, capabilities=[])) as client:
+        response = client.post(
+            '/api/game/knowledge/releases/build-from-current-indexes',
+            json={'release_id': 'release-safe-guarded-001'},
+        )
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.build'
+    assert called is False
+
+
+def test_build_release_from_current_indexes_allows_knowledge_build_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {}
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _build(project_root, workspace_dir, release_id, **kwargs):
+        captured['project_root'] = project_root
+        captured['workspace_dir'] = workspace_dir
+        captured['release_id'] = release_id
+        return KnowledgeReleaseBuildResult(
+            release_dir=tmp_path / 'release-safe-guarded-001',
+            manifest=_manifest('release-safe-guarded-001'),
+            knowledge_map=_knowledge_map('release-safe-guarded-001'),
+            artifacts={},
+        )
+
+    monkeypatch.setattr(release_router_module, 'build_knowledge_release_from_current_indexes', _build)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.build'})) as client:
+        response = client.post(
+            '/api/game/knowledge/releases/build-from-current-indexes',
+            json={'release_id': 'release-safe-guarded-001'},
+        )
+
+    assert response.status_code == 200
+    assert captured['project_root'] == tmp_path / 'project-root'
+    assert captured['release_id'] == 'release-safe-guarded-001'
+
+
+def test_release_read_routes_require_knowledge_read_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    calls = []
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _blocked(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError('read route should be blocked before store call')
+
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(release_router_module, 'list_releases', _blocked)
+    monkeypatch.setattr(release_router_module, 'get_current_release', _blocked)
+    monkeypatch.setattr(release_router_module, 'load_manifest', _blocked)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.publish'})) as client:
+        listed = client.get('/api/game/knowledge/releases')
+        current = client.get('/api/game/knowledge/releases/current')
+        detail = client.get('/api/game/knowledge/releases/release-002/manifest')
+
+    assert listed.status_code == 403
+    assert listed.json()['detail'] == 'Missing capability: knowledge.read'
+    assert current.status_code == 403
+    assert current.json()['detail'] == 'Missing capability: knowledge.read'
+    assert detail.status_code == 403
+    assert detail.json()['detail'] == 'Missing capability: knowledge.read'
+    assert calls == []
+
+
+def test_release_read_routes_allow_knowledge_read_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    manifest = _manifest('release-002')
+    calls = []
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _list(project_root):
+        calls.append(('list', project_root))
+        return [manifest]
+
+    def _current(project_root):
+        calls.append(('current', project_root))
+        return manifest
+
+    def _load(project_root, release_id):
+        calls.append(('manifest', project_root, release_id))
+        return manifest
+
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(release_router_module, 'list_releases', _list)
+    monkeypatch.setattr(release_router_module, 'get_current_release', _current)
+    monkeypatch.setattr(release_router_module, 'load_manifest', _load)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.read'})) as client:
+        listed = client.get('/api/game/knowledge/releases')
+        current = client.get('/api/game/knowledge/releases/current')
+        detail = client.get('/api/game/knowledge/releases/release-002/manifest')
+
+    assert listed.status_code == 200
+    assert current.status_code == 200
+    assert detail.status_code == 200
+    assert calls == [
+        ('list', tmp_path / 'project-root'),
+        ('current', tmp_path / 'project-root'),
+        ('manifest', tmp_path / 'project-root', 'release-002'),
+    ]
+
+
+def test_set_current_release_requires_knowledge_publish_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _set_current(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('publish should be blocked before store call')
+
+    monkeypatch.setattr(release_router_module, 'set_current_release', _set_current)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.build'})) as client:
+        response = client.post('/api/game/knowledge/releases/release-002/current')
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.publish'
+    assert called is False
+
+
+def test_set_current_release_allows_knowledge_publish_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {}
+    pointer = KnowledgeReleasePointer(
+        release_id='release-002',
+        updated_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+    )
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _set_current(project_root, release_id):
+        captured['project_root'] = project_root
+        captured['release_id'] = release_id
+        return pointer
+
+    monkeypatch.setattr(release_router_module, 'set_current_release', _set_current)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.publish'})) as client:
+        response = client.post('/api/game/knowledge/releases/release-002/current')
+
+    assert response.status_code == 200
+    assert captured == {'project_root': tmp_path / 'project-root', 'release_id': 'release-002'}

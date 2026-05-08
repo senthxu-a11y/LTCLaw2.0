@@ -221,6 +221,137 @@
           gap: 12px;
         }
 
+        .mapReviewSection {
+          margin-top: 20px;
+          padding-top: 20px;
+          border-top: 1px solid var(--ant-color-border-secondary);
+        }
+
+        .mapReviewHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .mapReviewHint {
+          margin-top: 4px;
+          color: var(--ant-color-text-secondary);
+          font-size: 12px;
+          line-height: 1.6;
+        }
+
+        .mapReviewAlert {
+          margin-top: 12px;
+          margin-bottom: 12px;
+        }
+
+        .mapReviewGrid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 16px;
+          margin-top: 16px;
+        }
+
+        .mapReviewPanel {
+          min-width: 0;
+          padding: 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-bg-container);
+        }
+
+        .mapReviewPanelHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 12px;
+        }
+
+        .mapReviewMetaSummary {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          margin-bottom: 12px;
+          color: var(--ant-color-text-secondary);
+          font-size: 12px;
+        }
+
+        .mapReviewCounts {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 12px;
+        }
+
+        .mapReviewBlock {
+          margin-bottom: 16px;
+
+          &:last-child {
+            margin-bottom: 0;
+          }
+        }
+
+        .mapReviewList {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-top: 8px;
+        }
+
+        .mapReviewItemRow {
+          padding: 10px 12px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-fill-quaternary);
+        }
+
+        .mapReviewItemMain {
+          min-width: 0;
+        }
+
+        .mapReviewItemActions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-top: 10px;
+        }
+
+        .mapReviewStatusControlWrap {
+          display: inline-flex;
+          width: 180px;
+          max-width: 100%;
+        }
+
+        .mapReviewStatusSelect {
+          width: 100%;
+        }
+
+        .mapReviewItemMeta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px 16px;
+          margin-top: 6px;
+          color: var(--ant-color-text-secondary);
+          font-size: 12px;
+          line-height: 1.6;
+          word-break: break-word;
+        }
+
+        .mapReviewEmpty {
+          padding: 12px 0;
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+        }
+
+        .mapReviewWarningList {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
         .releaseRow {
           display: flex;
           justify-content: space-between;
@@ -337,9 +468,14 @@
       .releaseListHeader,
       .releaseRow,
       .releaseCandidateHeader,
-      .releaseCandidateRow {
+      .releaseCandidateRow,
+      .mapReviewHeader {
         flex-direction: column;
         align-items: stretch;
+      }
+
+      .mapReviewGrid {
+        grid-template-columns: 1fr;
       }
     }
   }

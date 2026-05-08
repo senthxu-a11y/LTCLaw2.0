@@ -30,6 +30,7 @@ from ...game.models import (
     KnowledgeReleasePointer,
     TableIndex,
 )
+from ..capabilities import require_capability
 from ..agent_context import get_agent_for_request
 
 
@@ -95,6 +96,7 @@ def _project_root_or_400(game_service) -> Path:
 
 @router.post('/build', response_model=BuildKnowledgeReleaseResponse)
 async def build_release(request: Request, body: BuildKnowledgeReleaseRequest) -> BuildKnowledgeReleaseResponse:
+    require_capability(request, 'knowledge.build')
     workspace = await get_agent_for_request(request)
     game_service = _game_service_or_404(workspace)
     project_root = _project_root_or_400(game_service)
@@ -132,6 +134,7 @@ async def build_release_from_current_indexes(
     request: Request,
     body: BuildKnowledgeReleaseFromCurrentIndexesRequest,
 ) -> BuildKnowledgeReleaseResponse:
+    require_capability(request, 'knowledge.build')
     workspace = await get_agent_for_request(request)
     game_service = _game_service_or_404(workspace)
     project_root = _project_root_or_400(game_service)
@@ -163,6 +166,7 @@ async def build_release_from_current_indexes(
 
 @router.get('', response_model=list[KnowledgeManifest])
 async def list_release_manifests(request: Request) -> list[KnowledgeManifest]:
+    require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
     game_service = _game_service_or_404(workspace)
     return list_releases(_project_root_or_400(game_service))
@@ -170,6 +174,7 @@ async def list_release_manifests(request: Request) -> list[KnowledgeManifest]:
 
 @router.get('/current', response_model=KnowledgeManifest)
 async def get_current_release_manifest(request: Request) -> KnowledgeManifest:
+    require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
     game_service = _game_service_or_404(workspace)
     try:
@@ -182,6 +187,7 @@ async def get_current_release_manifest(request: Request) -> KnowledgeManifest:
 
 @router.post('/{release_id}/current', response_model=KnowledgeReleasePointer)
 async def set_current_release_manifest(release_id: str, request: Request) -> KnowledgeReleasePointer:
+    require_capability(request, 'knowledge.publish')
     workspace = await get_agent_for_request(request)
     game_service = _game_service_or_404(workspace)
     try:
@@ -194,6 +200,7 @@ async def set_current_release_manifest(release_id: str, request: Request) -> Kno
 
 @router.get('/{release_id}/manifest', response_model=KnowledgeManifest)
 async def get_release_manifest(release_id: str, request: Request) -> KnowledgeManifest:
+    require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
     game_service = _game_service_or_404(workspace)
     try:

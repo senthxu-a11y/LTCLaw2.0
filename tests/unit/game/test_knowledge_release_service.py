@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from ltclaw_gy_x.game.knowledge_release_builders import build_minimal_map
+from ltclaw_gy_x.game.knowledge_formal_map_store import save_formal_knowledge_map
+from ltclaw_gy_x.game.knowledge_release_builders import build_minimal_map, compute_map_hash
 from ltclaw_gy_x.game.knowledge_release_candidate_store import append_release_candidate
 from ltclaw_gy_x.game.knowledge_release_service import (
     KnowledgeProjectRootNotFoundError,
@@ -29,7 +30,13 @@ from ltclaw_gy_x.game.models import (
     ReleaseCandidate,
     TableIndex,
 )
-from ltclaw_gy_x.game.paths import get_code_index_dir, get_project_store_dir, get_table_indexes_path
+from ltclaw_gy_x.game.paths import (
+    get_code_index_dir,
+    get_formal_map_path,
+    get_project_store_dir,
+    get_release_dir,
+    get_table_indexes_path,
+)
 from ltclaw_gy_x.knowledge_base.kb_store import get_kb_store
 
 
@@ -296,6 +303,189 @@ def test_build_knowledge_release_from_current_indexes_uses_server_side_sources(m
 
     assert result.manifest.release_id == 'release-safe-001'
     assert result.artifacts['candidate_evidence'].count == 0
+    assert result.knowledge_map.release_id == 'release-safe-001'
+
+
+def test_build_knowledge_release_from_current_indexes_prefers_saved_formal_map(monkeypatch, tmp_path):
+    _, workspace_dir, project_root = _prepare_safe_build(monkeypatch, tmp_path, 'release-baseline-formal-map')
+    saved_map = build_minimal_map(
+        'formal-working',
+        tables=[
+            KnowledgeTableRef(
+                table_id='SkillTable',
+                title='SkillTable Formal',
+                source_path='Tables/SkillTable.xlsx',
+                source_hash='sha256:table-formal',
+                system_id='combat',
+            )
+        ],
+        docs=[
+            KnowledgeDocRef(
+                doc_id='combat-doc',
+                title='Combat Approved Formal',
+                source_path='KB/CombatApproved.md',
+                source_hash='sha256:approved-formal',
+                system_id='combat',
+            )
+        ],
+        scripts=[
+            KnowledgeScriptRef(
+                script_id='combat-script',
+                title='Combat Resolver Formal',
+                source_path='Scripts/CombatResolver.cs',
+                source_hash='sha256:script-formal',
+                system_id='combat',
+            )
+        ],
+        relationships=[
+            KnowledgeRelationship(
+                relationship_id='rel-formal-working',
+                from_ref='script:combat-script',
+                to_ref='table:SkillTable',
+                relation_type='references_table',
+                source_hash='sha256:formal-relationship',
+            )
+        ],
+    )
+    saved_record = save_formal_knowledge_map(project_root, saved_map, updated_by='designer')
+    formal_map_path = get_formal_map_path(project_root)
+    working_payload_before = json.loads(formal_map_path.read_text(encoding='utf-8'))
+    working_mtime_before = formal_map_path.stat().st_mtime_ns
+    baseline_map_path = get_release_dir(project_root, 'release-baseline-formal-map') / 'map.json'
+    baseline_map_before = baseline_map_path.read_text(encoding='utf-8')
+
+    result = build_knowledge_release_from_current_indexes(
+        project_root,
+        workspace_dir,
+        'release-safe-formal-map',
+    )
+
+    release_map_path = result.release_dir / 'map.json'
+    release_map = json.loads(release_map_path.read_text(encoding='utf-8'))
+    assert result.knowledge_map.release_id == 'release-safe-formal-map'
+    assert release_map['release_id'] == 'release-safe-formal-map'
+    assert release_map['tables'][0]['title'] == 'SkillTable Formal'
+    assert release_map['relationships'][0]['relation_type'] == 'references_table'
+    assert result.manifest.map_hash == compute_map_hash(result.knowledge_map)
+    assert result.manifest.map_hash == compute_map_hash(result.knowledge_map.__class__.model_validate(release_map))
+    assert result.manifest.map_hash != saved_record.map_hash
+    assert json.loads(formal_map_path.read_text(encoding='utf-8')) == working_payload_before
+    assert formal_map_path.stat().st_mtime_ns == working_mtime_before
+    assert baseline_map_path.read_text(encoding='utf-8') == baseline_map_before
+    assert get_current_release(project_root).release_id == 'release-baseline-formal-map'
+
+
+def test_build_knowledge_release_from_current_indexes_rewrites_saved_formal_map_release_id(monkeypatch, tmp_path):
+    _, workspace_dir, project_root = _prepare_safe_build(monkeypatch, tmp_path, 'release-baseline-formal-mismatch')
+    save_formal_knowledge_map(project_root, _knowledge_map('older-formal-release'))
+
+    result = build_knowledge_release_from_current_indexes(
+        project_root,
+        workspace_dir,
+        'release-safe-rewritten-map',
+    )
+
+    release_map = json.loads((result.release_dir / 'map.json').read_text(encoding='utf-8'))
+    assert result.knowledge_map.release_id == 'release-safe-rewritten-map'
+    assert release_map['release_id'] == 'release-safe-rewritten-map'
+    assert release_map['release_id'] != 'older-formal-release'
+
+
+def test_build_knowledge_release_from_current_indexes_fails_on_invalid_saved_formal_map(monkeypatch, tmp_path):
+    _, workspace_dir, project_root = _prepare_safe_build(monkeypatch, tmp_path, 'release-baseline-invalid-formal')
+    formal_map_path = get_formal_map_path(project_root)
+    formal_map_path.parent.mkdir(parents=True, exist_ok=True)
+    formal_map_path.write_text(
+        json.dumps(
+            {
+                'schema_version': 'formal-knowledge-map.v1',
+                'map': {
+                    'schema_version': 'knowledge-map.v1',
+                    'release_id': 'bad-formal-release',
+                    'tables': [
+                        {
+                            'schema_version': 'knowledge-table-ref.v1',
+                            'table_id': 'SkillTable',
+                            'title': 'SkillTable',
+                            'source_path': '../escape.xlsx',
+                            'source_hash': 'sha256:table',
+                            'system_id': 'combat',
+                            'status': 'active',
+                        }
+                    ],
+                    'docs': [],
+                    'scripts': [],
+                    'systems': [],
+                    'relationships': [],
+                    'deprecated': [],
+                    'source_hash': None,
+                },
+                'map_hash': 'sha256:not-real',
+                'updated_at': datetime(2026, 5, 8, tzinfo=timezone.utc).isoformat(),
+                'updated_by': 'designer',
+            },
+            ensure_ascii=False,
+            indent=2,
+        ) + '\n',
+        encoding='utf-8',
+    )
+
+    with pytest.raises(KnowledgeReleasePrerequisiteError, match='Saved formal knowledge map is invalid'):
+        build_knowledge_release_from_current_indexes(
+            project_root,
+            workspace_dir,
+            'release-safe-invalid-formal',
+        )
+
+    assert not get_release_dir(project_root, 'release-safe-invalid-formal').exists()
+    assert get_current_release(project_root).release_id == 'release-baseline-invalid-formal'
+
+
+def test_build_knowledge_release_from_current_indexes_does_not_touch_svn(monkeypatch, tmp_path):
+    _, workspace_dir, project_root = _prepare_safe_build(monkeypatch, tmp_path, 'release-baseline-no-svn')
+    svn_dir = project_root / '.svn'
+    svn_dir.mkdir(parents=True, exist_ok=True)
+    svn_marker = svn_dir / 'entries'
+    svn_marker.write_text('svn metadata\n', encoding='utf-8')
+
+    original_read_text = Path.read_text
+    original_read_bytes = Path.read_bytes
+    original_write_text = Path.write_text
+    original_write_bytes = Path.write_bytes
+
+    def _guard_read_text(self: Path, *args, **kwargs):
+        if '.svn' in self.parts:
+            raise AssertionError('safe build must not read svn state')
+        return original_read_text(self, *args, **kwargs)
+
+    def _guard_read_bytes(self: Path, *args, **kwargs):
+        if '.svn' in self.parts:
+            raise AssertionError('safe build must not read svn state')
+        return original_read_bytes(self, *args, **kwargs)
+
+    def _guard_write_text(self: Path, *args, **kwargs):
+        if '.svn' in self.parts:
+            raise AssertionError('safe build must not write svn state')
+        return original_write_text(self, *args, **kwargs)
+
+    def _guard_write_bytes(self: Path, *args, **kwargs):
+        if '.svn' in self.parts:
+            raise AssertionError('safe build must not write svn state')
+        return original_write_bytes(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', _guard_read_text)
+    monkeypatch.setattr(Path, 'read_bytes', _guard_read_bytes)
+    monkeypatch.setattr(Path, 'write_text', _guard_write_text)
+    monkeypatch.setattr(Path, 'write_bytes', _guard_write_bytes)
+
+    result = build_knowledge_release_from_current_indexes(
+        project_root,
+        workspace_dir,
+        'release-safe-no-svn',
+    )
+
+    assert result.manifest.release_id == 'release-safe-no-svn'
+    assert original_read_text(svn_marker, encoding='utf-8') == 'svn metadata\n'
 
 
 def test_build_knowledge_release_from_current_indexes_includes_selected_candidates(monkeypatch, tmp_path):

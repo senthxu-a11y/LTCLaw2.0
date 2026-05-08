@@ -286,6 +286,68 @@ def test_rag_answer_router_builds_answer_from_context(monkeypatch, tmp_path):
 
 
 
+def test_rag_answer_router_ignores_provider_field_in_request_body(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {}
+    context_payload = {
+        'mode': 'context',
+        'query': 'damage',
+        'release_id': 'release-001',
+        'built_at': datetime(2026, 1, 1, tzinfo=timezone.utc),
+        'chunks': [
+            {
+                'chunk_id': 'chunk-001',
+                'source_type': 'doc_knowledge',
+                'text': 'combat damage formula',
+                'score': 3.0,
+                'rank': 1,
+                'citation_id': 'citation-001',
+            }
+        ],
+        'citations': [
+            {
+                'citation_id': 'citation-001',
+                'release_id': 'release-001',
+                'source_type': 'doc_knowledge',
+                'artifact_path': 'indexes/doc_knowledge.jsonl',
+            }
+        ],
+    }
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _build_context(*args, **kwargs):
+        return context_payload
+
+    def _build_answer(query, context):
+        captured['query'] = query
+        captured['context'] = context
+        return {
+            'mode': 'answer',
+            'answer': 'Grounded answer',
+            'release_id': 'release-001',
+            'citations': list(context['citations']),
+            'warnings': [],
+        }
+
+    monkeypatch.setattr(rag_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(rag_router_module, 'build_current_release_context', _build_context)
+    monkeypatch.setattr(rag_router_module, 'build_rag_answer', _build_answer)
+
+    with TestClient(_build_app()) as client:
+        response = client.post(
+            '/api/game/knowledge/rag/answer',
+            json={'query': 'damage', 'provider': 'disabled'},
+        )
+
+    assert response.status_code == 200
+    assert response.json()['mode'] == 'answer'
+    assert captured['query'] == 'damage'
+    assert captured['context'] is context_payload
+
+
+
 def test_rag_answer_router_returns_no_current_release_payload(monkeypatch, tmp_path):
     workspace = _workspace(_service(tmp_path / 'project-root'))
 

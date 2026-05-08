@@ -8,6 +8,7 @@ from typing import Iterable
 
 from ..knowledge_base.kb_store import KnowledgeBaseEntry, get_kb_store
 from .code_indexer import CodeIndexStore
+from .knowledge_formal_map_store import FormalKnowledgeMapStoreError, load_formal_knowledge_map
 from .knowledge_release_builders import (
     build_minimal_manifest,
     export_candidate_evidence_jsonl,
@@ -136,10 +137,7 @@ def build_knowledge_release_from_current_indexes(
 
     workspace = Path(workspace_dir).expanduser().resolve(strict=False)
     validated_release_id = validate_release_id(release_id)
-    try:
-        current_map = get_current_release_map(root)
-    except CurrentKnowledgeReleaseNotSetError as exc:
-        raise KnowledgeReleasePrerequisiteError(str(exc)) from exc
+    current_map = _resolve_effective_map_for_safe_build(root, validated_release_id)
     selected_candidates = _resolve_release_candidates(root, candidate_ids)
 
     release_time = created_at or datetime.now(timezone.utc)
@@ -147,12 +145,11 @@ def build_knowledge_release_from_current_indexes(
     code_indexes = _select_current_code_indexes(workspace, root, current_map)
     approved_docs = _load_approved_doc_entries(workspace)
     doc_indexes, knowledge_docs = _build_release_docs(current_map, approved_docs, release_time)
-    next_map = current_map.model_copy(update={'release_id': validated_release_id})
 
     return build_knowledge_release(
         root,
         validated_release_id,
-        next_map,
+        current_map,
         table_indexes=table_indexes,
         doc_indexes=doc_indexes,
         code_indexes=code_indexes,
@@ -162,6 +159,22 @@ def build_knowledge_release_from_current_indexes(
         created_at=release_time,
         release_notes=release_notes,
     )
+
+
+def _resolve_effective_map_for_safe_build(project_root: Path, release_id: str) -> KnowledgeMap:
+    try:
+        formal_map_record = load_formal_knowledge_map(project_root)
+    except FormalKnowledgeMapStoreError as exc:
+        raise KnowledgeReleasePrerequisiteError(f'Saved formal knowledge map is invalid: {exc}') from exc
+
+    if formal_map_record is not None:
+        return formal_map_record.knowledge_map.model_copy(update={'release_id': release_id})
+
+    try:
+        current_map = get_current_release_map(project_root)
+    except CurrentKnowledgeReleaseNotSetError as exc:
+        raise KnowledgeReleasePrerequisiteError(str(exc)) from exc
+    return current_map.model_copy(update={'release_id': release_id})
 
 
 def _collect_source_paths(

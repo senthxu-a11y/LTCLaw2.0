@@ -12,6 +12,7 @@ from ...game.knowledge_test_plan_store import (
 )
 from ...game.models import WorkbenchTestPlan
 from ..agent_context import get_agent_for_request
+from ..capabilities import require_capability
 
 
 router = APIRouter(prefix='/game/knowledge/test-plans', tags=['game-knowledge-test-plans'])
@@ -49,6 +50,7 @@ def _project_root_or_400(game_service) -> Path:
 
 @router.post('', response_model=WorkbenchTestPlan)
 async def create_test_plan(request: Request, body: WorkbenchTestPlan) -> WorkbenchTestPlan:
+    require_capability(request, 'workbench.test.write')
     workspace = await get_agent_for_request(request)
     game_service = _game_service_or_404(workspace)
     try:
@@ -59,6 +61,7 @@ async def create_test_plan(request: Request, body: WorkbenchTestPlan) -> Workben
 
 @router.get('', response_model=list[WorkbenchTestPlan])
 async def get_test_plans(request: Request) -> list[WorkbenchTestPlan]:
+    require_capability(request, 'workbench.read')
     workspace = await get_agent_for_request(request)
     game_service = _game_service_or_404(workspace)
     try:

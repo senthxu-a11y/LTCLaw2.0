@@ -14,6 +14,7 @@ from ...game.knowledge_formal_map_store import (
 )
 from ...game.knowledge_map_candidate import build_map_candidate_from_release
 from ...game.models import KnowledgeMap
+from ..capabilities import require_capability
 from ..agent_context import get_agent_for_request
 
 
@@ -70,6 +71,7 @@ def _project_root_or_400(game_service) -> Path:
 
 @router.get('/candidate', response_model=KnowledgeMapCandidateResponse)
 async def get_map_candidate(request: Request, release_id: str | None = None) -> KnowledgeMapCandidateResponse:
+    require_capability(request, 'knowledge.map.read')
     workspace = await get_agent_for_request(request)
     project_root = _project_root_or_400(_game_service_or_404(workspace))
     candidate = build_map_candidate_from_release(project_root, release_id=release_id)
@@ -78,6 +80,7 @@ async def get_map_candidate(request: Request, release_id: str | None = None) -> 
 
 @router.get('', response_model=FormalKnowledgeMapResponse)
 async def get_formal_map(request: Request) -> FormalKnowledgeMapResponse:
+    require_capability(request, 'knowledge.map.read')
     workspace = await get_agent_for_request(request)
     project_root = _project_root_or_400(_game_service_or_404(workspace))
     record = load_formal_knowledge_map(project_root)
@@ -94,6 +97,7 @@ async def get_formal_map(request: Request) -> FormalKnowledgeMapResponse:
 
 @router.put('', response_model=FormalKnowledgeMapResponse)
 async def put_formal_map(request: Request, body: SaveFormalKnowledgeMapRequest) -> FormalKnowledgeMapResponse:
+    require_capability(request, 'knowledge.map.edit')
     workspace = await get_agent_for_request(request)
     project_root = _project_root_or_400(_game_service_or_404(workspace))
     if body.knowledge_map is None:

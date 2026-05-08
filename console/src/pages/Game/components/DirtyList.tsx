@@ -15,6 +15,7 @@ export interface DirtyListProps {
   saveSessionDisabled?: boolean;
   onExportDraft?: () => void;
   exportDisabled?: boolean;
+    exportDisabledReason?: string;
   exporting?: boolean;
 }
 
@@ -35,6 +36,7 @@ export function DirtyList(props: DirtyListProps) {
     saveSessionDisabled,
     onExportDraft,
     exportDisabled,
+    exportDisabledReason,
     exporting,
   } = props;
 
@@ -71,15 +73,19 @@ export function DirtyList(props: DirtyListProps) {
             {t("gameWorkbench.saveSession", { defaultValue: "保存当前会话" })}
           </Button>
           {onExportDraft && (
-            <Button
-              size="small"
-              icon={<SaveOutlined />}
-              onClick={onExportDraft}
-              disabled={exportDisabled || items.length === 0}
-              loading={exporting}
-            >
-              {t("gameWorkbench.exportDraft", { defaultValue: "导出草稿" })}
-            </Button>
+            <Tooltip title={exportDisabledReason || undefined}>
+              <span>
+                <Button
+                  size="small"
+                  icon={<SaveOutlined />}
+                  onClick={onExportDraft}
+                  disabled={exportDisabled || items.length === 0}
+                  loading={exporting}
+                >
+                  {t("gameWorkbench.exportDraft", { defaultValue: "导出草稿" })}
+                </Button>
+              </span>
+            </Tooltip>
           )}
         </Space>
       </div>

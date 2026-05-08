@@ -3,8 +3,15 @@ from __future__ import annotations
 import builtins
 from pathlib import Path
 
+import pytest
+
 from ltclaw_gy_x.game import knowledge_rag_answer as answer_module
-from ltclaw_gy_x.game.knowledge_rag_answer import build_rag_answer
+from ltclaw_gy_x.game.knowledge_rag_answer import build_rag_answer, build_rag_answer_with_provider
+from ltclaw_gy_x.game.knowledge_rag_model_client import DisabledRagModelClient
+from ltclaw_gy_x.game.knowledge_rag_model_registry import (
+    RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK,
+    RAG_MODEL_PROVIDER_DISABLED,
+)
 
 
 def _context(*, mode: str = 'context', release_id: str | None = 'release-001', chunks=None, citations=None):
@@ -15,6 +22,30 @@ def _context(*, mode: str = 'context', release_id: str | None = 'release-001', c
         'chunks': list(chunks or []),
         'citations': list(citations or []),
     }
+
+
+def _grounded_context():
+    return _context(
+        chunks=[
+            {
+                'chunk_id': 'chunk-001',
+                'citation_id': 'citation-001',
+                'rank': 1,
+                'score': 4.0,
+                'text': 'Combat damage uses the current release formula.',
+            }
+        ],
+        citations=[
+            {
+                'citation_id': 'citation-001',
+                'release_id': 'release-001',
+                'source_type': 'doc_knowledge',
+                'artifact_path': 'indexes/doc_knowledge.jsonl',
+                'source_path': 'Docs/Combat.md',
+                'title': 'Combat Overview',
+            }
+        ],
+    )
 
 
 def test_build_rag_answer_returns_no_current_release():
@@ -80,6 +111,61 @@ def test_build_rag_answer_returns_grounded_answer_from_valid_chunks():
     assert 'provided current-release context' in payload['answer']
     assert 'skill damage formula' in payload['answer']
     assert payload['warnings'] == []
+
+
+def test_build_rag_answer_sorts_grounded_chunks_before_composing_answer():
+    payload = build_rag_answer(
+        'How does combat damage work?',
+        _context(
+            chunks=[
+                {
+                    'chunk_id': 'chunk-003',
+                    'citation_id': 'citation-003',
+                    'rank': 2,
+                    'score': 9.0,
+                    'text': 'Third ranked evidence should not lead the answer.',
+                },
+                {
+                    'chunk_id': 'chunk-002',
+                    'citation_id': 'citation-002',
+                    'rank': 1,
+                    'score': 1.0,
+                    'text': 'Second strongest evidence should be summarized second.',
+                },
+                {
+                    'chunk_id': 'chunk-001',
+                    'citation_id': 'citation-001',
+                    'rank': 1,
+                    'score': 5.0,
+                    'text': 'Strongest evidence should be summarized first.',
+                },
+            ],
+            citations=[
+                {'citation_id': 'citation-001', 'release_id': 'release-001'},
+                {'citation_id': 'citation-002', 'release_id': 'release-001'},
+                {'citation_id': 'citation-003', 'release_id': 'release-001'},
+            ],
+        ),
+    )
+
+    assert payload['mode'] == 'answer'
+    assert payload['answer'].index('Strongest evidence') < payload['answer'].index('Second strongest evidence')
+    assert 'Third ranked evidence' not in payload['answer']
+    assert [citation['citation_id'] for citation in payload['citations']] == [
+        'citation-001',
+        'citation-002',
+        'citation-003',
+    ]
+
+
+def test_build_rag_answer_does_not_treat_general_numbered_status_query_as_structured_fact():
+    payload = build_rag_answer(
+        'What is P3.7 status?',
+        _grounded_context(),
+    )
+
+    assert payload['mode'] == 'answer'
+    assert 'For exact numeric or row-level facts, use the structured query flow.' not in payload['warnings']
 
 
 def test_build_rag_answer_uses_only_context_citations():
@@ -254,3 +340,155 @@ def test_build_rag_answer_does_not_read_or_write_files_or_use_model_client(monke
 
     assert payload['mode'] == 'answer'
     assert payload['citations'][0]['citation_id'] == 'citation-001'
+
+
+def test_build_rag_answer_with_provider_defaults_to_deterministic_mock_and_returns_grounded_answer():
+    payload = build_rag_answer_with_provider(
+        'How does combat damage work?',
+        _grounded_context(),
+    )
+
+    assert payload['mode'] == 'answer'
+    assert [citation['citation_id'] for citation in payload['citations']] == ['citation-001']
+    assert 'Grounded answer from the provided current-release context' in payload['answer']
+    assert payload['warnings'] == []
+
+
+def test_build_rag_answer_with_provider_disabled_provider_degrades_conservatively():
+    payload = build_rag_answer_with_provider(
+        'How does combat damage work?',
+        _grounded_context(),
+        provider_name=RAG_MODEL_PROVIDER_DISABLED,
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'Model provider is disabled.' in payload['warnings']
+    assert 'Model client output was not grounded in the provided context.' in payload['warnings']
+
+
+def test_build_rag_answer_with_provider_factory_failure_falls_back_to_disabled_with_warnings():
+    def _fail_factory():
+        raise RuntimeError('boom')
+
+    payload = build_rag_answer_with_provider(
+        'How does combat damage work?',
+        _grounded_context(),
+        provider_name=RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK,
+        factories={
+            RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK: _fail_factory,
+            RAG_MODEL_PROVIDER_DISABLED: DisabledRagModelClient,
+        },
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert (
+        "Failed to initialize RAG model provider 'deterministic_mock': boom. Falling back to disabled provider."
+        in payload['warnings']
+    )
+    assert 'Model provider is disabled.' in payload['warnings']
+    assert 'Model client output was not grounded in the provided context.' in payload['warnings']
+
+
+def test_build_rag_answer_with_provider_raises_for_unknown_provider_with_grounded_context():
+    with pytest.raises(ValueError, match='Unsupported RAG model provider: future_external'):
+        build_rag_answer_with_provider(
+            'How does combat damage work?',
+            _grounded_context(),
+            provider_name='future_external',
+        )
+
+
+def test_build_rag_answer_with_provider_does_not_call_provider_factory_for_no_current_release(monkeypatch):
+    called = False
+
+    def _unexpected_registry(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('provider registry should not be called')
+
+    monkeypatch.setattr(answer_module, 'get_rag_model_client', _unexpected_registry)
+
+    payload = build_rag_answer_with_provider(
+        'combat damage',
+        _context(mode='no_current_release', release_id=None),
+    )
+
+    assert payload['mode'] == 'no_current_release'
+    assert called is False
+
+
+def test_build_rag_answer_with_provider_does_not_call_provider_factory_without_grounded_chunks(monkeypatch):
+    called = False
+
+    def _unexpected_registry(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('provider registry should not be called')
+
+    monkeypatch.setattr(answer_module, 'get_rag_model_client', _unexpected_registry)
+
+    payload = build_rag_answer_with_provider(
+        'combat damage',
+        _context(chunks=[], citations=[]),
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert called is False
+
+
+def test_build_rag_answer_with_provider_filters_out_of_context_citations_and_degrades():
+    class _OutOfContextModelClient:
+        def generate_answer(self, payload):
+            return {
+                'answer': 'Unsupported answer.',
+                'citation_ids': ['citation-999'],
+                'warnings': [],
+            }
+
+    payload = build_rag_answer_with_provider(
+        'How does combat damage work?',
+        _grounded_context(),
+        provider_name=RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK,
+        factories={
+            RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK: _OutOfContextModelClient,
+            RAG_MODEL_PROVIDER_DISABLED: DisabledRagModelClient,
+        },
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'Ignored one or more model citation ids outside the provided context.' in payload['warnings']
+    assert 'Model client output was not grounded in the provided context.' in payload['warnings']
+
+
+@pytest.mark.parametrize(
+    ('model_response', 'expected_warning'),
+    [
+        ({'answer': '', 'citation_ids': ['citation-001']}, 'Model client output was not grounded in the provided context.'),
+        ({'answer': 'Grounded-looking answer.', 'citation_ids': []}, 'Model client output was not grounded in the provided context.'),
+    ],
+)
+def test_build_rag_answer_with_provider_degrades_for_empty_answer_or_empty_citations(model_response, expected_warning):
+    class _ModelClient:
+        def generate_answer(self, payload):
+            return model_response
+
+    payload = build_rag_answer_with_provider(
+        'How does combat damage work?',
+        _grounded_context(),
+        provider_name=RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK,
+        factories={
+            RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK: _ModelClient,
+            RAG_MODEL_PROVIDER_DISABLED: DisabledRagModelClient,
+        },
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert expected_warning in payload['warnings']

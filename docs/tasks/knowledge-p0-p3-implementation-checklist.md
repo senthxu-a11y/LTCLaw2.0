@@ -1240,15 +1240,15 @@ Implemented scope note:
 
 Open product gaps:
 
-1. Safe-build formal-map consumption is not implemented yet.
-2. Formal map review UX is not implemented yet.
-3. Frontend exposure should wait until role-gating for formal map writes is decided.
+1. Safe-build formal-map consumption is implemented in the backend safe-build path, and minimal frontend formal map review is now landed.
+2. Candidate map is now exposed as a frontend read-only review surface, while editing remains limited to saved formal map.
+3. Any later broader governance UX remains optional and should stay separate from the conservative P3.7 MVP closeout.
 
 ### P3.7b+ [P] Safe-Build Formal Map Consumption Boundary
 
 Depends on: P3.7b backend store/API validation
 
-Status as of 2026-05-07: next recommended construction slice.
+Status as of 2026-05-08: completed.
 
 Purpose:
 
@@ -1277,27 +1277,699 @@ Acceptance:
 4. Current-release pointer is not changed unless the existing build endpoint explicitly does that by contract.
 5. No SVN read/write is introduced by formal-map consumption.
 
-### P3.7c [P] Map Review UX
+Implemented scope note:
 
-Depends on: P3.7b API shape, P3.7b+ safe-build consumption rule
+1. The P3.7b+ implementation files are `src/ltclaw_gy_x/game/knowledge_release_service.py` and `tests/unit/game/test_knowledge_release_service.py`.
+2. When `working/formal_map.json` exists and is valid, safe build prefers it over the current release map.
+3. When `working/formal_map.json` exists and is valid, safe build can proceed without depending on a current release map.
+4. The saved formal map is reloaded and revalidated at build time before snapshotting.
+5. The build-time in-memory map copy rewrites `map.release_id` to the new `release_id`.
+6. The final `release/map.json` is a build-time snapshot, and `manifest.map_hash` corresponds to that final `release/map.json`.
+7. When `working/formal_map.json` does not exist, safe build falls back to the current release map and preserves the prior behavior.
+8. When `working/formal_map.json` does not exist and there is also no current release, safe build fails clearly.
+9. When `working/formal_map.json` exists but is invalid, safe build fails clearly, does not create a partial release, and does not set current release.
+10. Saving formal map itself still does not build, does not set current release, and does not read or write SVN.
+11. Candidate inclusion remains a build-time `candidate_evidence` write only and does not mutate the formal map snapshot.
+12. P3.7c-1 minimal frontend formal map review is complete, P3.7c-2 status-only edit is complete, and P3.7c-3 relationship editor is explicitly deferred.
 
-Tasks:
+### P3.permission-0 [S] Knowledge Capability / Permission Boundary Review
 
-1. Candidate inbox.
-2. System map view.
-3. Actions: accept, change system, mark deprecated, ignore.
-4. Avoid raw JSON editing as primary UX.
+Depends on: P1 boundary audit, P3.7b+, knowledge admin vs fast-test boundary review
+
+Status as of 2026-05-08: completed.
+
+Purpose:
+
+1. Define the backend capability boundary between workbench fast-test permissions and knowledge-governance permissions.
+2. Ensure build, publish, formal-map edit, and legacy full-payload build are not treated as frontend-only protected actions.
+3. Keep fast-test policy unchanged: ordinary workbench testing still does not require administrator acceptance.
 
 Acceptance:
 
-1. Admin can classify resources without editing JSON.
+1. The capability split is explicit.
+2. Route-to-capability mapping is explicit for release read, build, publish, map read, map edit, candidate read or write, and workbench test-plan routes.
+3. The next implementation slice is backend capability enforcement, not formal map UI.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-permission-boundary-review-2026-05-08.md`.
+2. It defines the capability set `knowledge.read`, `knowledge.build`, `knowledge.publish`, `knowledge.map.read`, `knowledge.map.edit`, `knowledge.candidate.read`, `knowledge.candidate.write`, `workbench.read`, `workbench.test.write`, and `workbench.test.export`.
+3. It states that frontend button visibility is not a permission boundary.
+4. It keeps fast-test workbench permissions separate from formal knowledge governance permissions.
+
+### P3.permission-1 [S] Backend Capability Helper And Route Checks
+
+Depends on: P3.permission-0
+
+Status as of 2026-05-08: completed.
+
+Tasks:
+
+1. Add a small backend capability helper or middleware.
+2. Add route checks for `knowledge.build`, `knowledge.publish`, and `knowledge.map.edit` first.
+3. Gate legacy full-payload build behind internal or test-only capability, or disable it outside dev or test.
+4. Add focused `403` tests for missing capability.
+5. Keep local or single-user development mode permissive only through an explicit documented default.
+
+Acceptance:
+
+1. Build no longer relies on frontend-only visibility.
+2. Publish or set-current no longer relies on frontend-only visibility.
+3. Formal-map writes no longer rely on frontend-only visibility.
+4. Legacy full-payload build is either explicitly gated or disabled outside dev or test.
+
+Implemented scope note:
+
+1. The capability helper is implemented in `src/ltclaw_gy_x/app/capabilities.py`.
+2. The helper resolves explicit capability context in this priority order: `request.state.capabilities`, then `request.state.user.capabilities`, then `app.state.capabilities`.
+3. The helper accepts capability collections from list, set, mapping, string, and user-dict forms.
+4. Mapping form is normalized by truthy values only, for example `{"knowledge.build": true, "knowledge.publish": false}` grants only `knowledge.build`.
+5. The `*` wildcard is treated as allow-all within an explicit capability context.
+6. When no capability context exists at any of those levels, the helper intentionally allows the request as the documented local trusted fallback for single-user or local-dev mode.
+7. The following route checks are now enforced without changing their semantics: `POST /game/knowledge/releases/build` -> `knowledge.build`, `POST /game/knowledge/releases/build-from-current-indexes` -> `knowledge.build`, `POST /game/knowledge/releases/{release_id}/current` -> `knowledge.publish`, and `PUT /game/knowledge/map` -> `knowledge.map.edit`.
+8. Read-only routes are not forced through capability checks in this slice.
+9. Workbench fast-test permissions remain separate from knowledge-governance permissions; ordinary fast testing still does not require administrator acceptance.
+
+### P3.permission-2 [S] Candidate And Test-Plan Route Capability Checks
+
+Depends on: P3.permission-1
+
+Status as of 2026-05-08: completed.
+
+Purpose:
+
+1. Add the minimum backend capability checks for test-plan and release-candidate routes.
+2. Preserve the boundary between workbench fast-test artifacts and knowledge-governance state.
+3. Keep local trusted fallback unchanged when no explicit capability context exists.
+
+Acceptance:
+
+1. Test-plan read and write routes no longer rely on frontend-only visibility.
+2. Release-candidate read and write routes no longer rely on frontend-only visibility.
+3. Test-plan fast testing still does not require `knowledge.build` or `knowledge.publish`.
+4. Release-candidate write remains separate from build and publish, and does not auto-enter a release.
+
+Implemented scope note:
+
+1. The route checks are implemented in `src/ltclaw_gy_x/app/routers/game_knowledge_test_plans.py` and `src/ltclaw_gy_x/app/routers/game_knowledge_release_candidates.py`.
+2. The following test-plan route checks are now enforced: `GET /game/knowledge/test-plans` -> `workbench.read`, `POST /game/knowledge/test-plans` -> `workbench.test.write`.
+3. The following release-candidate route checks are now enforced: `GET /game/knowledge/release-candidates` -> `knowledge.candidate.read`, `POST /game/knowledge/release-candidates` -> `knowledge.candidate.write`.
+4. Local trusted fallback is unchanged: when no capability context exists, the helper still allows the request.
+5. Test-plan fast-test flow still does not require `knowledge.build` or `knowledge.publish`.
+6. Release-candidate write still does not imply build or publish, and does not automatically enter a release.
+7. This slice did not change store or service semantics, did not auto-build, and did not set current release.
+8. This slice did not change the P2 candidate or test-plan storage model.
+
+### P3.permission-ui-0 [S] Frontend Permission-Aware UI Boundary Review
+
+Depends on: P3.permission-1, P3.permission-2
+
+Status as of 2026-05-08: completed.
+
+Purpose:
+
+1. Define how the frontend should present governance controls once backend capability checks already exist.
+2. Reduce user confusion without treating frontend visibility as the real permission boundary.
+3. Keep workbench fast-test UI separate from release governance UI.
+
+Acceptance:
+
+1. The frontend rule is explicit that backend `403` remains the final boundary.
+2. UI behavior is defined for build, publish, map read or edit, test-plan read or write, and candidate read or write.
+3. The next recommended slice is permission-aware frontend plumbing or copy review, not direct formal map review UX.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-frontend-permission-ui-boundary-review-2026-05-08.md`.
+2. It records the current backend capability state after `P3.permission-1` and `P3.permission-2`.
+3. It keeps the rule that frontend is not the permission boundary and backend `403` remains authoritative.
+4. It chooses disabled-with-explanation as the default behavior for governance controls when the surrounding panel is visible but required capability is missing.
+5. It states that workbench fast-test UI should not be hidden just because `knowledge.build` or `knowledge.publish` is absent.
+6. It keeps release-candidate eligibility UI separate from formal release build and publish UI.
+7. It records that permission-aware frontend plumbing or docs-only copy review should come before formal map review UX.
+
+### P3.permission-ui-1 [S] Frontend Capability State Plumbing And API Type Definition
+
+Depends on: P3.permission-ui-0
+
+Status as of 2026-05-08: completed.
+
+Purpose:
+
+1. Wire the minimum frontend capability state needed for release-governance controls.
+2. Keep local trusted fallback unchanged when no explicit capability context exists.
+3. Reduce duplicate permission noise in the existing release build modal without widening product scope.
+
+Acceptance:
+
+1. When `capabilities` is `undefined` or `null`, build and set-current remain usable by local trusted fallback.
+2. When `capabilities=[]`, build and set-current are disabled by frontend state.
+3. `knowledge.build` enables build, `knowledge.publish` enables set-current, and `knowledge.candidate.read` controls release-candidate list loading in the build modal.
+4. Backend `403` remains the final permission boundary.
+5. This slice does not add formal map review UX.
+
+Implemented scope note:
+
+1. Frontend capability types and helpers were added in `console/src/api/types/permissions.ts` and `console/src/utils/permissions.ts`.
+2. `AgentSummary` and `AgentProfileConfig` now accept optional `capabilities` fields so existing agent data can carry explicit frontend capability context without a new API.
+3. `console/src/pages/Game/GameProject.tsx` now uses permission-aware disabled behavior for release build, set-current, and candidate-read handling in the release panel and build modal.
+4. Local trusted fallback is preserved: missing capability context still behaves permissively.
+5. The build modal no longer requests the release-candidate list when `knowledge.candidate.read` is missing, and it shows only info or empty-state guidance instead of a duplicate warning path.
+6. Frontend permission errors continue to collapse to `You do not have permission to perform this action.` for governance actions.
+7. Backend route checks remain authoritative even when frontend capability state is present.
+8. This slice does not add formal map review UX, RAG UI, real LLM wiring, SVN behavior changes, or workbench fast-test permission changes.
+
+### P3.permission-ui-copy-review [S] Frontend Permission Copy Review
+
+Depends on: P3.permission-ui-0, P3.permission-ui-1
+
+Status as of 2026-05-08: completed.
+
+Purpose:
+
+1. Unify frontend permission-aware UI copy so permission errors are not misreported as SVN, local-directory, administrator-approval, or feature-missing problems.
+2. Freeze a small set of reusable permission strings before broader frontend permission coverage expands.
+3. Keep fast-test copy separate from formal release-governance copy.
+
+Acceptance:
+
+1. Recommended fixed English permission strings are documented.
+2. The review explicitly says permission copy must not imply SVN or local project directory misconfiguration when the real error is missing capability.
+3. The review explicitly says ordinary fast-test work does not require administrator acceptance.
+4. The next frontend implementation slice must reuse these copy rules.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-frontend-permission-copy-review-2026-05-08.md`.
+2. It documents the current backend capability coverage and the current `P3.permission-ui-1` GameProject release-panel behavior.
+3. It fixes the recommended default permission strings for build, publish, candidate read, map edit, workbench write, and workbench read cases.
+4. It records Chinese and product-semantics guidance so permission copy is not mistranslated into administrator-approval language.
+5. It records UI usage rules for tooltip or inline disabled reasons, generic `403` message usage, and no-request behavior for candidate-list read denial.
+6. It requires later permission-aware frontend slices to reuse these rules instead of inventing divergent strings.
+7. This slice is docs-only and adds no UI implementation, no backend changes, no API changes, no SVN behavior changes, and no formal map review UX.
+
+### P3.permission-ui-2 [S] Broader Frontend Permission Coverage On Existing Entry Points
+
+Depends on: P3.permission-ui-1, P3.permission-ui-copy-review
+
+Status as of 2026-05-08: completed as a narrow existing-entry-point slice.
+
+Purpose:
+
+1. Reuse the existing frontend capability helper on already-existing non-SVN entry points outside GameProject.
+2. Extend fixed permission copy only where a concrete current entry point already exists.
+3. Explicitly avoid inventing new test-plan or formal-map UI.
+
+Acceptance:
+
+1. Existing workbench entry points reuse the same capability semantics and fixed permission copy from the earlier review.
+2. Missing `workbench.read` disables current workbench read surfaces without removing backend authority.
+3. Missing `workbench.test.write` disables current workbench export or draft-write actions with the fixed permission string.
+4. Backend `403` remains the final permission boundary.
+5. If no current formal-map or knowledge test-plan entry point exists, the slice records that absence rather than creating one.
+
+Implemented scope note:
+
+1. `console/src/pages/Game/NumericWorkbench.tsx` now consumes existing agent capability context and applies permission-aware disabled behavior for workbench read and draft export actions.
+2. Existing workbench read paths now stop requesting table, row, and AI panel data when explicit capability context is present and `workbench.read` is missing.
+3. Existing workbench chat send and draft export flows now collapse frontend permission failures to `You do not have permission to perform this action.`.
+4. `console/src/pages/Game/components/DirtyList.tsx` now reuses the fixed tooltip-style disabled reason for export when `workbench.test.write` is missing.
+5. This slice intentionally does not modify `SvnSync`, proposal action semantics, backend APIs, or SVN logic.
+6. No current dedicated frontend caller for `/game/knowledge/test-plans` was found, so no separate test-plan page wiring was added in this slice.
+7. No current frontend formal-map review or candidate-map review entry point was found, so formal-map permission UI remains unimplemented.
+8. This slice adds no backend `src` changes, no new API, no formal map review UX, no RAG UI, and no real LLM wiring.
+
+### P3.read-permission-boundary-review [S] Broader Read Capability Checks Boundary Review
+
+Depends on: P3.permission-2, P3.permission-ui-2
+
+Status as of 2026-05-08: completed as a docs-only boundary review.
+
+Purpose:
+
+1. Decide whether broader read-only knowledge routes should receive backend capability checks.
+2. Keep local trusted fallback semantics explicit rather than accidental.
+3. Prevent broader read hardening from collapsing workbench, candidate, map, and release-reader roles into one over-broad permission.
+
+Acceptance:
+
+1. The route-to-capability recommendation is explicit for release read, query or RAG read, and map read routes.
+2. The review states whether broader backend read checks are recommended or deferred.
+3. The review keeps fast-test principles unchanged and does not widen RAG read boundaries.
+4. The review states whether the next recommended slice is backend read checks or later formal-map UI boundary work.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-read-permission-boundary-review-2026-05-08.md`.
+2. It recommends `knowledge.read` for release read and query or RAG read routes, and `knowledge.map.read` for candidate-map and saved-formal-map reads.
+3. It keeps `GET /game/knowledge/test-plans` under `workbench.read` and `GET /game/knowledge/release-candidates` under `knowledge.candidate.read`.
+4. It recommends preserving local trusted fallback only when explicit capability context is absent.
+5. It recommends `P3.permission-3` backend read capability checks as the next implementation slice.
+6. This slice is docs-only and adds no backend changes, no frontend changes, no new API, no RAG expansion, and no SVN behavior change.
+
+### P3.permission-3 [S] Backend Read Capability Checks
+
+Depends on: P3.permission-1, P3.permission-2
+
+Status as of 2026-05-08: completed.
+
+Purpose:
+
+1. Harden broader read-only knowledge routes when explicit capability context exists.
+2. Preserve the narrower split between release read, map read, candidate read, and workbench read.
+3. Keep local trusted fallback unchanged when explicit capability context is absent.
+4. Preserve the existing query or RAG release-owned read boundary without widening artifact access.
+
+Acceptance:
+
+1. `GET /game/knowledge/releases`, `GET /game/knowledge/releases/current`, and `GET /game/knowledge/releases/{release_id}/manifest` require `knowledge.read` when explicit capability context exists.
+2. `POST /game/knowledge/query`, `POST /game/knowledge/rag/context`, and `POST /game/knowledge/rag/answer` require `knowledge.read` when explicit capability context exists.
+3. `GET /game/knowledge/map/candidate` and `GET /game/knowledge/map` require `knowledge.map.read` when explicit capability context exists.
+4. Existing write gates from `P3.permission-1` remain intact for build, publish, and formal-map edit routes.
+5. Existing candidate and test-plan route checks from `P3.permission-2` remain intact.
+6. Query or RAG read still does not widen to raw source, pending state, or `candidate_evidence.jsonl`.
+7. Local trusted fallback remains unchanged when no explicit capability context is present.
+
+Implemented scope note:
+
+1. Backend read checks are now landed for `GET /game/knowledge/releases` -> `knowledge.read`.
+2. Backend read checks are now landed for `GET /game/knowledge/releases/current` -> `knowledge.read`.
+3. Backend read checks are now landed for `GET /game/knowledge/releases/{release_id}/manifest` -> `knowledge.read`.
+4. Backend read checks are now landed for `POST /game/knowledge/query` -> `knowledge.read`.
+5. Backend read checks are now landed for `POST /game/knowledge/rag/context` -> `knowledge.read`.
+6. Backend read checks are now landed for `POST /game/knowledge/rag/answer` -> `knowledge.read`.
+7. Backend read checks are now landed for `GET /game/knowledge/map/candidate` -> `knowledge.map.read`.
+8. Backend read checks are now landed for `GET /game/knowledge/map` -> `knowledge.map.read`.
+9. `P3.permission-1` write gates remain in place: release build -> `knowledge.build`, build-from-current-indexes -> `knowledge.build`, set current -> `knowledge.publish`, and `PUT /game/knowledge/map` -> `knowledge.map.edit`.
+10. `P3.permission-2` candidate and test-plan checks remain in place and unchanged.
+11. Local trusted fallback remains in place only when explicit capability context is absent.
+12. Query and RAG read remain bounded to release-owned artifacts and still do not read raw source, pending state, or `candidate_evidence.jsonl`.
+13. This slice is backend-only and does not add UI, new API, RAG expansion, LLM integration, or SVN behavior change.
+
+### P3.7c-alpha [S] Formal Map Review UX Boundary Review
+
+Depends on: P3.7b API shape, P3.7b+ safe-build consumption rule, P3.permission-1, P3.permission-3, P3.permission-ui-1, P3.permission-ui-copy-review
+
+Status as of 2026-05-08: completed as a docs-only boundary review.
+
+Purpose:
+
+1. Define the minimum frontend formal map review UX boundary now that backend map read, save, and build-consumption rules already exist.
+2. Avoid jumping directly to a graph editor, governance console, or field-level map editor.
+3. Choose the first frontend implementation slice without changing backend APIs or fast-test semantics.
+
+Acceptance:
+
+1. The review records the current backend capability: candidate-map read, saved-formal-map read, formal-map save, and safe-build formal-map snapshot behavior.
+2. The review records the required capability split for map read, map edit, build, and publish.
+3. The review defines the minimum first UX slice and explicitly lists the major non-goals.
+4. The review chooses the first implementation slice between review-only save, status editing, and relationship editing.
+5. The review keeps ordinary workbench fast-test semantics unchanged.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-p3-7c-formal-map-review-ux-boundary-2026-05-08.md`.
+2. It confirms the current backend is already sufficient for a minimal frontend formal map review section or modal using the existing `GET /game/knowledge/map/candidate`, `GET /game/knowledge/map`, and `PUT /game/knowledge/map` APIs.
+3. It recommends placing the first UX inside the existing GameProject release or knowledge surface rather than creating a new page.
+4. It recommends `P3.7c-1` as the first implementation slice: read-only review plus `Save as formal map`, with no field-level editing.
+5. It explicitly defers graph canvas, drag-and-drop relationship editing, LLM map generation, candidate-to-map auto merge, and automatic build or publish coupling.
+6. It keeps disabled-with-explanation frontend behavior and backend `403` as the final permission boundary.
+7. This slice is docs-only and adds no frontend implementation, no backend change, no new API, no RAG expansion, and no SVN behavior change.
+
+### P3.7c [P] Map Review UX
+
+Depends on: P3.7b API shape, P3.7b+ safe-build consumption rule, P3.permission-1 backend capability checks
+
+Status as of 2026-05-08: planned; first implementation slice is `P3.7c-1` minimal frontend formal map review.
+
+### P3.7c-1 [S] Minimal Frontend Formal Map Review
+
+Depends on: P3.7c-alpha, P3.permission-3, P3.permission-ui-1, P3.permission-ui-copy-review
+
+Status as of 2026-05-08: completed.
+
+Purpose:
+
+1. Add the narrowest possible formal map review surface to the existing GameProject governance area.
+2. Reuse only the already-landed map APIs and capability plumbing.
+3. Keep save decoupled from build and publish.
+
+Acceptance:
+
+1. The UI lives inside the existing GameProject `Knowledge Release Status` or governance surface.
+2. The UI loads candidate map and saved formal map through existing frontend API wrappers only.
+3. `no_formal_map` and `no current release` are shown as distinct states, not permission failures.
+4. `Save as formal map` saves candidate map only and does not build or set current.
+5. `knowledge.map.read` controls read behavior and `knowledge.map.edit` controls save behavior.
+6. Backend `403` still uses `You do not have permission to perform this action.`.
+
+Implemented scope note:
+
+1. The changed frontend files are `console/src/pages/Game/GameProject.tsx`, `console/src/pages/Game/GameProject.module.less`, `console/src/api/modules/gameKnowledgeRelease.ts`, and `console/src/api/types/game.ts`.
+2. The reused or added frontend API wrappers are `getMapCandidate`, `getFormalMap`, and `saveFormalMap`.
+3. The UI is placed inside the existing GameProject `Knowledge Release Status` or governance surface.
+4. The first slice loads candidate map.
+5. The first slice loads saved formal map.
+6. The first slice shows `no_formal_map` as `no saved formal map`.
+7. The first slice shows `No current knowledge release is set` as a separate candidate-map state.
+8. `Save as formal map` saves candidate map only.
+9. Save success does not build a release and does not set current release.
+10. `knowledge.map.read` controls map reads.
+11. `knowledge.map.edit` controls save.
+12. Backend `403` continues to use `You do not have permission to perform this action.`.
+13. This slice does not add graph canvas, relationship editor, field-level edit, LLM map generation, candidate-to-map auto merge, build or publish coupling, SVN behavior, or frontend RAG UI.
+
+### P3.7c-2-alpha [S] Formal Map Status Edit Boundary Review
+
+Depends on: P3.7c-1, P3.permission-3, P3.permission-ui-copy-review
+
+Status as of 2026-05-08: completed as a docs-only boundary review.
+
+Purpose:
+
+1. Define the minimum boundary for status-only formal map editing after the `P3.7c-1` review-plus-save slice.
+2. Keep the next map-edit slice smaller than relationship editing or graph editing.
+3. Reuse the current complete-map save boundary without introducing PATCH semantics.
+
+Acceptance:
+
+1. The review defines which object types are editable in the first status-edit slice.
+2. The review defines which fields remain non-editable.
+3. The review explicitly states how relationships are handled when status changes.
+4. The review preserves existing save, permission, and local trusted fallback semantics.
+5. The review makes `P3.7c-2` the next recommended implementation slice instead of relationship editing.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-p3-7c-2-formal-map-status-edit-boundary-2026-05-08.md`.
+2. It recommends allowing status edit only for `systems`, `tables`, `docs`, and `scripts`.
+3. It limits allowed statuses to `active`, `deprecated`, and `ignored`.
+4. It explicitly defers editing of ids, titles, `source_path`, `source_hash`, `relationships`, `deprecated`, `release_id`, and `schema_version`.
+5. It keeps relationship cleanup out of `P3.7c-2` and defers that work to `P3.7c-3`.
+6. It keeps save on the existing `PUT /game/knowledge/map` path through the current full-map save boundary.
+7. This slice is docs-only and adds no frontend implementation, no backend change, no new API, no relationship editor, no graph canvas, and no SVN behavior.
+
+### P3.7c-2 [S] Minimal Frontend Formal Map Status Edit
+
+Depends on: P3.7c-2-alpha, P3.permission-3, P3.permission-ui-copy-review
+
+Status as of 2026-05-08: completed.
+
+Purpose:
+
+1. Add the minimum status-only edit surface on top of the landed formal map review UI.
+2. Keep candidate map read-only and restrict editing to saved formal map only.
+3. Reuse the existing full-map save boundary without adding PATCH or field-level editing.
+
+Acceptance:
+
+1. Candidate map remains read-only.
+2. Saved formal map is the only editable object in this slice.
+3. Editable fields are limited to `systems`, `tables`, `docs`, and `scripts` status values.
+4. Allowed status values are limited to `active`, `deprecated`, and `ignored`.
+5. Save continues to use the existing `saveFormalMap` wrapper over `PUT /game/knowledge/map`.
+6. Save does not build, does not set current release, and does not modify release history.
+7. Relationship handling stays warning-only in this slice and does not auto-clean or auto-rewrite relationships.
+8. This slice adds no new backend API and does not alter NumericWorkbench fast-test permission semantics.
+
+Implemented scope note:
+
+1. The implementation files are `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/GameProject.module.less`.
+2. Candidate map remains read-only and continues to render as a review-only list.
+3. Saved formal map is cloned into a local draft for status-only editing.
+4. Dirty state is tracked on the local formal-map draft before save.
+5. The editable controls exist only on `systems`, `tables`, `docs`, and `scripts` rows.
+6. The status controls allow only `active`, `deprecated`, and `ignored`.
+7. This slice does not expose editing for ids, titles, `source_path`, `source_hash`, `relationships`, `deprecated`, `release_id`, or `schema_version`.
+8. Save continues to use the existing `saveFormalMap` wrapper over `PUT /game/knowledge/map`.
+9. No PATCH API was added.
+10. Save success refreshes saved formal map and uses the short message `Saved formal map. It will be used by the next safe build.`.
+11. Save does not build a release, does not set current release, does not modify release history, and does not read or write SVN.
+12. Relationship handling remains warning-only: deprecated or ignored items may still be referenced, but the frontend does not auto-clean or auto-rewrite relationships.
+13. `knowledge.map.read` still governs review visibility and `knowledge.map.edit` still governs status edit or save, with backend `403` remaining the final boundary.
+14. This slice does not add graph canvas, relationship editor, field-level edit, LLM, frontend RAG UI, build or publish auto-coupling, or SVN behavior changes.
+
+### P3.7c-3-alpha [S] Relationship Edit Boundary Decision
+
+Depends on: P3.7c-2, P3.permission-3, P3.permission-ui-copy-review
+
+Status as of 2026-05-08: completed as a docs-only boundary decision.
+
+Purpose:
+
+1. Decide whether relationship editor should enter the current conservative P3.7 closeout.
+2. Record the narrowest possible future relationship-edit boundary if product later needs it.
+3. Keep the current P3.7 MVP from expanding into graph or LLM-driven governance UX.
+
+Implemented scope note:
+
+1. The decision is recorded in `docs/tasks/knowledge-p3-7c-3-relationship-edit-boundary-2026-05-08.md`.
+2. It explicitly defers relationship editor from the current conservative closeout.
+3. It records that any future first slice should be saved-formal-map-only and simple form-based add or remove over existing refs.
+4. It explicitly rejects graph canvas, drag-and-drop relationship editor, LLM relationship generation, automatic relationship cleanup, and candidate-to-map auto merge in that first future slice.
+5. It preserves the existing complete-map `PUT /game/knowledge/map` save boundary and adds no new backend API, no PATCH API, and no SVN behavior.
+
+Tasks:
+
+1. Start with `P3.7c-1` minimal formal map review section or modal inside the existing GameProject release or knowledge surface.
+2. Load candidate map and saved formal map through the existing map APIs.
+3. Show explicit `no saved formal map` state when backend returns `no_formal_map`.
+4. Allow `Save as formal map` without coupling save to build or publish.
+5. Defer status editing, relationship editing, and graph editing to later slices.
+
+Acceptance:
+
+1. The first slice does not require a graph editor or field-level editor.
 2. Formal map changes are visible before release build.
+3. The first slice uses no new backend API.
+4. The first slice does not alter NumericWorkbench fast-test behavior.
 
 Next-step note:
 
-1. The next recommended follow-up is P3.7b+ safe-build formal-map consumption.
-2. After P3.7b+ is locked, design or implement UI on top of that boundary.
-3. The key open rule is whether the next safe build should prefer `working/formal_map.json` and how that saved formal map should be snapshotted into `release/map.json`.
+1. Do not continue expanding P3.7 UI beyond the landed conservative MVP.
+2. `P3.permission-1` backend capability helper and initial route checks are now complete.
+3. `P3.permission-2` candidate and test-plan route capability checks are now complete.
+4. `P3.permission-3` backend read capability checks are now complete.
+5. `P3.permission-ui-0` frontend permission-aware UI boundary review is now complete.
+6. `P3.permission-ui-1` frontend capability state plumbing and API type definition is now complete.
+7. `P3.permission-ui-copy-review` frontend permission copy review is now complete.
+8. `P3.permission-ui-2` broader frontend permission coverage is now complete as a narrow NumericWorkbench existing-entry-point slice.
+9. `P3.read-permission-boundary-review` broader read capability checks boundary review is now complete as a docs-only slice.
+10. `P3.7c-alpha` formal map review UX boundary review is now complete as a docs-only slice.
+11. `P3.7c-1` minimal frontend formal map review is now complete.
+12. `P3.7c-2-alpha` formal map status edit boundary review is now complete as a docs-only slice.
+13. `P3.7c-2` minimal frontend formal map status edit is now complete.
+14. `P3.7c-3-alpha` relationship edit boundary decision is now complete as a docs-only slice and explicitly defers relationship editor.
+15. P3.7 formal map MVP is now conservatively complete.
+16. Prefer broader P3 consolidation or RAG or model-client boundary work before any later relationship editor or graph canvas work.
+17. Start with a docs-only P3 gate consolidation pass before any deeper RAG or model-client implementation slice.
+18. Graph editor, relationship editor, and other broader governance UI remain intentionally deferred.
+
+### P3.gate [S] P3 Gate Consolidation
+
+Depends on: P3.7c-3-alpha
+
+Status as of 2026-05-08: completed as a docs-only consolidation record.
+
+Tasks:
+
+1. Summarize landed P3 capabilities in one docs-only consolidation record.
+2. Mark P3.7 formal map MVP as conservatively complete.
+3. State explicitly that the product is still not a full RAG product.
+4. Recommend RAG or model-client boundary work before more P3.7 UI.
+
+### P3.rag-model-boundary [S] RAG / Model-Client Boundary Review
+
+Depends on: P3.gate, P3.4b
+
+Status as of 2026-05-08: completed as a docs-only boundary review.
+
+Tasks:
+
+1. Define how the answer path may move from deterministic or no-LLM behavior to an injected model-client boundary.
+2. Preserve the existing RAG read boundary and keep context assembly as the only artifact-reading path.
+3. Keep citations bounded to `context.citations` and require validation on model output.
+4. Recommend a backend-only next slice using a protocol or interface plus deterministic or mock adapter.
+
+Acceptance:
+
+1. Router code still must not call a model directly.
+2. Answer service still must not bypass the context builder to read release artifacts.
+3. The review keeps raw source, pending state, SVN, `candidate_evidence.jsonl`, embedding, vector store, and frontend RAG UI out of scope.
+4. The next implementation slice is explicitly `P3.rag-model-1` backend model-client protocol plus deterministic or mock adapter.
+
+### P3.rag-model-1 [S] Backend Model-Client Protocol + Deterministic Or Mock Adapter
+
+Depends on: P3.rag-model-boundary
+
+Status as of 2026-05-08: completed.
+
+Tasks:
+
+1. Add a backend model-client protocol or interface for grounded answer generation.
+2. Keep the input boundary bounded to `query + context` only.
+3. Add a deterministic or mock adapter that uses only the provided payload and does not call a real model.
+4. Preserve the existing deterministic or no-LLM answer path when no model client is injected.
+5. Validate returned `citation_ids` against `context.citations` before producing the final answer payload.
+
+Implemented scope note:
+
+1. The implementation files for this slice are `src/ltclaw_gy_x/game/knowledge_rag_model_client.py` and `src/ltclaw_gy_x/game/knowledge_rag_answer.py`.
+2. The focused test files for this slice are `tests/unit/game/test_knowledge_rag_model_client.py` and `tests/unit/game/test_knowledge_rag_answer.py`.
+3. The model-client prompt payload is bounded to `query`, `release_id`, `built_at`, `chunks`, `citations`, and `policy_hints`.
+4. The model-client response is bounded to `answer`, `citation_ids`, and optional `warnings`.
+5. `DeterministicMockRagModelClient` uses only the provided payload and does not read files or call a real model.
+6. `build_rag_answer` now accepts an optional `model_client` while preserving the prior deterministic or no-LLM behavior when none is provided.
+7. When a `model_client` is provided, the answer service only converts `query + context` into the bounded payload and does not reread artifacts.
+8. Router behavior remains unchanged and still does not call any model directly.
+9. `citation_ids` must exist in `context.citations`; out-of-context ids are dropped and added to warnings.
+10. If all returned citations are invalid or the answer is not grounded, the result degrades to `insufficient_context`.
+11. `no_current_release` still returns directly without calling the model client.
+12. Empty or insufficient grounded context still returns `insufficient_context` without trusting model output.
+
+Acceptance:
+
+1. No real LLM is connected in this slice.
+2. No provider registry or provider selection is added in this slice.
+3. No embedding, vector store, frontend RAG UI, or API expansion is added in this slice.
+4. The context builder read boundary remains unchanged and still excludes raw source, pending state, `candidate_evidence.jsonl`, and SVN.
+5. Tests cover valid citations, invalid citations, no-current-release, insufficient-context, and default deterministic fallback behavior.
+
+Validation note:
+
+1. Focused pytest result: `15 passed`.
+2. NUL check result: the 4 touched Python files were rechecked as `NUL=0`.
+3. `git diff --check` reported no patch-format errors and only existing CRLF or LF warnings outside this slice.
+4. Local pytest may still emit environment-specific `.pytest_cache` permission warnings, but the focused tests passed.
+
+Next-step note:
+
+1. Do not connect a real external model yet.
+2. The next recommended slice is `P3.rag-model-2` backend provider registry or provider selection boundary review as a docs-only step.
+
+### P3.rag-model-2 [S] Backend Provider Registry / Provider Selection Boundary Review
+
+Depends on: P3.rag-model-1
+
+Status as of 2026-05-08: completed as a docs-only boundary review.
+
+Tasks:
+
+1. Define how provider registry and provider selection may choose among backend model-client implementations.
+2. Keep provider selection downstream of the existing `query + context` boundary.
+3. Require every provider to implement the existing model-client protocol and pass through the same citation validation path.
+4. Define a safe default provider strategy and a separate initialization-failure fallback strategy.
+5. Recommend the next backend-only slice as a registry skeleton without any real external model integration.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-p3-rag-model-provider-selection-boundary-review-2026-05-08.md`.
+2. Provider registry may choose only model-client implementations and must not widen retrieval or context-builder read boundaries.
+3. Provider selection must not let router code call any model directly.
+4. Provider selection must not let the answer service reread artifacts directly.
+5. Every provider must implement the `P3.rag-model-1` model-client protocol.
+6. Every provider output must pass the same citation validation already enforced against `context.citations`.
+7. Providers must not read raw source, pending state, SVN, or `candidate_evidence.jsonl`.
+8. Providers must not add embedding, vector store, frontend RAG UI, or API expansion in this slice.
+9. Recommended provider types are `deterministic_mock`, `disabled`, and `future_external`, with `future_external` kept as documentation-only placeholder.
+10. Recommended selection order is explicit backend function argument or dependency injection, then app or service config, then environment variable only if a later review explicitly allows it.
+11. Provider choice must never come directly from user query body and must never accept arbitrary frontend provider names without backend allowlist.
+12. The recommended default provider is `deterministic_mock`, while initialization failure should fall back to `disabled` with a clear warning rather than silently attempting any external connection.
+
+Acceptance:
+
+1. The review does not implement a registry, provider selection runtime, or real external model.
+2. The review keeps permission checks, retrieval bounds, citation validation, and trusted-local fallback rules unchanged.
+3. The review records that any future request-level provider hint must still be validated by backend allowlist.
+4. The next implementation slice is explicitly `P3.rag-model-2a` backend provider registry skeleton.
+
+### P3.rag-model-2a [S] Backend Provider Registry Skeleton
+
+Depends on: P3.rag-model-2
+
+Status as of 2026-05-08: completed.
+
+Tasks:
+
+1. Add a backend registry skeleton for model-client provider lookup.
+2. Keep runtime providers limited to `deterministic_mock` and `disabled`.
+3. Keep `future_external` as documentation-only placeholder rather than runtime provider.
+4. Keep provider lookup bounded to backend model-client selection only.
+5. Avoid any real external model connection, router change, frontend change, or API expansion.
+
+Implemented scope note:
+
+1. The implementation files are `src/ltclaw_gy_x/game/knowledge_rag_model_client.py` and `src/ltclaw_gy_x/game/knowledge_rag_model_registry.py`.
+2. `src/ltclaw_gy_x/game/knowledge_rag_answer.py` was compatibility-checked only and did not gain new router semantics.
+3. The focused test files are `tests/unit/game/test_knowledge_rag_model_client.py`, `tests/unit/game/test_knowledge_rag_model_registry.py`, and `tests/unit/game/test_knowledge_rag_answer.py`.
+4. The registry API is `get_rag_model_client(provider_name=None, *, factories=None)` and `ResolvedRagModelClient(provider_name, client, warnings)`.
+5. Runtime providers are limited to `deterministic_mock` and `disabled`.
+6. `future_external` remains documentation-only and is not included in `SUPPORTED_RAG_MODEL_PROVIDERS`.
+7. The default provider is `deterministic_mock`.
+8. `None`, empty string, and whitespace provider names normalize to `deterministic_mock`.
+9. Unknown provider names fail clearly with `ValueError` and do not fall back.
+10. Provider factory initialization failure falls back to `disabled` and returns a clear warning.
+11. `DisabledRagModelClient` returns empty `answer`, empty `citation_ids`, and `Model provider is disabled.` warning.
+12. The registry does not read files, does not read environment variables, and does not connect any real external model.
+13. Retrieval, context assembly, and citation validation boundaries remain unchanged.
+14. Router was not modified.
+15. Frontend was not modified.
+16. No new API was added.
+17. This slice experienced DLP/NUL corruption during editing and then received a clean repair before final validation.
+
+Validation note:
+
+1. NUL check result after clean repair: `knowledge_rag_model_client.py NUL=0`.
+2. NUL check result after clean repair: `knowledge_rag_answer.py NUL=0`.
+3. NUL check result after clean repair: `knowledge_rag_model_registry.py NUL=0`.
+4. NUL check result after clean repair: `test_knowledge_rag_model_client.py NUL=0`.
+5. NUL check result after clean repair: `test_knowledge_rag_model_registry.py NUL=0`.
+6. NUL check result after clean repair: `test_knowledge_rag_answer.py NUL=0`.
+7. Focused pytest result: `27 passed`.
+8. Local pytest may emit `.pytest_cache` permission warnings, but they do not affect the passing result.
+9. `git diff --check` reported no patch-format or whitespace errors and only existing CRLF/LF warnings.
+
+Next-step note:
+
+1. Do not connect any real external model in the next slice.
+2. The next recommended slice is `P3.rag-model-2b` service-layer provider selection boundary review or implementation planning.
+
+### P3.rag-model-2b [S] Service-Layer Provider Selection Boundary Review
+
+Depends on: P3.rag-model-2a
+
+Status as of 2026-05-08: completed as a docs-only boundary review.
+
+Tasks:
+
+1. Define where provider selection may happen after the registry skeleton is landed.
+2. Keep provider choice in backend service/config/DI boundaries only.
+3. Keep router thin and prevent request-body or arbitrary frontend provider selection.
+4. Preserve answer-service early-return and citation-validation boundaries.
+5. Recommend the next implementation slice without connecting any real external model.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-p3-rag-model-service-selection-boundary-review-2026-05-08.md`.
+2. Provider selection is limited to backend service layer, app/service config, or dependency injection boundaries.
+3. Router code still must not call models directly and still must not choose arbitrary providers.
+4. Query body is not allowed to carry provider name in this slice.
+5. Frontend is not allowed to choose arbitrary provider name in this slice.
+6. Any future request-level provider hint requires a later dedicated boundary review plus backend allowlist validation.
+7. Service layer may call only `get_rag_model_client(...)`.
+8. The default provider remains `deterministic_mock`.
+9. `disabled` remains explicit provider state rather than silent failure.
+10. Provider initialization failure may fall back only to `disabled` with clear warning and may not silently switch to any real external provider.
+11. Registry warnings are required to merge into answer warnings in the later implementation slice.
+12. `no_current_release` and `insufficient_context` still must not call model client.
+13. The answer service still must consume only the P3.2 context payload and must not read artifacts, raw source, pending state, or SVN.
+14. Citation validation remains centralized in the existing `P3.rag-model-1` answer path.
+15. This slice adds no backend implementation, no frontend change, no public API, no real LLM, no embedding/vector store, and no `candidate_evidence` expansion.
+
+Next-step note:
+
+1. Do not connect any real external model in the next slice.
+2. The next recommended slice is `P3.rag-model-2b` service-layer provider selection skeleton implementation or implementation planning.
 
 ### P3.8 [S] RAG Router Over Current Release
 

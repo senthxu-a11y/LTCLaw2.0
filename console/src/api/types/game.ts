@@ -120,6 +120,85 @@ export interface KnowledgeReleasePointer {
   updated_at: string;
 }
 
+export type KnowledgeStatus = "active" | "deprecated" | "ignored";
+
+export interface KnowledgeSystem {
+  schema_version?: "knowledge-system.v1";
+  system_id: string;
+  title: string;
+  description?: string | null;
+  status: KnowledgeStatus;
+  table_ids: string[];
+  doc_ids: string[];
+  script_ids: string[];
+}
+
+export interface KnowledgeTableRef {
+  schema_version?: "knowledge-table-ref.v1";
+  table_id: string;
+  title: string;
+  source_path: string;
+  source_hash: string;
+  system_id?: string | null;
+  status: KnowledgeStatus;
+}
+
+export interface KnowledgeDocRef {
+  schema_version?: "knowledge-doc-ref.v1";
+  doc_id: string;
+  title: string;
+  source_path: string;
+  source_hash: string;
+  system_id?: string | null;
+  status: KnowledgeStatus;
+}
+
+export interface KnowledgeScriptRef {
+  schema_version?: "knowledge-script-ref.v1";
+  script_id: string;
+  title: string;
+  source_path: string;
+  source_hash: string;
+  system_id?: string | null;
+  status: KnowledgeStatus;
+}
+
+export interface KnowledgeRelationship {
+  schema_version?: "knowledge-relationship.v1";
+  relationship_id: string;
+  from_ref: string;
+  to_ref: string;
+  relation_type: string;
+  summary?: string | null;
+  source_hash: string;
+}
+
+export interface KnowledgeMap {
+  schema_version?: "knowledge-map.v1";
+  release_id: string;
+  systems: KnowledgeSystem[];
+  tables: KnowledgeTableRef[];
+  docs: KnowledgeDocRef[];
+  scripts: KnowledgeScriptRef[];
+  relationships: KnowledgeRelationship[];
+  deprecated: string[];
+  source_hash?: string | null;
+}
+
+export interface KnowledgeMapCandidateResponse {
+  mode: "candidate_map";
+  map: KnowledgeMap | null;
+  release_id: string | null;
+}
+
+export interface FormalKnowledgeMapResponse {
+  mode: "no_formal_map" | "formal_map" | "formal_map_saved";
+  map: KnowledgeMap | null;
+  map_hash: string | null;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
 export interface ReleaseCandidateListItem {
   candidate_id: string;
   test_plan_id: string;

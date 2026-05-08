@@ -10,6 +10,7 @@ export * from "./env";
 export * from "./game";
 export * from "./mcp";
 export * from "./provider";
+export * from "./permissions";
 export * from "./skill";
 export * from "./workspace";
 export * from "./tokenUsage";
