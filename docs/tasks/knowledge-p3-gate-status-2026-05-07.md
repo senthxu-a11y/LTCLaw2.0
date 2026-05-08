@@ -397,7 +397,7 @@ The recommended next direction after P3.read-permission-boundary-review is:
 9. `P3.rag-model-2` backend provider registry or provider selection boundary review is now complete as a docs-only slice.
 10. `P3.rag-model-2a` backend provider registry skeleton is now complete after a DLP/NUL clean repair and revalidation pass.
 11. `P3.rag-model-2b` service-layer provider selection skeleton is now complete.
-12. The next recommended step is `P3.rag-model-2d` app/service config injection implementation planning before any real external model integration.
+12. `P3.rag-ui-3a` frontend-only product experience refinement is now complete, and provider credential, transport, or real external model integration remains deferred.
 
 ## Gate Decision
 
@@ -431,7 +431,7 @@ The current P3 gate result is:
 26. P3.7 formal map MVP is conservatively complete.
 27. The next recommended direction is broader P3 gate consolidation followed by the P3 RAG or model-client boundary.
 28. Candidate map is now exposed as a read-only frontend review surface, while editing remains limited to saved formal map.
-29. The current slice is still not a shipped RAG product or full map-governance product surface because no real LLM, app/service config injection code implementation, embedding flow, frontend RAG UI, relationship editor, or graph canvas has been added.
+29. The current slice is still not a shipped RAG product or full map-governance product surface because no real LLM, live backend app/service config injection into the RAG answer path, embedding flow, frontend RAG UI, relationship editor, or graph canvas has been added.
 30. `P3.rag-model-1` backend model-client protocol plus deterministic or mock adapter is complete.
 31. The implementation files for `P3.rag-model-1` are `knowledge_rag_model_client.py` and `knowledge_rag_answer.py`, and the focused test files are `test_knowledge_rag_model_client.py` and `test_knowledge_rag_answer.py`.
 32. `P3.rag-model-1` keeps router behavior unchanged, keeps artifact reads inside the existing context builder boundary, validates returned citation ids against `context.citations`, and degrades to `insufficient_context` when model output is not grounded.
@@ -474,11 +474,171 @@ The current P3 gate result is:
 69. `P3.rag-model-2c` keeps provider selection bounded to `get_rag_model_client(...)`, preserves the current allowlist, requires unknown providers to clear-fail, and allows fallback only to `disabled` when provider initialization fails.
 70. `P3.rag-model-2c` keeps warning merge, early-return, retrieval, context, and citation-validation boundaries unchanged.
 71. `P3.rag-model-2c` is docs-only, did not rerun pytest, and adds no backend code, no frontend code, no router change, and no public API.
-72. `P3.rag-model-2d` app/service config injection implementation plan is now complete as a docs-only slice.
-73. `P3.rag-model-2d` recommends a small service-layer resolver helper such as `resolve_rag_model_provider_name(...)` or an equivalent helper that resolves provider name only from backend DI or service config.
-74. `P3.rag-model-2d` keeps `build_rag_answer_with_provider(...)` as the service-layer entry point and `get_rag_model_client(...)` as the only registry entry point.
-75. `P3.rag-model-2d` keeps router provider selection, request-body provider hint, frontend provider control, environment variables, `ProviderManager.active_model`, and real external providers out of scope for the next code slice.
-76. `P3.rag-model-2d` keeps the next implementation limited to runtime providers `deterministic_mock` and `disabled` only.
-77. `P3.rag-model-2d` defines the expected file-touch set, do-not-touch set, focused tests, and acceptance criteria for the next implementation round.
-78. `P3.rag-model-2d` is docs-only, did not rerun pytest, and adds no backend code, no frontend code, no router change, and no public API.
-79. The next recommended step is execution of the `P3.rag-model-2d` plan as a narrow backend-only code slice rather than direct real-model integration.
+72. `P3.rag-model-2d` minimal app/service config injection implementation is now complete.
+73. The implementation files for `P3.rag-model-2d` are `src/ltclaw_gy_x/game/knowledge_rag_provider_selection.py`, `src/ltclaw_gy_x/game/knowledge_rag_answer.py`, `tests/unit/game/test_knowledge_rag_provider_selection.py`, and `tests/unit/game/test_knowledge_rag_answer.py`.
+74. `P3.rag-model-2d` adds a narrow service-layer resolver helper that resolves provider name only from explicit backend-passed object or mapping fields.
+75. The helper does not perform I/O, does not read environment variables, and does not access `ProviderManager`.
+76. The helper currently supports direct or nested `config`-style resolution for `rag_model_provider` and `knowledge_rag_model_provider` only.
+77. `P3.rag-model-2d` keeps `build_rag_answer_with_provider(...)` as the service-layer entry point and `get_rag_model_client(...)` as the only registry entry point.
+78. `P3.rag-model-2d` keeps router behavior unchanged, request body unchanged, frontend unchanged, and runtime providers limited to `deterministic_mock` and `disabled` only.
+79. `P3.rag-model-2d` keeps unknown provider as clear-fail, provider factory initialization failure as fallback-to-disabled only, and `no_current_release` or `insufficient_context` as no-resolver and no-registry early-return paths.
+80. `P3.rag-model-2d` keeps citation validation restricted to `context.citations` and does not widen retrieval or context boundaries.
+81. Focused pytest for the implementation round: `38 passed`.
+82. `P3.rag-model-2d` `git diff --check`: clean.
+83. The current closeout pass is docs-only and did not rerun pytest.
+84. `P3.rag-model-2d` is not real LLM integration and does not allow request-level provider hint, frontend provider control, or `ProviderManager.active_model` integration.
+85. The next recommended step is `P3.rag-model-3` external provider adapter boundary review rather than direct external model integration.
+86. `P3.rag-model-2e` live backend app/service config injection boundary review is now complete as a docs-only slice.
+87. `P3.rag-model-2e` records that live config injection should happen only through explicit server-side handoff of app or service config into the existing backend answer path rather than through request body, frontend control, router selection, environment variables, `ProjectConfig.models`, `UserGameConfig`, or `ProviderManager.active_model`.
+88. `P3.rag-model-2e` keeps `build_rag_answer_with_provider(...)` as the service-layer entry point and `get_rag_model_client(...)` as the only registry entry point for provider resolution.
+89. `P3.rag-model-2e` keeps runtime providers limited to `deterministic_mock` and `disabled`, keeps unknown provider as clear-fail, and keeps provider factory initialization failure as fallback-to-disabled only.
+90. `P3.rag-model-2e` keeps `no_current_release` and `insufficient_context` ahead of provider resolution and provider lookup, and keeps retrieval, context, and citation-validation boundaries unchanged.
+91. `P3.rag-model-2e` is docs-only, did not rerun pytest, and adds no backend code, no frontend code, no router change, and no public API.
+92. `P3.rag-model-2e` does not authorize real external provider integration, request-level provider hint, or frontend provider control.
+93. `P3.rag-model-2f` minimal live config handoff implementation plan is now complete as a docs-only slice.
+94. `P3.rag-model-2f` plans the next code round to hand backend-owned app or service config explicitly into the existing RAG answer path while keeping `build_rag_answer_with_provider(...)` as the service-layer entry point and `get_rag_model_client(...)` as the only registry entry point.
+95. `P3.rag-model-2f` recommends a very small service-layer helper such as `build_rag_answer_with_service_config(...)` in `src/ltclaw_gy_x/game/knowledge_rag_answer.py`, or a narrowly scoped resolver helper extension in `src/ltclaw_gy_x/game/knowledge_rag_provider_selection.py`, with preference for the answer-layer wrapper because it keeps router logic thinner.
+96. `P3.rag-model-2f` allows a minimal `src/ltclaw_gy_x/app/routers/game_knowledge_rag.py` touch only if needed to hand off backend-owned service config and explicitly forbids router provider selection logic and direct `get_rag_model_client(...)` calls from router code.
+97. `P3.rag-model-2f` keeps request-body provider hint, frontend provider control, environment variables, `ProjectConfig.models`, `UserGameConfig`, and `ProviderManager.active_model` out of scope.
+98. `P3.rag-model-2f` keeps runtime providers limited to `deterministic_mock` and `disabled`, keeps unknown provider as clear-fail, and keeps provider factory initialization failure as fallback-to-disabled only.
+99. `P3.rag-model-2f` keeps `no_current_release` and `insufficient_context` ahead of provider resolution and provider lookup, keeps citation validation restricted to `context.citations`, and does not widen retrieval or context boundaries.
+100. `P3.rag-model-2f` defines the next allowed file touch set as `src/ltclaw_gy_x/game/knowledge_rag_answer.py`, `src/ltclaw_gy_x/game/knowledge_rag_provider_selection.py`, `tests/unit/game/test_knowledge_rag_answer.py`, `tests/unit/game/test_knowledge_rag_provider_selection.py`, and optionally `src/ltclaw_gy_x/app/routers/game_knowledge_rag.py` only for backend-owned config handoff.
+101. `P3.rag-model-2f` defines focused tests for no-config default behavior, disabled provider handoff, unknown-provider clear fail, init-failure fallback warning, early-return no-call behavior, router no-provider-choice behavior, citation degradation, and unchanged runtime-provider list.
+102. `P3.rag-model-2f` is docs-only, did not rerun pytest, and adds no backend code, no frontend code, no router change, and no public API.
+103. `P3.rag-model-2g` minimal live config handoff implementation is now complete.
+104. The implementation files for `P3.rag-model-2g` are `src/ltclaw_gy_x/game/knowledge_rag_answer.py`, `src/ltclaw_gy_x/app/routers/game_knowledge_rag.py`, `tests/unit/game/test_knowledge_rag_answer.py`, and `tests/unit/routers/test_game_knowledge_rag_router.py`.
+105. `P3.rag-model-2g` adds a very small answer-layer wrapper that hands backend-owned service config into the existing RAG answer path.
+106. Router now passes `game_service` as a backend-owned object into that wrapper and remains a handoff surface only.
+107. Router does not choose provider, does not read request-body provider fields, and does not call `get_rag_model_client(...)` directly.
+108. Frontend and request schema remain unchanged.
+109. Provider resolution still flows through the existing resolver and `get_rag_model_client(...)`.
+110. Runtime providers remain limited to `deterministic_mock` and `disabled` only.
+111. Unknown provider remains clear-fail.
+112. Provider factory initialization failure still falls back only to `disabled` with warning.
+113. `no_current_release` and `insufficient_context` still return before provider selection.
+114. Citation validation still trusts only `context.citations`.
+115. Retrieval and context boundaries remain unchanged and do not widen.
+116. `P3.rag-model-2g` is not real LLM integration and does not authorize request-level provider hint or frontend provider control.
+117. Focused pytest for the implementation round: 59 passed.
+118. `P3.rag-model-2g` `git diff --check`: clean.
+119. The current closeout pass is docs-only and did not rerun pytest.
+120. `P3.rag-model-3` external provider adapter boundary review is now complete as a docs-only slice.
+121. `P3.rag-model-3` records that any future external provider adapter must sit behind the existing registry and RagModelClient protocol boundaries.
+122. `P3.rag-model-3` records that any future external provider adapter must accept only bounded prompt payload and must not read release artifacts, raw source, pending state, or SVN directly.
+123. `P3.rag-model-3` does not authorize request-body provider hint, frontend provider control, environment-variable-driven live source selection, ProviderManager reuse by default, new runtime provider names, candidate_evidence RAG usage, or embedding or vector-store widening.
+124. `P3.rag-model-3` keeps unknown provider clear-fail, keeps external-provider initialization failure constrained to fallback-to-disabled or explicit clear-fail, and forbids silent provider switching.
+125. `P3.rag-model-3` records that model outputs must still be citation-validated against `context.citations`, and that missing citations or out-of-context citations must degrade to `insufficient_context`.
+126. `P3.rag-model-3` keeps the structured-query boundary for exact numeric facts and the workbench-flow boundary for modification intent unchanged.
+127. `P3.rag-model-3` is docs-only, did not rerun pytest, and adds no backend code, no frontend code, no router change, and no public API.
+128. `P3.rag-model-3a` external provider adapter implementation plan is now complete as a docs-only slice.
+129. `P3.rag-model-3a` defines the future adapter skeleton file surface as a small new adapter module such as `src/ltclaw_gy_x/game/knowledge_rag_external_model_client.py` or a more conservative `src/ltclaw_gy_x/game/knowledge_rag_provider_adapters.py`, plus focused tests and only the minimum registry touch if a later slice explicitly chooses to wire a skeleton behind an allowlist.
+130. `P3.rag-model-3a` requires any future adapter class to implement `RagModelClient`, accept only `RagAnswerPromptPayload`, and return only `RagModelClientResponse`.
+131. `P3.rag-model-3a` keeps network I/O out of the future skeleton slice and limits that slice to contract shape, injected secret or config placeholders, timeout or retry or cost or token-limit config shape, and tests.
+132. `P3.rag-model-3a` does not authorize environment-variable reads, request-body or frontend provider control, router changes, request-schema changes, ProviderManager integration, candidate_evidence RAG usage, embedding, or vector-store work.
+133. `P3.rag-model-3a` requires future tests to mock the adapter, verify no artifact or raw-source or pending-state or SVN reads, verify citation out-of-bounds degradation, verify empty-answer or no-citation degradation, verify structured-query and workbench warnings remain, and verify router or request or frontend still do not participate in provider selection.
+134. `P3.rag-model-3a` is docs-only, did not rerun pytest, and adds no backend code, no frontend code, no router change, and no public API.
+135. `P3.rag-model-3b` external provider adapter skeleton implementation is now complete.
+136. The implementation files for `P3.rag-model-3b` are `src/ltclaw_gy_x/game/knowledge_rag_model_client.py` and `src/ltclaw_gy_x/game/knowledge_rag_external_model_client.py`.
+137. The focused test files for `P3.rag-model-3b` are `tests/unit/game/test_knowledge_rag_answer.py` and `tests/unit/game/test_knowledge_rag_external_model_client.py`, with existing registry, provider-selection, model-client, and router tests re-run for regression coverage.
+138. `P3.rag-model-3b` adds a small external adapter skeleton that implements `RagModelClient`, accepts only bounded prompt payload, returns only `RagModelClientResponse`, and provides a mockable responder seam.
+139. The default skeleton implementation performs no real network I/O and returns a conservative empty response with skeleton warning.
+140. `P3.rag-model-3b` defines injected config and secret placeholder shapes without reading environment variables, request body, or frontend state.
+141. Runtime providers remain limited to `deterministic_mock` and `disabled`, and registry allowlist remains unchanged.
+142. Router remains unchanged as a backend-owned config handoff surface only, request schema remains unchanged, and frontend remains unchanged.
+143. `P3.rag-model-3b` keeps no_current_release and insufficient_context early-return behavior unchanged, keeps citation validation restricted to `context.citations`, and does not widen retrieval or context boundaries.
+144. `P3.rag-model-3b` is adapter skeleton only and is not real external provider integration.
+145. Focused pytest for the implementation round: 70 passed.
+146. `P3.rag-model-3b` `git diff --check`: clean.
+147. The current closeout pass combines code, tests, and docs rather than docs-only.
+148. The next larger step may pivot to RAG product-entry UI planning or to a future provider credential or transport boundary slice, while real external provider integration remains deferred.
+149. `P3.rag-ui-1` minimal product-entry UI on the existing answer endpoint is now complete.
+150. The implementation files for `P3.rag-ui-1` are `console/src/api/types/game.ts`, `console/src/api/modules/gameKnowledgeRelease.ts`, `console/src/pages/Game/GameProject.tsx`, and `console/src/pages/Game/GameProject.module.less`.
+151. `P3.rag-ui-1` adds the smallest GameProject knowledge Q&A surface that calls the existing `POST /api/agents/{agentId}/game/knowledge/rag/answer` endpoint.
+152. The frontend request remains limited to `query` and does not expose provider or model control.
+153. `P3.rag-ui-1` renders backend-returned `mode`, `answer`, `release_id`, `citations`, and `warnings`, and explicitly surfaces `no_current_release` and `insufficient_context` states.
+154. `P3.rag-ui-1` keeps structured-query and workbench-flow guardrail messaging explicit in the UI.
+155. The minimal Ask entry is disabled under explicit capability context when the member lacks `knowledge.read`, and the handler also blocks the API call on the same condition.
+156. `P3.rag-ui-1` adds no backend code, no router contract changes, no request-schema changes, no provider registry changes, and no real external provider integration.
+157. VS Code Problems check on touched frontend files reported no errors.
+158. Console TypeScript no-emit validation passed through the local binary: `./node_modules/.bin/tsc -b --noEmit`.
+159. Focused backend RAG regression passed: `70 passed`.
+160. `pnpm build` could not run in the current environment because `pnpm` is unavailable.
+161. `npm run build` could not run in the current environment because `npm` is unavailable.
+162. `P3.rag-ui-1` `git diff --check`: clean.
+163. `P3.rag-ui-2` product-flow UX enhancement planning is now complete as a docs-only slice.
+164. The planning file for `P3.rag-ui-2` is `docs/tasks/knowledge-p3-rag-ui-2-product-flow-plan-2026-05-08.md`.
+165. `P3.rag-ui-2` recommends prioritizing pure frontend UX enhancement on the existing answer endpoint before provider credential or transport boundary work.
+166. The planned candidate features are recent-question history, static example questions, copy answer, and citation locate or jump.
+167. The plan requires recent-question history to remain local UI state or session-level frontend state only and not enter formal knowledge, release artifacts, or SVN-adjacent flows.
+168. The plan requires example questions to remain static UI suggestions only and not act as provider hints or prompt injection.
+169. The plan requires copy-answer behavior to remain a frontend-only convenience action and not write back into knowledge storage.
+170. The plan requires citation locate or jump to stay limited to citations already returned by the backend and forbids frontend artifact or raw-source reads.
+171. The plan keeps Ask-button `knowledge.read` disablement and handler-side `knowledge.read` guard unchanged.
+172. The plan keeps the effective minimal request payload at `query` only and does not authorize provider, model, provider-hint, or service-config request fields.
+173. The plan keeps router/provider boundaries unchanged: no request-schema change, no router call to `get_rag_model_client(...)`, no change to `build_rag_answer_with_service_config(...)` as the live handoff entry, and no runtime-provider expansion beyond `deterministic_mock` and `disabled`.
+174. The plan keeps real external provider integration, `ProviderManager.active_model`, environment-variable provider sources, and frontend provider/model settings out of scope.
+175. The plan keeps structured-query and workbench-flow guardrail copy required in the UI and keeps ordinary RAG Q&A separate from administrator acceptance workflows.
+176. `P3.rag-ui-2` is docs-only and does not modify `src/` or `console/src/` files.
+177. This docs-only planning pass does not rerun pytest.
+178. `P3.rag-ui-2a` frontend UX enhancement implementation is now complete.
+179. The implementation files for `P3.rag-ui-2a` are `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/GameProject.module.less`.
+180. `P3.rag-ui-2a` adds all four planned UX features: static example questions, recent question history, copy result, and local citation focus.
+181. Example questions only populate the existing query input and do not auto-submit.
+182. Recent-question history remains component-local only, stores only query plus mode plus timestamp, is capped at 5 items, deduplicates by query, and is not persisted.
+183. Copy-result uses the browser clipboard API only and does not write files, knowledge artifacts, formal map, release notes, or release assets.
+184. Citation focus is local scroll or highlight over the returned citation list only and does not read artifacts, raw source, or any new backend endpoint.
+185. The effective frontend request payload remains limited to `query` and does not expose provider or model control.
+186. Ask-button `knowledge.read` disablement and handler-side `knowledge.read` guard remain in place.
+187. `P3.rag-ui-2a` adds no backend code, no request-schema changes, no router provider-selection changes, no runtime-provider expansion, and no real external provider integration.
+188. VS Code Problems check on touched frontend files reported no errors.
+189. Focused backend RAG regression passed: `70 passed`.
+190. Console TypeScript no-emit validation passed: `./node_modules/.bin/tsc -b --noEmit`.
+191. `P3.rag-ui-2a` `git diff --check`: clean.
+192. Optional `./node_modules/.bin/vite build` could not complete because Rollup's native optional dependency failed to load with a macOS code-signature or optional-dependency error.
+193. `P3.rag-ui-2b` frontend hardening and helper extraction is now complete.
+194. The implementation files for `P3.rag-ui-2b` are `console/src/pages/Game/GameProject.tsx`, `console/src/pages/Game/GameProject.module.less`, and `console/src/pages/Game/ragUiHelpers.ts`.
+195. `P3.rag-ui-2b` extracts pure helper logic for recent-question history shaping, copy-result text assembly, citation-value formatting, and guardrail-warning classification.
+196. `P3.rag-ui-2b` adds only minimal narrow-screen polish for example buttons, result actions, and citation metadata wrapping.
+197. The effective frontend request payload remains limited to `query`, and Ask-button `knowledge.read` disablement plus handler-side guard remain unchanged.
+198. `P3.rag-ui-2b` keeps recent history, copied output, and citation focus frontend-local only and does not add save, accept, publish, or formal-knowledge writes.
+199. `P3.rag-ui-2b` adds no backend code, no request-schema changes, no router provider-selection changes, no runtime-provider expansion, and no real external provider integration.
+200. No frontend test framework was added in `P3.rag-ui-2b` because the console workspace does not already define one.
+201. Targeted frontend ESLint passed for `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/ragUiHelpers.ts`.
+202. Console TypeScript no-emit validation passed: `./node_modules/.bin/tsc -b --noEmit`.
+203. Focused backend RAG regression passed: `70 passed`.
+204. `P3.rag-ui-2b` `git diff --check`: clean.
+205. `P3.rag-ui-3` product experience consolidation planning is now complete as a docs-only slice.
+206. The planning file for `P3.rag-ui-3` is `docs/tasks/knowledge-p3-rag-ui-3-product-experience-consolidation-plan-2026-05-08.md`.
+207. `P3.rag-ui-3` records that the current RAG MVP entry should remain inside GameProject rather than splitting into a standalone Knowledge Q&A surface at this stage.
+208. `P3.rag-ui-3` defines `answer` as the primary success state, `insufficient_context` as the primary recoverable failure state, and `no_current_release` as the primary readiness blocker state.
+209. `P3.rag-ui-3` records that `insufficient_context` should gain read-only next-step guidance before any provider credential or transport work is considered.
+210. `P3.rag-ui-3` keeps precise numeric or row-level questions routed toward structured query and keeps change or edit intent routed toward numeric workbench.
+211. `P3.rag-ui-3` recommends future citation enhancement as display grouping only and does not authorize artifact or raw-source reading behavior.
+212. `P3.rag-ui-3` records that any future citation reading view requires a separate boundary review before implementation.
+213. `P3.rag-ui-3` keeps recent-question history component-local and non-persistent by default.
+214. `P3.rag-ui-3` treats expanded copy affordances such as citation summary or markdown copy as future planning only and not the immediate next slice.
+215. `P3.rag-ui-3` records a minimum future frontend test-strategy direction including helper tests, component smoke coverage when lightweight infrastructure exists, and payload-boundary checks, but does not introduce a new test framework in this slice.
+216. `P3.rag-ui-3` explicitly recommends `P3.rag-ui-3a` as the next implementation slice.
+217. `P3.rag-ui-3a` is recommended to remain frontend-only and to focus on three-state display hierarchy refinement, read-only next-step guidance, structured-query and workbench entry affordance planning, and citation display grouping planning.
+218. `P3.rag-ui-3` explicitly recommends frontend-only product experience refinement before provider credential or transport work.
+219. `P3.rag-ui-3` keeps provider or model control closed, keeps the effective request payload limited to `query`, keeps router provider selection unchanged, and keeps runtime providers limited to `deterministic_mock` and `disabled`.
+220. `P3.rag-ui-3` keeps ordinary RAG Q&A separate from administrator acceptance and does not allow recent history, copy result, citation review, structured-query routing, or workbench routing to become acceptance or formal-knowledge entry paths.
+221. `P3.rag-ui-3` is docs-only, does not rerun pytest, does not rerun TypeScript checks, and limits post-edit validation to `git diff --check`.
+222. `P3.rag-ui-3a` frontend-only product experience refinement is now complete.
+223. The implementation files for `P3.rag-ui-3a` are `console/src/pages/Game/GameProject.tsx`, `console/src/pages/Game/GameProject.module.less`, and `console/src/pages/Game/ragUiHelpers.ts`.
+224. `P3.rag-ui-3a` keeps the RAG MVP entry inside the existing GameProject surface and does not create a standalone Knowledge Q&A page.
+225. `P3.rag-ui-3a` refines the three-state hierarchy so `answer` remains the primary success content, `insufficient_context` is a recoverable failure state, and `no_current_release` is a readiness blocker state.
+226. `P3.rag-ui-3a` keeps answer body primary, while release metadata, warnings, and citations remain auxiliary information.
+227. `P3.rag-ui-3a` adds read-only next-step hints for `insufficient_context` and does not auto-retry or fabricate an answer.
+228. `P3.rag-ui-3a` keeps structured-query and workbench guardrail copy in place and adds read-only compact path labels only.
+229. `P3.rag-ui-3a` does not navigate routes, does not write URLs, and does not trigger a workbench session.
+230. `P3.rag-ui-3a` groups citations by `source_type` for display only and derives that grouping only from returned `ragAnswer.citations`.
+231. `P3.rag-ui-3a` does not synthesize citations, does not read artifact or raw source content, and does not add a new backend endpoint.
+232. `P3.rag-ui-3a` keeps existing example questions, recent-question history, copy result, and local citation focus in place.
+233. The effective frontend request payload remains limited to `query`, and `answerRagQuestion(...)` still sends only `{ query }`.
+234. Ask-button `knowledge.read` disablement and handler-side `knowledge.read` guard remain unchanged in `P3.rag-ui-3a`.
+235. `P3.rag-ui-3a` adds no backend code, no request-schema changes, no router provider-selection changes, no runtime-provider expansion, and no real external provider integration.
+236. Targeted frontend ESLint passed for `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/ragUiHelpers.ts`.
+237. Console TypeScript no-emit validation passed: `./node_modules/.bin/tsc -b --noEmit`.
+238. Focused backend RAG regression passed: `70 passed`.
+239. `P3.rag-ui-3a` `git diff --check`: clean.

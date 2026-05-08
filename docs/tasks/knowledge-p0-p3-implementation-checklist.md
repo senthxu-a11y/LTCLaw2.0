@@ -2032,42 +2032,84 @@ Next-step note:
 1. Do not connect any real external model in the next slice.
 2. The next recommended slice is `P3.rag-model-2d` app/service config injection implementation, still limited to `deterministic_mock` and `disabled`.
 
-### P3.rag-model-2d [S] App/Service Config Injection Implementation Plan
+### P3.rag-model-2d [S] Minimal App/Service Config Injection Implementation
 
 Depends on: P3.rag-model-2c
 
-Status as of 2026-05-08: completed as a docs-only implementation plan.
+Status as of 2026-05-08: completed.
 
 Tasks:
 
-1. Break the `P3.rag-model-2c` boundary into a minimal implementation checklist.
-2. Define which backend files should change in the first implementation slice.
-3. Define which files should stay untouched.
-4. Define focused test coverage and acceptance criteria.
-5. Keep the next runtime implementation limited to `deterministic_mock` and `disabled` only.
+1. Add a very small service-layer resolver helper for provider-name selection.
+2. Keep provider-name resolution limited to backend DI or passed service or config objects.
+3. Keep runtime providers limited to `deterministic_mock` and `disabled` only.
+4. Preserve router, request-body, frontend, retrieval, context, and citation-validation boundaries.
+5. Keep real external models out of scope.
 
 Implemented scope note:
 
 1. The plan is recorded in `docs/tasks/knowledge-p3-rag-model-2d-implementation-plan-2026-05-08.md`.
-2. This slice is docs-only and does not modify backend code, frontend code, routers, request schema, or public API.
-3. The plan recommends a small service-layer resolver helper such as `resolve_rag_model_provider_name(...)` or an equivalent helper with the same boundary.
-4. The recommended implementation surface is backend game-layer code only.
-5. The recommended first implementation files are `src/ltclaw_gy_x/game/knowledge_rag_answer.py`, one small new helper module under `src/ltclaw_gy_x/game/`, `tests/unit/game/test_knowledge_rag_answer.py`, and one focused new game-layer test file for the resolver helper.
-6. The plan allows a minimal `src/ltclaw_gy_x/game/service.py` touch only if a strictly server-side service-config handoff is needed.
-7. The plan does not put router, request body, frontend, environment variables, `ProjectConfig.models`, `UserGameConfig`, or `ProviderManager.active_model` in scope for first implementation.
-8. `build_rag_answer_with_provider(...)` remains the service-layer provider-selection entry point.
-9. `get_rag_model_client(...)` remains the only registry entry point.
-10. Unknown provider remains clear-fail.
-11. Provider initialization failure remains fallback-to-disabled only.
-12. `no_current_release` and `insufficient_context` must still return before provider selection.
-13. Citation validation must still trust only `context.citations`.
-14. Retrieval and context boundaries remain unchanged and must not widen.
+2. This slice is closed out in `docs/tasks/knowledge-p3-rag-model-2d-closeout-2026-05-08.md`.
+3. The implementation files are `src/ltclaw_gy_x/game/knowledge_rag_provider_selection.py`, `src/ltclaw_gy_x/game/knowledge_rag_answer.py`, `tests/unit/game/test_knowledge_rag_provider_selection.py`, and `tests/unit/game/test_knowledge_rag_answer.py`.
+4. The new helper is limited to service-layer provider-name resolution.
+5. The helper does not perform I/O, does not read environment variables, and does not access `ProviderManager`.
+6. The helper accepts only explicit backend-passed object or mapping fields and currently supports direct or nested `config`-style resolution for `rag_model_provider` and `knowledge_rag_model_provider`.
+7. `build_rag_answer_with_provider(...)` now resolves provider name only after the existing `no_current_release` and grounded-context early returns.
+8. Provider selection still occurs only through `get_rag_model_client(...)`.
+9. Router was not modified, request body was not modified, and frontend was not modified.
+10. Runtime providers remain limited to `deterministic_mock` and `disabled`.
+11. Unknown provider remains clear-fail.
+12. Provider factory initialization failure still falls back only to `disabled`.
+13. Citation validation still trusts only `context.citations`.
+14. Retrieval and context boundaries remain unchanged and were not widened.
 
 Acceptance:
 
-1. The plan does not add code, runtime providers, real external model wiring, API changes, request-schema changes, or frontend changes.
-2. The plan explicitly limits the next implementation slice to `deterministic_mock` and `disabled`.
-3. The plan records the file touch set, do-not-touch set, focused test list, and acceptance criteria for the next implementation round.
+1. This slice adds only a minimal service-layer resolver path and does not add new runtime providers, real external model wiring, API changes, request-schema changes, or frontend changes.
+2. Runtime providers remain limited to `deterministic_mock` and `disabled`.
+3. Request-level provider hint, frontend provider control, and `ProviderManager.active_model` are still not allowed in this slice.
+
+Validation note from implementation round:
+
+1. Focused pytest result: `38 passed`.
+2. `git diff --check`: clean.
+
+Next-step note:
+
+1. Do not connect any real external model in the next slice.
+2. The next recommended slice is `P3.rag-model-2e` boundary review or implementation planning for whether and how backend app/service config should be injected into the live RAG answer path, still without direct real external model integration.
+
+### P3.rag-model-2e [S] Live Backend App/Service Config Injection Boundary Review
+
+Depends on: P3.rag-model-2d
+
+Status as of 2026-05-08: completed as a docs-only boundary review.
+
+Tasks:
+
+1. Define whether and how backend app or service config may enter the live RAG answer path after the 2d resolver helper landed.
+2. Define the allowed handoff layer for server-owned config.
+3. Keep router, request body, frontend, and global provider runtime state out of scope.
+4. Preserve provider allowlist, clear-fail, fallback-disabled, early-return, retrieval, context, and citation-validation boundaries.
+5. Keep real external model integration out of scope.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-p3-rag-model-2e-live-config-injection-boundary-review-2026-05-08.md`.
+2. This slice is docs-only and does not modify backend code, frontend code, routers, request schema, or public API.
+3. The review records that live config injection should happen only through explicit server-side handoff of app or service config into the existing backend answer path.
+4. The review keeps `build_rag_answer_with_provider(...)` as the service-layer provider-selection entry point and `get_rag_model_client(...)` as the only registry entry point.
+5. The review does not allow request-body provider hint, frontend provider control, router provider selection, environment-variable-driven selection, `ProjectConfig.models`, `UserGameConfig`, or `ProviderManager.active_model` as the live source of truth.
+6. The review keeps runtime providers limited to `deterministic_mock` and `disabled` only.
+7. The review keeps unknown provider as clear-fail and provider factory initialization failure as fallback-to-disabled only.
+8. The review keeps `no_current_release` and `insufficient_context` ahead of provider resolution and provider lookup.
+9. The review keeps retrieval, context assembly, and citation validation boundaries unchanged.
+
+Acceptance:
+
+1. The review does not add code, runtime providers, real external model wiring, API changes, request-schema changes, or frontend changes.
+2. The review records explicit backend config handoff as the only allowed live injection shape in this slice.
+3. The review keeps request-level provider hint and frontend provider control disallowed.
 
 Validation note:
 
@@ -2078,7 +2120,473 @@ Validation note:
 Next-step note:
 
 1. Do not connect any real external model in the next slice.
-2. The next recommended step is to execute the `P3.rag-model-2d` implementation plan as a narrow backend-only code slice.
+2. The next recommended slice is `P3.rag-model-2f` implementation planning for a minimal live backend app/service config handoff into the existing RAG answer path.
+
+### P3.rag-model-2f [S] Minimal Live Config Handoff Implementation Plan
+
+Depends on: P3.rag-model-2e
+
+Status as of 2026-05-08: completed as a docs-only implementation plan.
+
+Tasks:
+
+1. Define the minimal code shape for handing backend-owned app or service config into the live RAG answer path.
+2. Decide whether the next slice should add one small service-layer helper for live config handoff.
+3. Define where that helper should live.
+4. Define the smallest allowed router touch, if any, without allowing router provider selection.
+5. Define focused tests and acceptance criteria for the next implementation slice.
+
+Implemented scope note:
+
+1. The plan is recorded in `docs/tasks/knowledge-p3-rag-model-2f-live-config-handoff-implementation-plan-2026-05-08.md`.
+2. This slice is docs-only and does not modify backend code, frontend code, routers, request schema, or public API.
+3. The plan recommends keeping `build_rag_answer_with_provider(...)` as the service-layer provider-selection entry point and `get_rag_model_client(...)` as the only registry entry point.
+4. The plan recommends either a very small `build_rag_answer_with_service_config(...)` helper in `src/ltclaw_gy_x/game/knowledge_rag_answer.py` or a narrowly named resolver helper extension in `src/ltclaw_gy_x/game/knowledge_rag_provider_selection.py`, with preference for the answer-layer wrapper because it keeps router logic thin.
+5. The plan allows a minimal router change only if needed to hand off backend-owned service config into the existing answer path.
+6. The plan does not allow router to call `get_rag_model_client(...)` directly, does not allow request-body provider hint, and does not allow frontend provider control.
+7. The plan keeps runtime providers limited to `deterministic_mock` and `disabled` only.
+8. The plan keeps unknown provider as clear-fail and provider factory initialization failure as fallback-to-disabled only.
+9. The plan keeps `no_current_release`, `insufficient_context`, citation validation, retrieval, and context boundaries unchanged.
+
+Acceptance:
+
+1. The plan is implementation planning only and does not add code, new runtime providers, real external model wiring, API changes, request-schema changes, or frontend changes.
+2. The plan can directly guide the next minimal backend code slice.
+3. The plan keeps request-level provider hint, frontend provider control, and router provider selection out of scope.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not rerun pytest.
+3. Post-edit validation for this pass is limited to `git diff --check`.
+
+Next-step note:
+
+1. Do not connect any real external model in the next slice.
+2. The next recommended slice is `P3.rag-model-2g` minimal live config handoff implementation.
+
+### P3.rag-model-2g [S] Minimal Live Config Handoff Implementation
+
+Depends on: P3.rag-model-2f
+
+Status as of 2026-05-08: completed.
+
+Tasks:
+
+1. Add the smallest answer-layer wrapper needed to hand backend-owned app or service config into the live RAG answer path.
+2. Keep router limited to backend-owned config handoff only.
+3. Keep provider resolution and provider instantiation inside the existing service-layer and registry boundaries.
+4. Preserve all request, frontend, retrieval, context, and citation-validation boundaries.
+5. Keep real external models out of scope.
+
+Implemented scope note:
+
+1. This slice is closed out in docs/tasks/knowledge-p3-rag-model-2g-closeout-2026-05-08.md.
+2. The implementation files are src/ltclaw_gy_x/game/knowledge_rag_answer.py, src/ltclaw_gy_x/app/routers/game_knowledge_rag.py, tests/unit/game/test_knowledge_rag_answer.py, and tests/unit/routers/test_game_knowledge_rag_router.py.
+3. The implementation adds a very small answer-layer wrapper that hands backend-owned service config into the existing answer path.
+4. Router now passes game_service as a backend-owned object into that wrapper.
+5. Router does not choose provider and does not call get_rag_model_client(...) directly.
+6. Request body still does not carry provider name, and frontend remains unchanged.
+7. Provider resolution still goes through the existing resolver and get_rag_model_client(...).
+8. Runtime providers remain limited to deterministic_mock and disabled.
+9. Unknown provider remains clear-fail.
+10. Provider factory initialization failure still falls back only to disabled with warning.
+11. no_current_release and insufficient_context still return before provider selection.
+12. Citation validation still trusts only context.citations.
+13. Retrieval and context boundaries remain unchanged and were not widened.
+14. No real external provider was added.
+
+Acceptance:
+
+1. This slice implements only minimal live config handoff and is not real LLM integration.
+2. Request-level provider hint and frontend provider control remain disallowed.
+3. Router is only a backend-owned config handoff surface and is not a provider selector.
+
+Validation note from implementation round:
+
+1. Focused pytest result: 59 passed.
+2. git diff --check: clean.
+
+Next-step note:
+
+1. Preferred next slice: P3.rag-model-3 external provider adapter boundary review.
+2. That next slice should review how a real external provider adapter would fit behind the existing registry and client protocol boundaries, without implementing a real provider yet.
+3. If external-provider review is intentionally deferred, the next planning alternative is RAG UI planning or P3.8/P3.9 planning, with external-provider boundary review still the higher-priority backend dependency.
+
+### P3.rag-model-3 [S] External Provider Adapter Boundary Review
+
+Depends on: P3.rag-model-2g
+
+Status as of 2026-05-08: completed as a docs-only boundary review.
+
+Tasks:
+
+1. Define where a real external provider adapter may sit in the existing RAG backend layering.
+2. Define what adapter contract it must satisfy.
+3. Preserve the current retrieval, context, grounding, citation-validation, and structured-query boundaries.
+4. Keep credential, provider-runtime, and provider-rollout concerns in review scope only.
+5. Keep real external provider implementation out of scope.
+
+Implemented scope note:
+
+1. The review is recorded in docs/tasks/knowledge-p3-rag-model-3-external-provider-adapter-boundary-review-2026-05-08.md.
+2. This slice is docs-only and does not modify backend code, frontend code, routers, request schema, or public API.
+3. The review records that any future external provider adapter must sit behind the existing registry and client protocol boundaries.
+4. The review records that any future adapter must implement the existing RagModelClient protocol and accept only bounded prompt payload rather than reading artifacts directly.
+5. The review does not allow release-artifact reads, raw-source reads, pending-state reads, SVN reads, request-body provider hint, frontend provider control, environment-variable-driven live source selection, or ProviderManager reuse by default in this slice.
+6. The review does not authorize new runtime provider names in this slice.
+7. The review keeps unknown provider clear-fail, initialization failure fallback-to-disabled or explicit clear-fail, structured-query boundary, workbench-flow boundary, citation-validation boundary, and no-candidate-evidence or vector-store widening unchanged.
+
+Acceptance:
+
+1. The review does not implement a real external provider.
+2. The review does not add runtime providers, router changes, request-schema changes, frontend changes, or ProviderManager integration.
+3. The review can directly guide a later external-provider adapter implementation plan.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not rerun pytest.
+3. Post-edit validation for this pass is limited to git diff --check.
+
+Next-step note:
+
+1. The next recommended slice is P3.rag-model-3a external provider adapter implementation plan.
+2. P3.rag-model-3a should remain planning-only and must not directly implement a real external provider.
+3. Real provider implementation must remain deferred until adapter plan, credential boundary, timeout or cost policy, and grounding or citation test plan are settled.
+
+### P3.rag-model-3a [S] External Provider Adapter Implementation Plan
+
+Depends on: P3.rag-model-3
+
+Status as of 2026-05-08: completed as a docs-only implementation plan.
+
+Tasks:
+
+1. Define the minimal file-touch set for a future external provider adapter skeleton.
+2. Define the adapter class shape and protocol conformance requirements.
+3. Define the prompt-payload and response-shape constraints for the future skeleton.
+4. Define how timeout, retry, cost, token-limit, and secret placeholders should be represented without implementing real I/O.
+5. Define the focused test plan and acceptance criteria for a future adapter skeleton slice.
+
+Implemented scope note:
+
+1. The plan is recorded in docs/tasks/knowledge-p3-rag-model-3a-external-provider-adapter-implementation-plan-2026-05-08.md.
+2. This slice is docs-only and does not modify backend code, frontend code, routers, request schema, or public API.
+3. The plan recommends a future adapter module such as src/ltclaw_gy_x/game/knowledge_rag_external_model_client.py or a more conservative src/ltclaw_gy_x/game/knowledge_rag_provider_adapters.py.
+4. The plan requires any future adapter class to implement RagModelClient and accept only RagAnswerPromptPayload while returning only RagModelClientResponse.
+5. The plan keeps network I/O out of the future skeleton slice and limits that slice to contract shape, injected config placeholders, and tests.
+6. The plan does not authorize runtime provider expansion, router changes, request-schema changes, frontend changes, environment-variable reads, or ProviderManager integration.
+
+Acceptance:
+
+1. The plan is implementation planning only and does not implement a real external provider.
+2. The plan can directly guide a later skeleton-only adapter implementation slice.
+3. The plan keeps retrieval, context, citation-validation, structured-query, and workbench-flow boundaries unchanged.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not rerun pytest.
+3. Post-edit validation for this pass is limited to git diff --check.
+
+Next-step note:
+
+1. The next recommended slice is P3.rag-model-3b external provider adapter skeleton implementation.
+2. P3.rag-model-3b should still avoid real network calls and real provider integration.
+3. Real provider implementation must remain deferred until the skeleton, credential boundary, timeout or cost policy, and grounding or citation tests are settled.
+
+### P3.rag-model-3b [S] External Provider Adapter Skeleton Implementation
+
+Depends on: P3.rag-model-3a
+
+Status as of 2026-05-08: completed.
+
+Tasks:
+
+1. Add the smallest external provider adapter skeleton module behind the existing client boundary.
+2. Keep the slice free of real network I/O and real provider integration.
+3. Preserve router, request, frontend, registry allowlist, retrieval, context, and citation-validation boundaries.
+4. Add focused adapter tests and answer-layer regression coverage.
+5. Record closeout and verified outcomes.
+
+Implemented scope note:
+
+1. This slice is closed out in docs/tasks/knowledge-p3-rag-model-3b-external-provider-adapter-skeleton-closeout-2026-05-08.md.
+2. The implementation files are src/ltclaw_gy_x/game/knowledge_rag_model_client.py and src/ltclaw_gy_x/game/knowledge_rag_external_model_client.py.
+3. The focused test files are tests/unit/game/test_knowledge_rag_answer.py and tests/unit/game/test_knowledge_rag_external_model_client.py, along with the existing model-client, registry, provider-selection, and router tests.
+4. The new adapter skeleton implements RagModelClient, accepts only bounded prompt payload shape, returns only RagModelClientResponse shape, and provides a mockable responder seam.
+5. The default skeleton implementation performs no real network I/O and returns a conservative empty response with skeleton warning.
+6. The skeleton defines injected config and secret placeholder shapes without reading environment variables, request body, or frontend state.
+7. Runtime providers remain limited to deterministic_mock and disabled, and registry allowlist remains unchanged.
+8. Router remains unchanged as a backend-owned config handoff surface only and does not call get_rag_model_client(...) directly.
+9. Request schema remains unchanged and frontend remains unchanged.
+10. Citation validation remains in the answer layer and still trusts only context.citations.
+11. Retrieval and context boundaries remain unchanged and were not widened.
+12. No real external provider was added.
+
+Acceptance:
+
+1. This slice implements only an adapter skeleton and is not real external provider integration.
+2. The slice adds no frontend or request provider control.
+3. The slice keeps router, registry allowlist, retrieval, context, and citation boundaries intact.
+
+Validation note from implementation round:
+
+1. Focused pytest result: 70 passed.
+2. git diff --check: clean.
+
+Next-step note:
+
+1. The adapter skeleton is now complete.
+2. The next larger product step may pivot to RAG product-entry UI planning or to a future provider credential or transport boundary slice.
+3. Real external provider integration still remains unimplemented.
+
+### P3.rag-ui-1 [S] Minimal Product-Entry UI On Existing Answer Endpoint
+
+Depends on: P3.4b, P3.rag-model-3b
+
+Status as of 2026-05-08: completed.
+
+Tasks:
+
+1. Add the smallest frontend API typing and client method for the existing backend RAG answer endpoint.
+2. Add a minimal GameProject knowledge Q&A entry on the existing knowledge release surface.
+3. Render `mode`, `answer`, `release_id`, `citations`, and `warnings`.
+4. Surface explicit `no_current_release` and `insufficient_context` states.
+5. Keep provider selection, real external provider integration, request-schema changes, and broader chat UX out of scope.
+
+Implemented scope note:
+
+1. This slice is closed out in docs/tasks/knowledge-p3-rag-ui-minimal-closeout-2026-05-08.md.
+2. The implementation files are console/src/api/types/game.ts, console/src/api/modules/gameKnowledgeRelease.ts, console/src/pages/Game/GameProject.tsx, and console/src/pages/Game/GameProject.module.less.
+3. The UI sends only `query` to the existing backend answer endpoint and does not expose provider or model controls.
+4. The UI renders current backend fields only and does not invent a new response contract.
+5. The UI keeps structured-query and workbench-flow guardrail messaging explicit.
+6. No backend code, router contract, request schema, provider registry, or real external provider integration was added in this slice.
+
+Acceptance:
+
+1. The slice lands a minimal product-entry RAG UI without widening backend or provider boundaries.
+2. The slice does not expose frontend provider control.
+3. The slice does not add real external provider integration.
+
+Validation note from implementation round:
+
+1. VS Code Problems check on touched frontend files: no errors found.
+2. `pnpm build` could not run because `pnpm` was unavailable in the environment.
+3. `npm run build` could not run because `npm` was unavailable in the environment.
+4. `git diff --check`: clean.
+
+### P3.rag-ui-2 [S] Product-Flow UX Enhancement Plan
+
+Depends on: P3.rag-ui-1
+
+Status as of 2026-05-08: planned.
+
+Tasks:
+
+1. Plan the next small-step UX enhancement on the existing answer endpoint.
+2. Limit the scope to frontend product-flow improvements such as recent question history, static example questions, copy answer, and citation locate or jump.
+3. Keep provider, router, request-schema, model-client, and runtime-provider boundaries unchanged.
+4. Keep `knowledge.read` Ask-button disablement and handler guard unchanged.
+5. Record allowed scope, forbidden scope, acceptance criteria, rollback conditions, and validation expectations for a future implementation round.
+
+Planned scope note:
+
+1. This slice is planned in docs/tasks/knowledge-p3-rag-ui-2-product-flow-plan-2026-05-08.md.
+2. The preferred next step is pure frontend UX enhancement rather than provider credential or transport boundary work.
+3. Recent-question history should remain local UI state or session-level frontend state only.
+4. Example questions should remain static UI suggestions only.
+5. Copy answer should remain a frontend-only convenience action.
+6. Citation locate or jump must stay limited to the citations already returned by the backend.
+7. No backend code, request-schema change, provider control, or external provider integration is included in this plan.
+
+Acceptance:
+
+1. The plan keeps the next step small and frontend-focused.
+2. The plan does not widen provider, router, request, or citation-grounding boundaries.
+3. The plan keeps RAG Q&A separate from administrator acceptance and release-entry workflows.
+4. The next implementation target is explicitly `P3.rag-ui-2a`: static example questions, recent question history, copy answer, and local citation focus.
+5. Citation focus is limited to local focus or scroll inside already-rendered returned citations and must not add backend artifact or raw-source reads.
+6. The next implementation must not add backend endpoints, request-schema fields, provider controls, model controls, save actions, accept actions, publish actions, or formal-knowledge writes.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not rerun pytest.
+3. Post-edit validation for this pass is limited to git diff --check.
+
+### P3.rag-ui-2a [S] Frontend UX Enhancement Implementation
+
+Depends on: P3.rag-ui-2
+
+Status as of 2026-05-08: completed.
+
+Tasks:
+
+1. Implement static example questions in the existing Knowledge Q&A section.
+2. Implement recent question history in component-local state only.
+3. Implement copy-answer behavior using the browser clipboard API only.
+4. Implement local citation focus or scroll inside the rendered citation list only.
+5. Preserve `knowledge.read` Ask-button disablement and handler guard.
+6. Preserve query-only payload and all provider, router, and runtime-provider boundaries.
+
+Implemented scope note:
+
+1. This slice is closed out in docs/tasks/knowledge-p3-rag-ui-2a-closeout-2026-05-08.md.
+2. The implementation files are console/src/pages/Game/GameProject.tsx and console/src/pages/Game/GameProject.module.less.
+3. Static example questions populate the existing query input only and do not auto-submit.
+4. Recent question history remains component-local, capped at 5 items, stores only query plus mode plus timestamp, and is not persisted.
+5. Copy-result uses the browser clipboard API only and does not write files or knowledge assets.
+6. Citation focus remains local scroll or highlight over returned citations only and does not read artifacts or raw source.
+7. No backend code, no request-schema change, no provider or model control, and no external provider integration were added.
+
+Acceptance:
+
+1. The slice completes all four planned frontend UX enhancements.
+2. The slice keeps the effective request payload at `query` only.
+3. The slice keeps `knowledge.read` Ask-button disablement and handler guard intact.
+4. The slice keeps RAG Q&A separate from administrator acceptance and release-entry workflows.
+
+Validation note from implementation round:
+
+1. VS Code Problems check on touched frontend files: no errors found.
+2. Console TypeScript no-emit validation passed: `./node_modules/.bin/tsc -b --noEmit`.
+3. Focused backend RAG regression: 70 passed.
+4. `git diff --check`: clean.
+5. Optional `./node_modules/.bin/vite build` could not complete because Rollup's native optional dependency failed to load with a macOS code-signature or optional-dependency error.
+
+### P3.rag-ui-2b [S] Frontend Hardening And Helper Extraction
+
+Depends on: P3.rag-ui-2a
+
+Status as of 2026-05-08: completed.
+
+Tasks:
+
+1. Extract pure helper logic from the GameProject RAG UI without changing request or answer semantics.
+2. Improve maintainability of recent-history, copy-text, citation-value, and warning-classification logic.
+3. Apply only minimal frontend polish for wrapping or overflow in the existing RAG entry.
+4. Preserve `knowledge.read` Ask-button disablement and handler guard.
+5. Do not add backend code, request-schema fields, provider controls, model controls, or external provider integration.
+6. Do not introduce a new frontend test framework when none already exists in the console workspace.
+
+Implemented scope note:
+
+1. This slice is closed out in docs/tasks/knowledge-p3-rag-ui-2b-closeout-2026-05-08.md.
+2. The implementation files are console/src/pages/Game/GameProject.tsx, console/src/pages/Game/GameProject.module.less, and console/src/pages/Game/ragUiHelpers.ts.
+3. Recent-question history shaping now uses a dedicated pure helper.
+4. Copy-result text assembly now uses a dedicated pure helper.
+5. Citation field-value formatting and guardrail-warning classification now use dedicated pure helpers.
+6. Minimal narrow-screen wrapping polish was added for example buttons, action buttons, and citation metadata.
+7. No backend code, no request-schema change, no provider or model control, and no external provider integration were added.
+8. No frontend test framework was added because the console workspace does not already define one.
+
+Acceptance:
+
+1. The slice improves maintainability without changing the effective request payload.
+2. The slice keeps `knowledge.read` Ask-button disablement and handler guard intact.
+3. The slice keeps recent history, copy-result, and citation focus frontend-local only.
+4. The slice keeps RAG Q&A separate from administrator acceptance and release-entry workflows.
+
+Validation note from implementation round:
+
+1. Targeted frontend ESLint passed: `./node_modules/.bin/eslint src/pages/Game/GameProject.tsx src/pages/Game/ragUiHelpers.ts`.
+2. Console TypeScript no-emit validation passed: `./node_modules/.bin/tsc -b --noEmit`.
+3. Focused backend RAG regression: `70 passed`.
+4. `git diff --check`: clean.
+
+### P3.rag-ui-3 [S] Product Experience Consolidation Plan
+
+Depends on: P3.rag-ui-2b
+
+Status as of 2026-05-08: completed as a docs-only product experience consolidation plan.
+
+Tasks:
+
+1. Decide whether the current RAG MVP entry should remain inside GameProject or split into a standalone Knowledge Q&A surface.
+2. Define the product display hierarchy across `answer`, `insufficient_context`, and `no_current_release`.
+3. Define the read-only next-step guidance for `insufficient_context`.
+4. Define how precise numeric or row-level questions should route toward structured query and how change or edit intent should route toward numeric workbench.
+5. Define the next-step stance for citation grouping, citation reading view review needs, recent-history scope, copy-result scope, and minimum future test strategy.
+6. Recommend the next implementation slice without widening provider, router, request, or model boundaries.
+
+Implemented scope note:
+
+1. The plan is recorded in `docs/tasks/knowledge-p3-rag-ui-3-product-experience-consolidation-plan-2026-05-08.md`.
+2. This slice is docs-only and does not modify backend code, frontend code, routers, request schema, or public API.
+3. The plan keeps the current MVP product entry inside GameProject rather than splitting to a standalone Knowledge Q&A surface.
+4. The plan defines `answer` as the primary success state, `insufficient_context` as the primary recoverable failure state, and `no_current_release` as the primary readiness blocker state.
+5. The plan recommends read-only next-step guidance for `insufficient_context` rather than provider or transport expansion.
+6. The plan keeps precise numeric or row-level questions routed toward structured query and keeps change or edit intent routed toward numeric workbench.
+7. The plan recommends citation display grouping as a future presentation-only enhancement and explicitly requires a separate boundary review before any citation reading-view implementation.
+8. The plan keeps recent-question history component-local and non-persistent by default.
+9. The plan treats expanded copy affordances as optional future planning only.
+10. The plan records a minimum future frontend test-strategy direction without introducing a new test framework in this slice.
+11. The plan explicitly recommends `P3.rag-ui-3a` as the next slice.
+12. The plan explicitly recommends frontend-only product refinement before provider credential or transport work.
+
+Acceptance:
+
+1. The plan keeps GameProject as the current MVP entry.
+2. The plan keeps provider or model control closed.
+3. The plan keeps the effective request payload limited to `query` only.
+4. The plan keeps router, provider-selection, retrieval, and citation-validation boundaries unchanged.
+5. The plan recommends `P3.rag-ui-3a` rather than provider credential or transport work as the next implementation slice.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not rerun pytest.
+3. This docs-only pass does not rerun TypeScript checks.
+4. Post-edit validation for this pass is limited to `git diff --check`.
+
+Next-step note:
+
+1. The next recommended slice is `P3.rag-ui-3a` frontend-only product experience refinement.
+2. `P3.rag-ui-3a` should strengthen the three-state display hierarchy, add read-only next-step hints for `insufficient_context`, and refine structured-query or workbench entry affordance planning without widening backend boundaries.
+
+### P3.rag-ui-3a [S] Frontend-Only Product Experience Refinement
+
+Depends on: P3.rag-ui-3
+
+Status as of 2026-05-08: completed.
+
+Tasks:
+
+1. Refine the display hierarchy across `answer`, `insufficient_context`, and `no_current_release` inside the existing GameProject RAG entry.
+2. Add read-only next-step hints for `insufficient_context`.
+3. Preserve the existing structured-query and workbench guardrail copy while adding read-only compact path labels only.
+4. Add citation display grouping based only on returned citations.
+5. Preserve existing example questions, recent-question history, copy result, citation focus, and `knowledge.read` guards.
+6. Do not widen request payload, router behavior, provider or model control, registry behavior, or external-provider scope.
+
+Implemented scope note:
+
+1. This slice is closed out in docs/tasks/knowledge-p3-rag-ui-3a-closeout-2026-05-08.md.
+2. The implementation files are console/src/pages/Game/GameProject.tsx, console/src/pages/Game/GameProject.module.less, and console/src/pages/Game/ragUiHelpers.ts.
+3. `answer` now keeps answer body as the primary content, with state metadata, warnings, and citations remaining auxiliary.
+4. `insufficient_context` now shows read-only next-step hints without auto-retry, fabricated answer, or backend widening.
+5. `no_current_release` now shows readiness-blocker guidance without adding build or publish actions.
+6. Structured-query and workbench path labels remain read-only and do not navigate.
+7. Citation grouping is presentation-only and derived only from returned citations.
+8. No backend code, no request-schema change, no provider or model control, and no external provider integration were added.
+
+Acceptance:
+
+1. The slice keeps the RAG MVP entry inside GameProject.
+2. The slice keeps `answer`, `insufficient_context`, and `no_current_release` visually distinct without changing backend semantics.
+3. The slice keeps `answerRagQuestion(...)` limited to `{ query }` only.
+4. The slice keeps Ask-button `knowledge.read` disablement and handler-side guard intact.
+5. The slice keeps citation review limited to returned citations only.
+
+Validation note from implementation round:
+
+1. Targeted frontend ESLint passed: `./node_modules/.bin/eslint src/pages/Game/GameProject.tsx src/pages/Game/ragUiHelpers.ts`.
+2. Console TypeScript no-emit validation passed: `./node_modules/.bin/tsc -b --noEmit`.
+3. Focused backend RAG regression: `70 passed`.
+4. `git diff --check`: clean.
 
 ### P3.8 [S] RAG Router Over Current Release
 

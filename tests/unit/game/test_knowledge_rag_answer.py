@@ -6,7 +6,15 @@ from pathlib import Path
 import pytest
 
 from ltclaw_gy_x.game import knowledge_rag_answer as answer_module
-from ltclaw_gy_x.game.knowledge_rag_answer import build_rag_answer, build_rag_answer_with_provider
+from ltclaw_gy_x.game.knowledge_rag_external_model_client import (
+    ExternalRagModelClientConfig,
+    ExternalRagModelClientSkeleton,
+)
+from ltclaw_gy_x.game.knowledge_rag_answer import (
+    build_rag_answer,
+    build_rag_answer_with_provider,
+    build_rag_answer_with_service_config,
+)
 from ltclaw_gy_x.game.knowledge_rag_model_client import DisabledRagModelClient
 from ltclaw_gy_x.game.knowledge_rag_model_registry import (
     RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK,
@@ -381,6 +389,111 @@ def test_build_rag_answer_with_provider_reads_disabled_provider_from_service_con
     assert 'Model provider is disabled.' in payload['warnings']
 
 
+def test_build_rag_answer_with_service_config_defaults_to_deterministic_mock_and_returns_grounded_answer():
+    payload = build_rag_answer_with_service_config(
+        'How does combat damage work?',
+        _grounded_context(),
+    )
+
+    assert payload['mode'] == 'answer'
+    assert [citation['citation_id'] for citation in payload['citations']] == ['citation-001']
+    assert 'Grounded answer from the provided current-release context' in payload['answer']
+
+
+def test_build_rag_answer_with_service_config_reads_disabled_provider_from_service_config():
+    payload = build_rag_answer_with_service_config(
+        'How does combat damage work?',
+        _grounded_context(),
+        {'rag_model_provider': RAG_MODEL_PROVIDER_DISABLED},
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'Model provider is disabled.' in payload['warnings']
+
+
+def test_build_rag_answer_with_service_config_raises_for_unknown_provider_from_service_config():
+    with pytest.raises(ValueError, match='Unsupported RAG model provider: future_external'):
+        build_rag_answer_with_service_config(
+            'How does combat damage work?',
+            _grounded_context(),
+            {'rag_model_provider': 'future_external'},
+        )
+
+
+def test_build_rag_answer_with_service_config_factory_failure_falls_back_to_disabled_with_warnings():
+    def _fail_factory():
+        raise RuntimeError('boom')
+
+    payload = build_rag_answer_with_service_config(
+        'How does combat damage work?',
+        _grounded_context(),
+        {'rag_model_provider': RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK},
+        factories={
+            RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK: _fail_factory,
+            RAG_MODEL_PROVIDER_DISABLED: DisabledRagModelClient,
+        },
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert (
+        "Failed to initialize RAG model provider 'deterministic_mock': boom. Falling back to disabled provider."
+        in payload['warnings']
+    )
+    assert 'Model provider is disabled.' in payload['warnings']
+
+
+def test_build_rag_answer_with_service_config_does_not_call_provider_factory_for_no_current_release(monkeypatch):
+    called = False
+
+    def _unexpected_resolver(*args, **kwargs):
+        raise AssertionError('provider resolver should not be called')
+
+    def _unexpected_registry(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('provider registry should not be called')
+
+    monkeypatch.setattr(answer_module, 'resolve_rag_model_provider_name', _unexpected_resolver)
+    monkeypatch.setattr(answer_module, 'get_rag_model_client', _unexpected_registry)
+
+    payload = build_rag_answer_with_service_config(
+        'combat damage',
+        _context(mode='no_current_release', release_id=None),
+        {'rag_model_provider': RAG_MODEL_PROVIDER_DISABLED},
+    )
+
+    assert payload['mode'] == 'no_current_release'
+    assert called is False
+
+
+def test_build_rag_answer_with_service_config_does_not_call_provider_factory_without_grounded_chunks(monkeypatch):
+    called = False
+
+    def _unexpected_resolver(*args, **kwargs):
+        raise AssertionError('provider resolver should not be called')
+
+    def _unexpected_registry(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('provider registry should not be called')
+
+    monkeypatch.setattr(answer_module, 'resolve_rag_model_provider_name', _unexpected_resolver)
+    monkeypatch.setattr(answer_module, 'get_rag_model_client', _unexpected_registry)
+
+    payload = build_rag_answer_with_service_config(
+        'combat damage',
+        _context(chunks=[], citations=[]),
+        {'rag_model_provider': RAG_MODEL_PROVIDER_DISABLED},
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert called is False
+
+
 def test_build_rag_answer_with_provider_ignores_request_like_provider_field_in_config():
     payload = build_rag_answer_with_provider(
         'How does combat damage work?',
@@ -506,6 +619,64 @@ def test_build_rag_answer_with_provider_filters_out_of_context_citations_and_deg
     assert payload['citations'] == []
     assert 'Ignored one or more model citation ids outside the provided context.' in payload['warnings']
     assert 'Model client output was not grounded in the provided context.' in payload['warnings']
+
+
+def test_build_rag_answer_with_external_adapter_skeleton_degrades_without_grounded_model_output():
+    payload = build_rag_answer(
+        'How does combat damage work?',
+        _grounded_context(),
+        model_client=ExternalRagModelClientSkeleton(),
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'External provider adapter skeleton is not connected.' in payload['warnings']
+    assert 'Model client output was not grounded in the provided context.' in payload['warnings']
+
+
+def test_build_rag_answer_with_external_adapter_skeleton_rejects_out_of_context_citations():
+    client = ExternalRagModelClientSkeleton(
+        responder=lambda payload: {
+            'answer': 'Grounded-looking answer.',
+            'citation_ids': ['citation-999'],
+            'warnings': [],
+        }
+    )
+
+    payload = build_rag_answer(
+        'How does combat damage work?',
+        _grounded_context(),
+        model_client=client,
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'Ignored one or more model citation ids outside the provided context.' in payload['warnings']
+    assert 'Model client output was not grounded in the provided context.' in payload['warnings']
+
+
+def test_build_rag_answer_with_external_adapter_skeleton_preserves_structured_and_workbench_warnings():
+    client = ExternalRagModelClientSkeleton(
+        config=ExternalRagModelClientConfig(max_prompt_chars=20000),
+        responder=lambda payload: {
+            'answer': 'Grounded adapter answer.',
+            'citation_ids': ['citation-001'],
+            'warnings': [],
+        },
+    )
+
+    payload = build_rag_answer(
+        'Change SkillTable 1029 damage to 120',
+        _grounded_context(),
+        model_client=client,
+    )
+
+    assert payload['mode'] == 'answer'
+    assert [citation['citation_id'] for citation in payload['citations']] == ['citation-001']
+    assert 'For change proposals or edits, use the workbench flow.' in payload['warnings']
+    assert 'For exact numeric or row-level facts, use the structured query flow.' in payload['warnings']
 
 
 @pytest.mark.parametrize(

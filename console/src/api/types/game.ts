@@ -209,6 +209,24 @@ export interface ReleaseCandidateListItem {
   created_at: string;
 }
 
+export interface KnowledgeRagCitation {
+  citation_id: string;
+  release_id?: string | null;
+  source_type?: string | null;
+  artifact_path?: string | null;
+  source_path?: string | null;
+  title?: string | null;
+  row?: number | null;
+}
+
+export interface KnowledgeRagAnswerResponse {
+  mode: "answer" | "no_current_release" | "insufficient_context";
+  answer: string;
+  release_id: string | null;
+  citations: KnowledgeRagCitation[];
+  warnings: string[];
+}
+
 export type FieldConfidence = "confirmed" | "high_ai" | "low_ai";
 
 export interface FieldInfo {

@@ -254,9 +254,10 @@ def test_rag_answer_router_builds_answer_from_context(monkeypatch, tmp_path):
         captured['max_chars'] = max_chars
         return context_payload
 
-    def _build_answer(query, context):
+    def _build_answer(query, context, service_config):
         captured['answer_query'] = query
         captured['answer_context'] = context
+        captured['service_config'] = service_config
         return {
             'mode': 'answer',
             'answer': 'Based on the provided current-release context, the strongest grounded evidence is: combat damage formula',
@@ -267,7 +268,7 @@ def test_rag_answer_router_builds_answer_from_context(monkeypatch, tmp_path):
 
     monkeypatch.setattr(rag_router_module, 'get_agent_for_request', _get_agent)
     monkeypatch.setattr(rag_router_module, 'build_current_release_context', _build_context)
-    monkeypatch.setattr(rag_router_module, 'build_rag_answer', _build_answer)
+    monkeypatch.setattr(rag_router_module, 'build_rag_answer_with_service_config', _build_answer)
 
     with TestClient(_build_app()) as client:
         response = client.post(
@@ -283,6 +284,7 @@ def test_rag_answer_router_builds_answer_from_context(monkeypatch, tmp_path):
     assert captured['query'] == 'damage'
     assert captured['answer_query'] == 'damage'
     assert captured['answer_context'] is context_payload
+    assert captured['service_config'] is workspace.game_service
 
 
 
@@ -320,9 +322,10 @@ def test_rag_answer_router_ignores_provider_field_in_request_body(monkeypatch, t
     def _build_context(*args, **kwargs):
         return context_payload
 
-    def _build_answer(query, context):
+    def _build_answer(query, context, service_config):
         captured['query'] = query
         captured['context'] = context
+        captured['service_config'] = service_config
         return {
             'mode': 'answer',
             'answer': 'Grounded answer',
@@ -333,7 +336,7 @@ def test_rag_answer_router_ignores_provider_field_in_request_body(monkeypatch, t
 
     monkeypatch.setattr(rag_router_module, 'get_agent_for_request', _get_agent)
     monkeypatch.setattr(rag_router_module, 'build_current_release_context', _build_context)
-    monkeypatch.setattr(rag_router_module, 'build_rag_answer', _build_answer)
+    monkeypatch.setattr(rag_router_module, 'build_rag_answer_with_service_config', _build_answer)
 
     with TestClient(_build_app()) as client:
         response = client.post(
@@ -345,6 +348,7 @@ def test_rag_answer_router_ignores_provider_field_in_request_body(monkeypatch, t
     assert response.json()['mode'] == 'answer'
     assert captured['query'] == 'damage'
     assert captured['context'] is context_payload
+    assert captured['service_config'] is workspace.game_service
 
 
 
@@ -369,8 +373,8 @@ def test_rag_answer_router_returns_no_current_release_payload(monkeypatch, tmp_p
     )
     monkeypatch.setattr(
         rag_router_module,
-        'build_rag_answer',
-        lambda query, context: {
+        'build_rag_answer_with_service_config',
+        lambda query, context, service_config: {
             'mode': 'no_current_release',
             'answer': '',
             'release_id': None,
@@ -409,8 +413,8 @@ def test_rag_answer_router_returns_insufficient_context_for_blank_query(monkeypa
     )
     monkeypatch.setattr(
         rag_router_module,
-        'build_rag_answer',
-        lambda query, context: {
+        'build_rag_answer_with_service_config',
+        lambda query, context, service_config: {
             'mode': 'insufficient_context',
             'answer': '',
             'release_id': 'release-001',
@@ -457,8 +461,8 @@ def test_rag_answer_router_uses_only_context_citations(monkeypatch, tmp_path):
     monkeypatch.setattr(rag_router_module, 'build_current_release_context', lambda *args, **kwargs: context_payload)
     monkeypatch.setattr(
         rag_router_module,
-        'build_rag_answer',
-        lambda query, context: {
+        'build_rag_answer_with_service_config',
+        lambda query, context, service_config: {
             'mode': 'answer',
             'answer': 'Grounded answer',
             'release_id': 'release-001',
@@ -512,8 +516,8 @@ def test_rag_answer_router_is_read_only_and_does_not_read_files(monkeypatch, tmp
     )
     monkeypatch.setattr(
         rag_router_module,
-        'build_rag_answer',
-        lambda query, context: {
+        'build_rag_answer_with_service_config',
+        lambda query, context, service_config: {
             'mode': 'insufficient_context',
             'answer': '',
             'release_id': 'release-001',

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping, Protocol, TypedDict
+from typing import Any, Mapping, Protocol, TypedDict, runtime_checkable
 
 
 MAX_MODEL_SUMMARY_CHUNKS = 2
@@ -23,6 +23,7 @@ class RagModelClientResponse(TypedDict, total=False):
     warnings: list[str]
 
 
+@runtime_checkable
 class RagModelClient(Protocol):
     def generate_answer(self, payload: RagAnswerPromptPayload) -> RagModelClientResponse:
         ...

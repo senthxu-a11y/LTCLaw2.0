@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ...game.knowledge_rag_answer import build_rag_answer
+from ...game.knowledge_rag_answer import build_rag_answer_with_service_config
 from ...game.knowledge_rag_context import build_current_release_context
 from ..capabilities import require_capability
 from ..agent_context import get_agent_for_request
@@ -83,10 +83,13 @@ async def rag_context(request: Request, body: RagRequest) -> RagContextResponse:
 async def rag_answer(request: Request, body: RagRequest) -> RagAnswerResponse:
     require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
+    game_service = _game_service_or_404(workspace)
     context = build_current_release_context(
-        _project_root_or_400(_game_service_or_404(workspace)),
+        _project_root_or_400(game_service),
         body.query,
         max_chunks=body.max_chunks,
         max_chars=body.max_chars,
     )
-    return RagAnswerResponse.model_validate(build_rag_answer(body.query, context))
+    return RagAnswerResponse.model_validate(
+        build_rag_answer_with_service_config(body.query, context, game_service)
+    )

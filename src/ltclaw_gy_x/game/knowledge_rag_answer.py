@@ -117,6 +117,21 @@ def build_rag_answer_with_provider(
     return payload
 
 
+def build_rag_answer_with_service_config(
+    query: str,
+    context: Mapping[str, Any],
+    service_config: Any = None,
+    *,
+    factories: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    return build_rag_answer_with_provider(
+        query,
+        context,
+        config_or_service=service_config,
+        factories=factories,
+    )
+
+
 def _build_model_client_answer(
     *,
     release_id: str | None,

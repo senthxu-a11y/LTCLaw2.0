@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Form, Input, Switch, Button, Card } from "@agentscope-ai/design";
 import { Alert, Checkbox, Modal, Select, Space, Tag, Tooltip, Typography } from "antd";
 import { useTranslation } from "react-i18next";
@@ -15,6 +15,8 @@ import type {
   KnowledgeDocRef,
   KnowledgeManifest,
   KnowledgeMap,
+  KnowledgeRagAnswerResponse,
+  KnowledgeRagCitation,
   KnowledgeRelationship,
   KnowledgeScriptRef,
   KnowledgeStatus,
@@ -22,9 +24,22 @@ import type {
   KnowledgeTableRef,
   ProjectConfig,
   ReleaseCandidateListItem,
+  UserGameConfig,
   ValidationIssue,
 } from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
+import {
+  CHANGE_QUERY_WARNING,
+  buildCopyableRagText,
+  buildRecentRagQuestions,
+  formatCitationValue,
+  getRagDisplayState,
+  getRagNextStepHints,
+  groupRagCitations,
+  isStructuredOrWorkbenchWarning,
+  STRUCTURED_FACT_WARNING,
+  type RecentRagQuestionItem,
+} from "./ragUiHelpers";
 import styles from "./GameProject.module.less";
 
 const { TextArea } = Input;
@@ -57,6 +72,12 @@ const LOCAL_PROJECT_DIRECTORY_LABEL = "local project directory";
 const NO_CURRENT_RELEASE_DETAIL = "No current knowledge release is set";
 const LOCAL_PROJECT_DIRECTORY_ERROR = "Local project directory not configured";
 const NO_FORMAL_MAP_MODE = "no_formal_map";
+const MAX_RECENT_RAG_QUESTIONS = 5;
+const RAG_EXAMPLE_QUESTIONS = [
+  "How does combat damage work in the current release?",
+  "What systems are related to skill progression?",
+  "Where is equipment enhancement described?",
+];
 const FORMAL_MAP_STATUS_OPTIONS: Array<{ label: KnowledgeStatus; value: KnowledgeStatus }> = [
   { label: "active", value: "active" },
   { label: "deprecated", value: "deprecated" },
@@ -141,12 +162,22 @@ export default function GameProject() {
   const [wizardSaving, setWizardSaving] = useState(false);
   const [buildForm] = Form.useForm<BuildReleaseFormData>();
   const [wizardForm] = Form.useForm<{ id?: string; name: string }>();
+  const [ragQuery, setRagQuery] = useState("");
+  const [ragLoading, setRagLoading] = useState(false);
+  const [ragError, setRagError] = useState<string | null>(null);
+  const [ragAnswer, setRagAnswer] = useState<KnowledgeRagAnswerResponse | null>(null);
+  const [recentRagQuestions, setRecentRagQuestions] = useState<RecentRagQuestionItem[]>([]);
+  const [highlightedCitationId, setHighlightedCitationId] = useState<string | null>(null);
+  const citationsSectionRef = useRef<HTMLDivElement | null>(null);
+  const citationRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const citationHighlightTimeoutRef = useRef<number | null>(null);
 
   const selectedAgentSummary = agents.find((agent) => agent.id === selectedAgent);
   const capabilities: FrontendCapabilityToken[] | undefined = selectedAgentSummary?.capabilities;
   const hasExplicitCapabilityContext = hasCapabilityContext(capabilities);
   const canBuildRelease = canUseGovernanceAction(capabilities, "knowledge.build");
   const canPublishRelease = canUseGovernanceAction(capabilities, "knowledge.publish");
+  const canReadKnowledge = canUseGovernanceAction(capabilities, "knowledge.read");
   const canReadReleaseCandidates = canUseGovernanceAction(capabilities, "knowledge.candidate.read");
   const canReadMap = canUseGovernanceAction(capabilities, "knowledge.map.read");
   const canEditMap = canUseGovernanceAction(capabilities, "knowledge.map.edit");
@@ -165,6 +196,12 @@ export default function GameProject() {
     hasExplicitCapabilityContext && !canPublishRelease
       ? t("gameProject.releasePublishPermissionRequired", {
           defaultValue: "Requires knowledge.publish permission.",
+        })
+      : null;
+  const knowledgeReadReason =
+    hasExplicitCapabilityContext && !canReadKnowledge
+      ? t("gameProject.knowledgeReadPermissionRequired", {
+          defaultValue: "Requires knowledge.read permission.",
         })
       : null;
   const releaseCandidateReadReason =
@@ -186,19 +223,22 @@ export default function GameProject() {
         })
       : null;
 
-  const formatGovernanceError = (error: unknown, fallbackMessage: string) => {
+  const formatGovernanceError = useCallback((error: unknown, fallbackMessage: string) => {
     if (isPermissionDeniedError(error)) {
       return permissionDeniedMessage;
     }
     return error instanceof Error ? error.message : fallbackMessage;
-  };
+  }, [permissionDeniedMessage]);
 
   const getIndexCount = (manifest: KnowledgeManifest | null, indexName: string) => manifest?.indexes?.[indexName]?.count ?? 0;
 
-  const getErrorText = (error: unknown, fallbackMessage: string) =>
-    error instanceof Error ? error.message : fallbackMessage;
+  const getErrorText = useCallback(
+    (error: unknown, fallbackMessage: string) =>
+      error instanceof Error ? error.message : fallbackMessage,
+    [],
+  );
 
-  const resolveMapLoadError = (error: unknown, fallbackMessage: string) => {
+  const resolveMapLoadError = useCallback((error: unknown, fallbackMessage: string) => {
     if (isPermissionDeniedError(error)) {
       return permissionDeniedMessage;
     }
@@ -210,7 +250,7 @@ export default function GameProject() {
       return LOCAL_PROJECT_DIRECTORY_ERROR;
     }
     return messageText;
-  };
+  }, [getErrorText, permissionDeniedMessage]);
 
   const summarizeMap = (map: KnowledgeMap | null) => ({
     systems: map?.systems ?? [],
@@ -231,7 +271,77 @@ export default function GameProject() {
     return parsed.toLocaleString();
   };
 
-  const fetchKnowledgeReleases = async (agentId: string) => {
+  const formatRecentQuestionTime = (timestamp: number) => {
+    const parsed = new Date(timestamp);
+    if (Number.isNaN(parsed.getTime())) {
+      return "-";
+    }
+    return parsed.toLocaleTimeString();
+  };
+
+  const recordRecentRagQuestion = (query: string, mode: KnowledgeRagAnswerResponse["mode"]) => {
+    setRecentRagQuestions((current) => buildRecentRagQuestions(current, query, mode, Date.now(), MAX_RECENT_RAG_QUESTIONS));
+  };
+
+  const clearCitationHighlight = () => {
+    if (citationHighlightTimeoutRef.current !== null) {
+      window.clearTimeout(citationHighlightTimeoutRef.current);
+      citationHighlightTimeoutRef.current = null;
+    }
+    setHighlightedCitationId(null);
+  };
+
+  const focusCitation = (citationId?: string | null) => {
+    if (!citationId) {
+      citationsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const target = citationRefs.current[citationId];
+    if (!target) {
+      citationsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    clearCitationHighlight();
+    setHighlightedCitationId(citationId);
+    target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    target.focus();
+    citationHighlightTimeoutRef.current = window.setTimeout(() => {
+      setHighlightedCitationId((current) => (current === citationId ? null : current));
+      citationHighlightTimeoutRef.current = null;
+    }, 2200);
+  };
+
+  const handleCopyRagAnswer = async () => {
+    if (!ragAnswer) {
+      return;
+    }
+    if (!navigator.clipboard?.writeText) {
+      message.warning(
+        t("gameProject.ragCopyUnavailable", {
+          defaultValue: "Clipboard is unavailable in this environment.",
+        }),
+      );
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(buildCopyableRagText(ragAnswer));
+      message.success(
+        t("gameProject.ragCopySuccess", {
+          defaultValue: "Copied the current knowledge answer.",
+        }),
+      );
+    } catch (err) {
+      message.warning(
+        err instanceof Error
+          ? err.message
+          : t("gameProject.ragCopyFailed", {
+              defaultValue: "Failed to copy the current knowledge answer.",
+            }),
+      );
+    }
+  };
+
+  const fetchKnowledgeReleases = useCallback(async (agentId: string) => {
     setReleaseLoading(true);
     setReleaseError(null);
     try {
@@ -248,9 +358,9 @@ export default function GameProject() {
     } finally {
       setReleaseLoading(false);
     }
-  };
+  }, [t]);
 
-  const fetchCandidateMap = async (agentId: string) => {
+  const fetchCandidateMap = useCallback(async (agentId: string) => {
     setCandidateMapLoading(true);
     setCandidateMapError(null);
     try {
@@ -269,9 +379,9 @@ export default function GameProject() {
     } finally {
       setCandidateMapLoading(false);
     }
-  };
+  }, [resolveMapLoadError, t]);
 
-  const fetchFormalMap = async (agentId: string) => {
+  const fetchFormalMap = useCallback(async (agentId: string) => {
     setFormalMapLoading(true);
     setFormalMapError(null);
     try {
@@ -288,13 +398,13 @@ export default function GameProject() {
     } finally {
       setFormalMapLoading(false);
     }
-  };
+  }, [resolveMapLoadError, t]);
 
-  const fetchMapReviewData = async (agentId: string) => {
+  const fetchMapReviewData = useCallback(async (agentId: string) => {
     await Promise.all([fetchCandidateMap(agentId), fetchFormalMap(agentId)]);
-  };
+  }, [fetchCandidateMap, fetchFormalMap]);
 
-  const fetchBuildCandidates = async (agentId: string) => {
+  const fetchBuildCandidates = useCallback(async (agentId: string) => {
     if (hasExplicitCapabilityContext && !canReadReleaseCandidates) {
       setBuildCandidates([]);
       setBuildCandidatesError(null);
@@ -316,9 +426,9 @@ export default function GameProject() {
     } finally {
       setBuildCandidatesLoading(false);
     }
-  };
+  }, [canReadReleaseCandidates, formatGovernanceError, hasExplicitCapabilityContext, t]);
 
-  const fetchConfig = async () => {
+  const fetchConfig = useCallback(async () => {
     if (!selectedAgent) {
       setLoading(false);
       setReleaseLoading(false);
@@ -356,20 +466,19 @@ export default function GameProject() {
       ]);
       setStorageSummary(storage);
       if (projectConfig) {
-        const pc = projectConfig as any;
-        const uc = (userConfig || {}) as any;
+        const uc: UserGameConfig = userConfig ?? { my_role: "consumer" };
         form.setFieldsValue({
-          name: pc.project?.name || "",
-          description: pc.project?.engine || "",
+          name: projectConfig.project.name || "",
+          description: projectConfig.project.engine || "",
           is_maintainer: uc.my_role === "maintainer",
           svn_url: uc.svn_url || "",
           svn_username: uc.svn_username || "",
           svn_password: uc.svn_password || "",
           svn_trust_cert: !!uc.svn_trust_cert,
-          svn_working_copy_path: uc.svn_local_root || pc.svn?.root || "",
-          watch_paths: (pc.paths || []).map((item: any) => item.path).join("\n"),
-          watch_patterns: (pc.filters?.include_ext || []).join("\n"),
-          watch_exclude_patterns: (pc.filters?.exclude_glob || []).join("\n"),
+          svn_working_copy_path: uc.svn_local_root || projectConfig.svn.root || "",
+          watch_paths: projectConfig.paths.map((item) => item.path).join("\n"),
+          watch_patterns: projectConfig.filters.include_ext.join("\n"),
+          watch_exclude_patterns: projectConfig.filters.exclude_glob.join("\n"),
           auto_sync: false,
           auto_index: true,
           auto_resolve_dependencies: true,
@@ -401,7 +510,7 @@ export default function GameProject() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [canReadMap, fetchKnowledgeReleases, fetchMapReviewData, form, hasExplicitCapabilityContext, selectedAgent, t]);
 
   const storageGroups = storageSummary
     ? [
@@ -493,13 +602,13 @@ export default function GameProject() {
       svn_password: values.svn_password || null,
       svn_trust_cert: !!values.svn_trust_cert,
     };
-    await gameApi.saveUserConfig(targetAgent, userPayload as any);
+    await gameApi.saveUserConfig(targetAgent, userPayload);
 
     const paths = splitLines(values.watch_paths).map((p) => ({
       path: p,
       semantic: "table" as const,
     }));
-    const projectPayload: any = {
+    const projectPayload: ProjectConfig = {
       schema_version: "project-config.v1",
       project: {
         name: values.name,
@@ -525,7 +634,7 @@ export default function GameProject() {
       doc_templates: {},
       models: {},
     };
-    const result = await gameApi.saveProjectConfig(targetAgent, projectPayload as ProjectConfig);
+    const result = await gameApi.saveProjectConfig(targetAgent, projectPayload);
     message.success(result.message || t("gameProject.saveSuccess"));
   };
 
@@ -767,6 +876,104 @@ export default function GameProject() {
     }
   };
 
+  const handleAskRagQuestion = async () => {
+    if (!selectedAgent) {
+      return;
+    }
+    if (hasExplicitCapabilityContext && !canReadKnowledge) {
+      setRagAnswer(null);
+      setRagError(knowledgeReadReason || permissionDeniedMessage);
+      return;
+    }
+    const query = ragQuery.trim();
+    if (!query) {
+      setRagAnswer(null);
+      setRagError(
+        t("gameProject.ragQueryRequired", {
+          defaultValue: "Please enter a knowledge question.",
+        }),
+      );
+      return;
+    }
+
+    try {
+      setRagLoading(true);
+      setRagError(null);
+      clearCitationHighlight();
+      const response = await gameKnowledgeReleaseApi.answerRagQuestion(selectedAgent, {
+        query,
+      });
+      setRagAnswer(response);
+      recordRecentRagQuestion(query, response.mode);
+    } catch (err) {
+      setRagAnswer(null);
+      setRagError(
+        err instanceof Error
+          ? err.message
+          : t("gameProject.ragAnswerFailed", { defaultValue: "Failed to get knowledge answer" }),
+      );
+    } finally {
+      setRagLoading(false);
+    }
+  };
+
+  const ragDisplayState = useMemo(() => (ragAnswer ? getRagDisplayState(ragAnswer) : null), [ragAnswer]);
+  const ragNextStepHints = useMemo(() => (ragAnswer ? getRagNextStepHints(ragAnswer) : []), [ragAnswer]);
+  const groupedRagCitations = useMemo(() => (ragAnswer ? groupRagCitations(ragAnswer.citations) : []), [ragAnswer]);
+
+  const renderRagCitationList = (citations: KnowledgeRagCitation[]) => {
+    if (citations.length === 0) {
+      return <div className={styles.ragEmpty}>{t("gameProject.ragNoCitations", { defaultValue: "No citations returned." })}</div>;
+    }
+
+    return groupedRagCitations.map((group) => (
+      <div key={group.key} className={styles.ragCitationGroup}>
+        <div className={styles.ragCitationGroupHeader}>
+          <div className={styles.ragCitationGroupTitle}>
+            <Text strong>{group.label}</Text>
+            <Tag>{group.citations.length}</Tag>
+          </div>
+          <Text type="secondary">
+            {t("gameProject.ragCitationGroupHint", {
+              defaultValue: "Grouped from returned citations only.",
+            })}
+          </Text>
+        </div>
+        <div className={styles.ragCitationList}>
+          {group.citations.map((citation) => (
+            <div
+              key={citation.citation_id}
+              ref={(element) => {
+                citationRefs.current[citation.citation_id] = element;
+              }}
+              className={`${styles.ragCitationRow} ${highlightedCitationId === citation.citation_id ? styles.ragCitationRowHighlighted : ""}`}
+              tabIndex={-1}
+            >
+              <div className={styles.ragCitationTitleRow}>
+                <div className={styles.ragCitationTitleContent}>
+                  <Text strong>{citation.title || citation.citation_id}</Text>
+                  {citation.source_type ? <Tag color="blue">{citation.source_type}</Tag> : null}
+                </div>
+                <Button
+                  size="small"
+                  onClick={() => focusCitation(citation.citation_id)}
+                >
+                  {t("gameProject.ragFocusCitationButton", { defaultValue: "Focus" })}
+                </Button>
+              </div>
+              <div className={styles.ragCitationMeta}>
+                <span>source_path: {formatCitationValue(citation.source_path)}</span>
+                <span>artifact_path: {formatCitationValue(citation.artifact_path)}</span>
+                <span>row: {formatCitationValue(citation.row)}</span>
+                <span>release_id: {formatCitationValue(citation.release_id)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ));
+  };
+
   const updateFormalMapDraftStatus = (
     section: "systems" | "tables" | "docs" | "scripts",
     itemId: string,
@@ -990,7 +1197,10 @@ export default function GameProject() {
   };
 
   const candidateSummary = summarizeMap(candidateMap);
-  const savedFormalMap = formalMap?.mode === NO_FORMAL_MAP_MODE ? null : formalMap?.map ?? null;
+  const savedFormalMap = useMemo(
+    () => (formalMap?.mode === NO_FORMAL_MAP_MODE ? null : formalMap?.map ?? null),
+    [formalMap],
+  );
   const formalSummary = summarizeMap(formalMapDraft);
   const formalMapDraftDirty = !!savedFormalMap && !!formalMapDraft && JSON.stringify(formalMapDraft) !== JSON.stringify(savedFormalMap);
   const formalMapRelationshipWarnings = buildRelationshipWarningMessages(formalMapDraft);
@@ -1007,11 +1217,17 @@ export default function GameProject() {
 
   useEffect(() => {
     fetchConfig();
-  }, [selectedAgent, hasExplicitCapabilityContext, canReadMap]);
+  }, [fetchConfig]);
 
   useEffect(() => {
     setFormalMapDraft(savedFormalMap ? cloneKnowledgeMap(savedFormalMap) : null);
-  }, [formalMap]);
+  }, [savedFormalMap]);
+
+  useEffect(() => () => {
+    if (citationHighlightTimeoutRef.current !== null) {
+      window.clearTimeout(citationHighlightTimeoutRef.current);
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -1149,6 +1365,243 @@ export default function GameProject() {
                         </Tooltip>
                       </div>
                     );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className={styles.ragSection}>
+              <div className={styles.ragHeader}>
+                <div>
+                  <Text strong>{t("gameProject.ragTitle", { defaultValue: "Knowledge Q&A" })}</Text>
+                  <div className={styles.ragHint}>
+                    {t("gameProject.ragHint", {
+                      defaultValue:
+                        "Ask a current-release knowledge question. This entry point does not expose provider or model selection and uses the existing grounded RAG answer path.",
+                    })}
+                  </div>
+                </div>
+                <Space size={8}>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setRagQuery("");
+                      setRagAnswer(null);
+                      setRagError(null);
+                    }}
+                    disabled={ragLoading}
+                  >
+                    {t("common.reset")}
+                  </Button>
+                  <Tooltip title={knowledgeReadReason || undefined}>
+                    <span>
+                      <Button
+                        size="small"
+                        type="primary"
+                        onClick={handleAskRagQuestion}
+                        loading={ragLoading}
+                        disabled={!selectedAgent || (hasExplicitCapabilityContext && !canReadKnowledge)}
+                      >
+                        {t("gameProject.ragAskButton", { defaultValue: "Ask" })}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </Space>
+              </div>
+
+              <TextArea
+                rows={3}
+                value={ragQuery}
+                onChange={(event) => setRagQuery(event.target.value)}
+                placeholder={t("gameProject.ragQueryPlaceholder", {
+                  defaultValue: "Example: How does combat damage work in the current release?",
+                })}
+              />
+
+              <div className={styles.ragExamplesSection}>
+                <div className={styles.ragSectionLabel}>{t("gameProject.ragExamplesTitle", { defaultValue: "Examples" })}</div>
+                <div className={styles.ragExamplesList}>
+                  {RAG_EXAMPLE_QUESTIONS.map((exampleQuestion) => (
+                    <Button
+                      key={exampleQuestion}
+                      size="small"
+                      onClick={() => setRagQuery(exampleQuestion)}
+                    >
+                      {exampleQuestion}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className={styles.ragHistorySection}>
+                <div className={styles.ragSectionLabel}>{t("gameProject.ragRecentQuestionsTitle", { defaultValue: "Recent questions" })}</div>
+                {recentRagQuestions.length === 0 ? (
+                  <div className={styles.ragHistoryEmpty}>
+                    {t("gameProject.ragRecentQuestionsEmpty", {
+                      defaultValue: "Your last submitted questions will appear here for quick reuse.",
+                    })}
+                  </div>
+                ) : (
+                  <div className={styles.ragHistoryList}>
+                    {recentRagQuestions.map((item) => (
+                      <button
+                        key={`${item.query}-${item.askedAt}`}
+                        type="button"
+                        className={styles.ragHistoryItem}
+                        onClick={() => setRagQuery(item.query)}
+                      >
+                        <span className={styles.ragHistoryQuestion}>{item.query}</span>
+                        <span className={styles.ragHistoryMeta}>
+                          <span>{item.mode}</span>
+                          <span>{formatRecentQuestionTime(item.askedAt)}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className={styles.ragGuardrailHints}>
+                <Alert
+                  type="info"
+                  showIcon
+                  message={t("gameProject.ragStructuredGuardrail", {
+                    defaultValue: "Exact numeric or row-level facts should go through structured query, not this RAG entry.",
+                  })}
+                  description={<span className={styles.ragReadonlyPathLabel}>Structured query path</span>}
+                />
+                <Alert
+                  type="info"
+                  showIcon
+                  message={t("gameProject.ragWorkbenchGuardrail", {
+                    defaultValue: "Change or edit intent should go through the workbench flow, not this RAG entry.",
+                  })}
+                  description={<span className={styles.ragReadonlyPathLabel}>Workbench flow</span>}
+                />
+              </div>
+
+              {ragError ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message={t("gameProject.ragAnswerWarning", { defaultValue: "Knowledge answer is temporarily unavailable" })}
+                  description={ragError}
+                  className={styles.ragAlert}
+                />
+              ) : null}
+
+              {ragAnswer ? (
+                <div className={styles.ragResultBlock}>
+                  <div className={styles.ragResultActions}>
+                    <Button size="small" onClick={handleCopyRagAnswer}>
+                      {t("gameProject.ragCopyButton", { defaultValue: "Copy result" })}
+                    </Button>
+                    {ragAnswer.citations.length > 0 ? (
+                      <Button
+                        size="small"
+                        onClick={() => focusCitation(ragAnswer.citations[0]?.citation_id ?? null)}
+                      >
+                        {t("gameProject.ragFocusCitationsButton", { defaultValue: "Focus citations" })}
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {ragDisplayState === "answer" && ragAnswer.answer ? (
+                    <div className={styles.ragAnswerBox}>
+                      <Text strong>{t("gameProject.ragAnswerTitle", { defaultValue: "Answer" })}</Text>
+                      <div className={styles.ragAnswerText}>{ragAnswer.answer}</div>
+                    </div>
+                  ) : null}
+
+                  {ragDisplayState === "no_current_release" ? (
+                    <div className={`${styles.ragStatePanel} ${styles.ragStatePanelBlocked}`}>
+                      <Text strong>{t("gameProject.ragNoCurrentReleaseTitle", { defaultValue: "No current knowledge release" })}</Text>
+                      <div className={styles.ragStateDescription}>
+                        {t("gameProject.ragNoCurrentReleaseDescription", {
+                          defaultValue: "Build or set a current knowledge release before using this RAG entry.",
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {ragDisplayState === "insufficient_context" ? (
+                    <div className={`${styles.ragStatePanel} ${styles.ragStatePanelRecoverable}`}>
+                      <Text strong>{t("gameProject.ragInsufficientContextTitle", { defaultValue: "Insufficient grounded context" })}</Text>
+                      <div className={styles.ragStateDescription}>
+                        {t("gameProject.ragInsufficientContextDescription", {
+                          defaultValue: "The current release did not provide enough grounded evidence for a safe answer.",
+                        })}
+                      </div>
+                      {ragNextStepHints.length > 0 ? (
+                        <div className={styles.ragNextStepsBlock}>
+                          <Text strong>{t("gameProject.ragNextStepsTitle", { defaultValue: "Next-step hints" })}</Text>
+                          <div className={styles.ragNextStepsList}>
+                            {ragNextStepHints.map((hint) => (
+                              <div key={hint} className={styles.ragNextStepItem}>
+                                {hint}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <div className={styles.ragResultSummary}>
+                    <div className={styles.releaseSummaryRow}>
+                      <div className={styles.releaseSummaryLabel}>state</div>
+                      <div className={styles.releaseSummaryValue}>{ragDisplayState || ragAnswer.mode}</div>
+                    </div>
+                    <div className={styles.releaseSummaryRow}>
+                      <div className={styles.releaseSummaryLabel}>release_id</div>
+                      <div className={styles.releaseSummaryValue}>{ragAnswer.release_id || "-"}</div>
+                    </div>
+                  </div>
+
+                  {ragAnswer.warnings.length > 0 ? (
+                    <div className={styles.ragWarningsBlock}>
+                      <Text strong>{t("gameProject.ragWarningsTitle", { defaultValue: "Warnings" })}</Text>
+                      <div className={styles.ragWarningList}>
+                        {ragAnswer.warnings.map((warning) => {
+                          const alertType = isStructuredOrWorkbenchWarning(warning) ? "info" : "warning";
+                          return (
+                            <Alert
+                              key={warning}
+                              type={alertType}
+                              showIcon
+                              message={warning}
+                              description={
+                                warning === STRUCTURED_FACT_WARNING ? (
+                                  <span className={styles.ragReadonlyPathLabel}>Structured query path</span>
+                                ) : warning === CHANGE_QUERY_WARNING ? (
+                                  <span className={styles.ragReadonlyPathLabel}>Workbench flow</span>
+                                ) : undefined
+                              }
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className={styles.ragCitationsBlock} ref={citationsSectionRef}>
+                    <div className={styles.ragCitationsHeader}>
+                      <Text strong>{t("gameProject.ragCitationsTitle", { defaultValue: "Citations" })}</Text>
+                      {ragAnswer.citations.length > 0 ? (
+                        <Text type="secondary">
+                          {t("gameProject.ragCitationsHint", {
+                            defaultValue: "Focus stays within the returned citation list only.",
+                          })}
+                        </Text>
+                      ) : null}
+                    </div>
+                    <div className={styles.ragCitationList}>{renderRagCitationList(ragAnswer.citations)}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className={styles.ragEmpty}>
+                  {t("gameProject.ragEmptyState", {
+                    defaultValue: "Ask a question to see the current-release RAG answer, release id, citations, and warnings here.",
                   })}
                 </div>
               )}

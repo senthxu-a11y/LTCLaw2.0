@@ -2,6 +2,7 @@ import { request } from '../request';
 import type {
   FormalKnowledgeMapResponse,
   KnowledgeMap,
+  KnowledgeRagAnswerResponse,
   KnowledgeMapCandidateResponse,
   KnowledgeIndexArtifact,
   KnowledgeManifest,
@@ -22,6 +23,12 @@ export interface BuildKnowledgeReleaseResponse {
   manifest: KnowledgeManifest;
   knowledge_map: Record<string, unknown>;
   artifacts: Record<string, KnowledgeIndexArtifact>;
+}
+
+export interface KnowledgeRagAnswerRequest {
+  query: string;
+  max_chunks?: number;
+  max_chars?: number;
 }
 
 function isNoCurrentReleaseError(error: unknown): boolean {
@@ -74,6 +81,13 @@ export const gameKnowledgeReleaseApi = {
 
   async getFormalMap(agentId: string): Promise<FormalKnowledgeMapResponse> {
     return request<FormalKnowledgeMapResponse>(`/agents/${agentId}/game/knowledge/map`);
+  },
+
+  async answerRagQuestion(agentId: string, payload: KnowledgeRagAnswerRequest): Promise<KnowledgeRagAnswerResponse> {
+    return request<KnowledgeRagAnswerResponse>(`/agents/${agentId}/game/knowledge/rag/answer`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   async saveFormalMap(agentId: string, map: KnowledgeMap, updatedBy?: string): Promise<FormalKnowledgeMapResponse> {

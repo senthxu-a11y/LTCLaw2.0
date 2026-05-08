@@ -13,7 +13,9 @@ Authority:
 
 Create a docs-only consolidation starting point for the completed P3 slices before any new implementation work.
 
-This document does not add frontend UI, backend API, model integration, embeddings, vector storage, or map-governance functionality.
+This document started as a docs-only consolidation point.
+
+It now also records the later minimal frontend RAG product-entry UI closeout.
 
 ## P3 Completed Summary
 
@@ -34,7 +36,19 @@ The following P3 capabilities are now treated as landed:
 13. P3.rag-model-2a backend provider registry skeleton completed after DLP/NUL clean repair and revalidation.
 14. P3.rag-model-2b service-layer provider selection skeleton completed.
 15. P3.rag-model-2c app/service config injection boundary review completed as a docs-only slice.
-16. P3.rag-model-2d app/service config injection implementation plan completed as a docs-only slice.
+16. P3.rag-model-2d minimal app/service config injection implementation completed.
+17. P3.rag-model-2e live backend app/service config injection boundary review completed as a docs-only slice.
+18. P3.rag-model-2f minimal live config handoff implementation plan completed as a docs-only slice.
+19. P3.rag-model-2g minimal live config handoff implementation completed.
+20. P3.rag-model-3 external provider adapter boundary review completed as a docs-only slice.
+21. P3.rag-model-3a external provider adapter implementation plan completed as a docs-only slice.
+22. P3.rag-model-3b external provider adapter skeleton implementation completed.
+23. P3.rag-ui-1 minimal product-entry UI on the existing answer endpoint completed.
+24. P3.rag-ui-2 product-flow UX enhancement planning completed as a docs-only slice.
+25. P3.rag-ui-2a frontend UX enhancement implementation completed.
+26. P3.rag-ui-2b frontend hardening and helper-extraction slice completed.
+27. P3.rag-ui-3 product experience consolidation planning completed as a docs-only slice.
+28. P3.rag-ui-3a frontend-only product experience refinement completed.
 
 ## Current Product Truth
 
@@ -52,14 +66,14 @@ Current facts:
 
 The current result is not yet a full RAG product.
 
-Specifically, it does not yet provide an end-user RAG experience with real model execution, model-client orchestration, vector retrieval, or broader frontend RAG surfaces.
+Specifically, it does not yet provide real model execution, model-client orchestration beyond the current backend skeletons, vector retrieval, or broader frontend RAG surfaces.
 
 ## Still Not Implemented
 
 1. Real LLM integration.
-2. App or service config injection code implementation beyond the current docs-only planning record.
+2. Real external provider credential or transport boundary work, or broader RAG product-entry work, beyond the current adapter skeleton implementation.
 3. Embedding or vector store.
-4. Frontend RAG UI.
+4. Broader frontend RAG UI beyond the current GameProject product-entry surface and its local UX refinements.
 5. Candidate-evidence RAG usage.
 6. Relationship editor.
 7. Graph canvas.
@@ -76,8 +90,23 @@ Recommended next mainline direction:
 5. Treat `P3.rag-model-2a` as the landed backend provider registry skeleton and keep real external providers out of scope.
 6. Treat `P3.rag-model-2b` as the landed service-layer provider selection skeleton and keep real external providers out of scope.
 7. Treat `P3.rag-model-2c` as the landed app/service config injection boundary definition and keep real external providers out of scope.
-8. Treat `P3.rag-model-2d` as the landed docs-only implementation plan and keep real external providers out of scope.
-9. Prefer execution of the `P3.rag-model-2d` plan as the next primary backend-only slice.
+8. Treat `P3.rag-model-2d` as the landed minimal app/service config injection implementation and keep real external providers out of scope.
+9. Treat `P3.rag-model-2e` as the landed live backend app/service config injection boundary definition and keep real external providers out of scope.
+10. Treat `P3.rag-model-2f` as the landed minimal live config handoff implementation plan and keep real external providers out of scope.
+11. Treat `P3.rag-model-2g` as the landed minimal live config handoff implementation and keep real external providers out of scope.
+12. Treat `P3.rag-model-3` as the landed external provider adapter boundary definition and keep real external provider implementation out of scope.
+13. Treat `P3.rag-model-3a` as the landed external provider adapter implementation plan and keep real external provider implementation out of scope.
+14. Treat `P3.rag-model-3b` as the landed external provider adapter skeleton implementation and keep real external provider integration out of scope.
+15. Treat `P3.rag-ui-1` as the landed minimal frontend product-entry RAG UI on the existing answer endpoint.
+16. Treat `P3.rag-ui-2` as the landed docs-only plan for pure frontend product-flow enhancement on the existing answer endpoint, with `P3.rag-ui-2a` as the next implementation target.
+17. Keep provider selection, request-schema changes, and real external provider integration out of the frontend surface.
+18. Treat `P3.rag-ui-2a` as the landed frontend-only implementation of static examples, recent history, copy answer, and local citation focus.
+19. Treat `P3.rag-ui-2b` as the landed frontend-only hardening slice for helper extraction and minimal narrow-screen polish.
+20. Treat `P3.rag-ui-3` as the landed docs-only product experience consolidation plan for the current MVP entry.
+21. Keep the current MVP entry in GameProject and defer any standalone Knowledge Q&A panel decision until the MVP interaction model stabilizes further.
+22. Treat `P3.rag-ui-3a` as the landed frontend-only product experience refinement slice for the current GameProject MVP entry.
+23. Keep provider selection, request-schema changes, router provider selection, and real external provider integration out of this frontend surface.
+24. Real external provider integration remains deferred until later dedicated slices.
 
 ## Final Result
 
@@ -90,5 +119,18 @@ Recommended next mainline direction:
 7. `P3.rag-model-2a` is now landed as the backend provider registry skeleton with runtime providers limited to `deterministic_mock` and `disabled`.
 8. `P3.rag-model-2b` is now landed as the service-layer provider selection skeleton in the existing answer-service path.
 9. `P3.rag-model-2c` is now landed as the docs-only app/service config injection boundary definition.
-10. `P3.rag-model-2d` is now landed as the docs-only app/service config injection implementation plan.
-11. The next recommended step is execution of the `P3.rag-model-2d` plan rather than direct real-LLM integration.
+10. `P3.rag-model-2d` is now landed as the minimal app/service config injection implementation with a narrow service-layer resolver helper.
+11. `P3.rag-model-2e` is now landed as the docs-only live backend app/service config injection boundary review.
+12. `P3.rag-model-2f` is now landed as the docs-only minimal live config handoff implementation plan.
+13. `P3.rag-model-2g` is now landed as the minimal live config handoff implementation.
+14. `P3.rag-model-3` is now landed as the docs-only external provider adapter boundary review.
+15. `P3.rag-model-3a` is now landed as the docs-only external provider adapter implementation plan.
+16. `P3.rag-model-3b` is now landed as the external provider adapter skeleton implementation.
+17. `P3.rag-ui-1` is now landed as the minimal frontend product-entry RAG UI on the existing answer endpoint.
+18. `P3.rag-ui-2` is now landed as the docs-only plan for the next small-step frontend product-flow enhancement.
+19. `P3.rag-ui-2a` is now landed as the frontend-only implementation of static example questions, recent question history, copy answer, and local citation focus.
+20. `P3.rag-ui-2b` is now landed as the frontend-only hardening slice for pure helper extraction and minimal RAG UI polish.
+21. `P3.rag-ui-3` is now landed as the docs-only product experience consolidation plan for the current GameProject RAG MVP entry.
+22. `P3.rag-ui-3a` is now landed as the frontend-only product experience refinement slice for the current GameProject RAG MVP entry.
+23. The current MVP entry now has refined three-state hierarchy, read-only next-step hints, read-only structured-query and workbench path labels, and citation display grouping based only on returned citations.
+24. Direct real external provider integration remains deferred.

@@ -221,6 +221,306 @@
           gap: 12px;
         }
 
+        .ragSection {
+          margin-top: 20px;
+          padding-top: 20px;
+          border-top: 1px solid var(--ant-color-border-secondary);
+        }
+
+        .ragHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .ragHint {
+          margin-top: 4px;
+          color: var(--ant-color-text-secondary);
+          font-size: 12px;
+          line-height: 1.6;
+        }
+
+        .ragExamplesSection,
+        .ragHistorySection {
+          margin-top: 12px;
+        }
+
+        .ragSectionLabel {
+          margin-bottom: 8px;
+          color: var(--ant-color-text-secondary);
+          font-size: 12px;
+          line-height: 1.4;
+        }
+
+        .ragExamplesList {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+
+          :global(.ant-btn) {
+            max-width: 100%;
+            height: auto;
+            white-space: normal;
+            word-break: break-word;
+          }
+        }
+
+        .ragHistoryList {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .ragHistoryItem {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          width: 100%;
+          padding: 10px 12px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-bg-container);
+          text-align: left;
+          cursor: pointer;
+
+          &:hover {
+            border-color: var(--ant-color-primary);
+          }
+        }
+
+        .ragHistoryQuestion {
+          color: var(--ant-color-text);
+          font-size: 13px;
+          line-height: 1.5;
+          word-break: break-word;
+        }
+
+        .ragHistoryMeta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px 12px;
+          color: var(--ant-color-text-secondary);
+          font-size: 12px;
+          line-height: 1.4;
+        }
+
+        .ragHistoryEmpty {
+          padding: 10px 0;
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+        }
+
+        .ragGuardrailHints {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+          margin-top: 12px;
+          margin-bottom: 12px;
+        }
+
+        .ragAlert {
+          margin-top: 12px;
+          margin-bottom: 12px;
+        }
+
+        .ragResultBlock {
+          margin-top: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .ragResultActions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+
+          :global(.ant-btn) {
+            height: auto;
+            white-space: normal;
+          }
+        }
+
+        .ragResultSummary {
+          padding: 12px 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-fill-quaternary);
+        }
+
+        .ragStatePanel {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 12px 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-bg-container);
+        }
+
+        .ragStatePanelRecoverable {
+          background: color-mix(in srgb, var(--ant-color-warning-bg) 70%, var(--ant-color-bg-container));
+          border-color: color-mix(in srgb, var(--ant-color-warning) 30%, var(--ant-color-border-secondary));
+        }
+
+        .ragStatePanelBlocked {
+          background: color-mix(in srgb, var(--ant-color-info-bg) 75%, var(--ant-color-bg-container));
+          border-color: color-mix(in srgb, var(--ant-color-info) 30%, var(--ant-color-border-secondary));
+        }
+
+        .ragStateDescription {
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+          line-height: 1.7;
+          word-break: break-word;
+        }
+
+        .ragNextStepsBlock {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding-top: 4px;
+        }
+
+        .ragNextStepsList {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .ragNextStepItem {
+          padding: 8px 10px;
+          border-radius: 8px;
+          background: color-mix(in srgb, var(--ant-color-fill-secondary) 75%, var(--ant-color-bg-container));
+          color: var(--ant-color-text);
+          font-size: 13px;
+          line-height: 1.6;
+          word-break: break-word;
+        }
+
+        .ragReadonlyPathLabel {
+          display: inline-flex;
+          align-items: center;
+          max-width: 100%;
+          padding: 2px 10px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 999px;
+          background: var(--ant-color-fill-quaternary);
+          color: var(--ant-color-text-secondary);
+          font-size: 12px;
+          line-height: 1.6;
+          word-break: break-word;
+        }
+
+        .ragAnswerBox,
+        .ragWarningsBlock,
+        .ragCitationsBlock {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .ragAnswerText {
+          padding: 12px 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-bg-container);
+          white-space: pre-wrap;
+          line-height: 1.7;
+          color: var(--ant-color-text);
+        }
+
+        .ragWarningList,
+        .ragCitationList {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .ragCitationGroup {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .ragCitationGroupHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          flex-wrap: wrap;
+          gap: 8px 12px;
+        }
+
+        .ragCitationGroupTitle {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+          min-width: 0;
+        }
+
+        .ragCitationsHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+        }
+
+        .ragCitationRow {
+          padding: 12px 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-bg-container);
+          outline: none;
+          transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+
+        .ragCitationRowHighlighted {
+          border-color: var(--ant-color-primary);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
+          background: color-mix(in srgb, var(--ant-color-primary-bg) 65%, var(--ant-color-bg-container));
+        }
+
+        .ragCitationTitleRow {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+
+        .ragCitationTitleContent {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+          min-width: 0;
+        }
+
+        .ragCitationMeta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px 16px;
+          color: var(--ant-color-text-secondary);
+          font-size: 12px;
+          line-height: 1.6;
+          word-break: break-word;
+
+          span {
+            min-width: 0;
+            overflow-wrap: anywhere;
+          }
+        }
+
+        .ragEmpty {
+          padding: 16px 0;
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+        }
+
         .mapReviewSection {
           margin-top: 20px;
           padding-top: 20px;
@@ -469,13 +769,20 @@
       .releaseRow,
       .releaseCandidateHeader,
       .releaseCandidateRow,
-      .mapReviewHeader {
+      .mapReviewHeader,
+      .ragHeader {
         flex-direction: column;
         align-items: stretch;
       }
 
+      .ragGuardrailHints,
       .mapReviewGrid {
         grid-template-columns: 1fr;
+      }
+
+      .ragCitationsHeader {
+        flex-direction: column;
+        align-items: stretch;
       }
     }
   }
