@@ -1934,42 +1934,151 @@ Next-step note:
 1. Do not connect any real external model in the next slice.
 2. The next recommended slice is `P3.rag-model-2b` service-layer provider selection boundary review or implementation planning.
 
-### P3.rag-model-2b [S] Service-Layer Provider Selection Boundary Review
+### P3.rag-model-2b [S] Service-Layer Provider Selection Skeleton
 
 Depends on: P3.rag-model-2a
+
+Status as of 2026-05-08: completed.
+
+Tasks:
+
+1. Wire service-layer provider selection through the existing registry entry point only.
+2. Keep provider choice in backend service/config/DI boundaries only.
+3. Keep router thin and prevent request-body or arbitrary frontend provider selection.
+4. Preserve answer-service early-return and citation-validation boundaries.
+5. Keep real external model integration out of scope.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-p3-rag-model-service-selection-boundary-review-2026-05-08.md`.
+2. This slice is closed out in `docs/tasks/knowledge-p3-rag-model-2b-closeout-2026-05-08.md`.
+3. The implementation files are `src/ltclaw_gy_x/game/knowledge_rag_answer.py` and `tests/unit/game/test_knowledge_rag_answer.py`.
+4. Provider selection remains limited to backend service layer, app/service config, or dependency injection boundaries.
+5. The service layer may call only `get_rag_model_client(...)`.
+6. Router code still must not call models directly and still must not choose arbitrary providers.
+7. Query body is not allowed to carry provider name in this slice.
+8. Frontend is not allowed to choose arbitrary provider name in this slice.
+9. Any future request-level provider hint requires a later dedicated boundary review plus backend allowlist validation.
+10. The default provider remains `deterministic_mock`.
+11. `disabled` remains explicit provider state rather than silent failure, and provider initialization failure may fall back only to `disabled` with clear warning.
+12. Registry warnings are now merged into answer warnings in the service layer.
+13. `no_current_release` and `insufficient_context` still must not call model client.
+14. Citation validation remains centralized in the existing `P3.rag-model-1` answer path and still accepts only `context.citations` as citation authority.
+15. The answer service still consumes only the P3.2 context payload and does not read artifacts, raw source, pending state, or SVN.
+16. This slice adds no new API, no request-body provider control, no frontend change, no real LLM, no embedding/vector store, and no `candidate_evidence` expansion.
+
+Validation note from implementation round:
+
+1. Mainline reference: `5355e39 Implement knowledge permission gates and RAG provider skeleton`.
+2. Python NUL scan result: `ALL_PY_NUL=0`.
+3. RAG model focused tests: `32 passed`.
+4. TypeScript validation: passed.
+5. `git diff --check`: clean.
+6. Local router pytest on one Windows machine hit `tmp_path` permission issues; this was an environment problem rather than an assertion failure and is not treated as a code failure for this slice.
+
+Next-step note:
+
+1. Do not connect any real external model in the next slice.
+2. The next recommended slice is `P3.rag-model-2c` app/service config injection boundary review.
+
+### P3.rag-model-2c [S] App/Service Config Injection Boundary Review
+
+Depends on: P3.rag-model-2b
 
 Status as of 2026-05-08: completed as a docs-only boundary review.
 
 Tasks:
 
-1. Define where provider selection may happen after the registry skeleton is landed.
-2. Keep provider choice in backend service/config/DI boundaries only.
-3. Keep router thin and prevent request-body or arbitrary frontend provider selection.
-4. Preserve answer-service early-return and citation-validation boundaries.
-5. Recommend the next implementation slice without connecting any real external model.
+1. Define where RAG provider configuration may enter the backend service layer after the 2b skeleton is landed.
+2. Decide whether app config, service config, project config, or dependency injection should own provider selection input.
+3. Keep router thin and forbid request-body or frontend provider selection.
+4. Keep environment-variable-driven provider selection out of scope in this slice.
+5. Preserve allowlist, clear-fail, fallback-disabled, warning-merge, early-return, retrieval, context, and citation-validation boundaries.
 
 Implemented scope note:
 
-1. The review is recorded in `docs/tasks/knowledge-p3-rag-model-service-selection-boundary-review-2026-05-08.md`.
-2. Provider selection is limited to backend service layer, app/service config, or dependency injection boundaries.
-3. Router code still must not call models directly and still must not choose arbitrary providers.
-4. Query body is not allowed to carry provider name in this slice.
-5. Frontend is not allowed to choose arbitrary provider name in this slice.
-6. Any future request-level provider hint requires a later dedicated boundary review plus backend allowlist validation.
-7. Service layer may call only `get_rag_model_client(...)`.
-8. The default provider remains `deterministic_mock`.
-9. `disabled` remains explicit provider state rather than silent failure.
-10. Provider initialization failure may fall back only to `disabled` with clear warning and may not silently switch to any real external provider.
-11. Registry warnings are required to merge into answer warnings in the later implementation slice.
-12. `no_current_release` and `insufficient_context` still must not call model client.
-13. The answer service still must consume only the P3.2 context payload and must not read artifacts, raw source, pending state, or SVN.
-14. Citation validation remains centralized in the existing `P3.rag-model-1` answer path.
-15. This slice adds no backend implementation, no frontend change, no public API, no real LLM, no embedding/vector store, and no `candidate_evidence` expansion.
+1. The review is recorded in `docs/tasks/knowledge-p3-rag-model-2c-config-injection-boundary-review-2026-05-08.md`.
+2. This slice is docs-only and does not modify backend code, frontend code, routers, request schema, or public API.
+3. The reviewed code baseline is `src/ltclaw_gy_x/game/knowledge_rag_model_client.py`, `src/ltclaw_gy_x/game/knowledge_rag_model_registry.py`, `src/ltclaw_gy_x/game/knowledge_rag_answer.py`, `src/ltclaw_gy_x/app/routers/game_knowledge_rag.py`, `src/ltclaw_gy_x/game/config.py`, `src/ltclaw_gy_x/game/service.py`, and `src/ltclaw_gy_x/providers/provider_manager.py`.
+4. The review keeps provider choice as a backend-only service/config/dependency-injection concern.
+5. The recommended config entry points are explicit backend dependency injection first, then server-side app or service config.
+6. `ProjectConfig.models` and `UserGameConfig` are not selected as direct `P3.rag-model-2c` provider-control surfaces.
+7. Router must not choose provider, and request body must not carry provider name.
+8. Frontend must not choose arbitrary provider name.
+9. Environment-variable-driven selection is explicitly out of scope in this slice.
+10. `ProviderManager.active_model` is not adopted as the `P3.rag-model-2c` source of truth in this slice; any bridge to broader provider runtime requires a later dedicated review.
+11. Provider allowlist remains the existing registry allowlist, so config-injected names must still resolve only through `get_rag_model_client(...)` and the current supported runtime providers.
+12. Unknown provider names must still clear-fail and must not silently degrade to `disabled`.
+13. Provider initialization failure may still fall back only to `disabled` with clear warning.
+14. Registry warnings must continue to merge into answer warnings rather than being dropped.
+15. `no_current_release` and `insufficient_context` must still return before provider selection or provider call.
+16. Retrieval, context assembly, and citation validation remain unchanged and still do not widen to raw source, pending state, `candidate_evidence.jsonl`, or SVN.
+
+Acceptance:
+
+1. The review does not implement config injection, runtime provider expansion, or real external model wiring.
+2. The review does not allow request-body, frontend, router, or environment-variable provider control.
+3. The review keeps unknown provider handling as clear-fail and provider initialization failure as fallback-to-disabled only.
+4. The review records `P3.rag-model-2d` as the next possible implementation slice, still limited to `deterministic_mock` and `disabled`.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not rerun pytest.
+3. Post-edit validation for this pass is limited to `git diff --check`.
 
 Next-step note:
 
 1. Do not connect any real external model in the next slice.
-2. The next recommended slice is `P3.rag-model-2b` service-layer provider selection skeleton implementation or implementation planning.
+2. The next recommended slice is `P3.rag-model-2d` app/service config injection implementation, still limited to `deterministic_mock` and `disabled`.
+
+### P3.rag-model-2d [S] App/Service Config Injection Implementation Plan
+
+Depends on: P3.rag-model-2c
+
+Status as of 2026-05-08: completed as a docs-only implementation plan.
+
+Tasks:
+
+1. Break the `P3.rag-model-2c` boundary into a minimal implementation checklist.
+2. Define which backend files should change in the first implementation slice.
+3. Define which files should stay untouched.
+4. Define focused test coverage and acceptance criteria.
+5. Keep the next runtime implementation limited to `deterministic_mock` and `disabled` only.
+
+Implemented scope note:
+
+1. The plan is recorded in `docs/tasks/knowledge-p3-rag-model-2d-implementation-plan-2026-05-08.md`.
+2. This slice is docs-only and does not modify backend code, frontend code, routers, request schema, or public API.
+3. The plan recommends a small service-layer resolver helper such as `resolve_rag_model_provider_name(...)` or an equivalent helper with the same boundary.
+4. The recommended implementation surface is backend game-layer code only.
+5. The recommended first implementation files are `src/ltclaw_gy_x/game/knowledge_rag_answer.py`, one small new helper module under `src/ltclaw_gy_x/game/`, `tests/unit/game/test_knowledge_rag_answer.py`, and one focused new game-layer test file for the resolver helper.
+6. The plan allows a minimal `src/ltclaw_gy_x/game/service.py` touch only if a strictly server-side service-config handoff is needed.
+7. The plan does not put router, request body, frontend, environment variables, `ProjectConfig.models`, `UserGameConfig`, or `ProviderManager.active_model` in scope for first implementation.
+8. `build_rag_answer_with_provider(...)` remains the service-layer provider-selection entry point.
+9. `get_rag_model_client(...)` remains the only registry entry point.
+10. Unknown provider remains clear-fail.
+11. Provider initialization failure remains fallback-to-disabled only.
+12. `no_current_release` and `insufficient_context` must still return before provider selection.
+13. Citation validation must still trust only `context.citations`.
+14. Retrieval and context boundaries remain unchanged and must not widen.
+
+Acceptance:
+
+1. The plan does not add code, runtime providers, real external model wiring, API changes, request-schema changes, or frontend changes.
+2. The plan explicitly limits the next implementation slice to `deterministic_mock` and `disabled`.
+3. The plan records the file touch set, do-not-touch set, focused test list, and acceptance criteria for the next implementation round.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not rerun pytest.
+3. Post-edit validation for this pass is limited to `git diff --check`.
+
+Next-step note:
+
+1. Do not connect any real external model in the next slice.
+2. The next recommended step is to execute the `P3.rag-model-2d` implementation plan as a narrow backend-only code slice.
 
 ### P3.8 [S] RAG Router Over Current Release
 

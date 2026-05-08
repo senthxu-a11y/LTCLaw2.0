@@ -32,7 +32,9 @@ The following P3 capabilities are now treated as landed:
 11. P3.rag-model-1 backend model-client protocol plus deterministic or mock adapter completed.
 12. P3.rag-model-2 backend provider registry or provider selection boundary review completed as a docs-only slice.
 13. P3.rag-model-2a backend provider registry skeleton completed after DLP/NUL clean repair and revalidation.
-14. P3.rag-model-2b service-layer provider selection boundary review completed as a docs-only slice.
+14. P3.rag-model-2b service-layer provider selection skeleton completed.
+15. P3.rag-model-2c app/service config injection boundary review completed as a docs-only slice.
+16. P3.rag-model-2d app/service config injection implementation plan completed as a docs-only slice.
 
 ## Current Product Truth
 
@@ -55,7 +57,7 @@ Specifically, it does not yet provide an end-user RAG experience with real model
 ## Still Not Implemented
 
 1. Real LLM integration.
-2. Service-layer provider selection wiring beyond the registry skeleton.
+2. App or service config injection code implementation beyond the current docs-only planning record.
 3. Embedding or vector store.
 4. Frontend RAG UI.
 5. Candidate-evidence RAG usage.
@@ -72,8 +74,10 @@ Recommended next mainline direction:
 3. Treat `P3.rag-model-1` as landed and keep it limited to protocol plus deterministic or mock adapter scope.
 4. Treat `P3.rag-model-2` as the completed provider-selection boundary definition and keep real external providers out of scope.
 5. Treat `P3.rag-model-2a` as the landed backend provider registry skeleton and keep real external providers out of scope.
-6. Treat `P3.rag-model-2b` as the landed service-layer provider selection boundary definition and keep real external providers out of scope.
-7. Prefer `P3.rag-model-2b` service-layer provider selection skeleton implementation or implementation planning as the next primary backend-only slice.
+6. Treat `P3.rag-model-2b` as the landed service-layer provider selection skeleton and keep real external providers out of scope.
+7. Treat `P3.rag-model-2c` as the landed app/service config injection boundary definition and keep real external providers out of scope.
+8. Treat `P3.rag-model-2d` as the landed docs-only implementation plan and keep real external providers out of scope.
+9. Prefer execution of the `P3.rag-model-2d` plan as the next primary backend-only slice.
 
 ## Final Result
 
@@ -84,5 +88,7 @@ Recommended next mainline direction:
 5. `P3.rag-model-1` is now landed as the minimum model-client protocol plus deterministic or mock adapter slice.
 6. `P3.rag-model-2` is now landed as the docs-only provider registry or provider selection boundary definition.
 7. `P3.rag-model-2a` is now landed as the backend provider registry skeleton with runtime providers limited to `deterministic_mock` and `disabled`.
-8. `P3.rag-model-2b` is now landed as the docs-only service-layer provider selection boundary definition.
-9. The next recommended step is `P3.rag-model-2b` service-layer provider selection skeleton implementation or implementation planning rather than direct real-LLM integration.
+8. `P3.rag-model-2b` is now landed as the service-layer provider selection skeleton in the existing answer-service path.
+9. `P3.rag-model-2c` is now landed as the docs-only app/service config injection boundary definition.
+10. `P3.rag-model-2d` is now landed as the docs-only app/service config injection implementation plan.
+11. The next recommended step is execution of the `P3.rag-model-2d` plan rather than direct real-LLM integration.

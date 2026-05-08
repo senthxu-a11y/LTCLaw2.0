@@ -5,6 +5,7 @@ from typing import Any, Mapping
 
 from .knowledge_rag_model_client import RagModelClient, build_rag_model_prompt_payload
 from .knowledge_rag_model_registry import get_rag_model_client
+from .knowledge_rag_provider_selection import resolve_rag_model_provider_name
 
 
 _NO_GROUNDED_CONTEXT_WARNING = 'No grounded context was available for a safe answer.'
@@ -90,6 +91,7 @@ def build_rag_answer_with_provider(
     context: Mapping[str, Any],
     *,
     provider_name: str | None = None,
+    config_or_service: Any = None,
     factories: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     if _normalize_text(context.get('mode')) == 'no_current_release':
@@ -105,7 +107,11 @@ def build_rag_answer_with_provider(
             'warnings': _dedupe_strings([*warnings, _NO_GROUNDED_CONTEXT_WARNING]),
         }
 
-    resolved = get_rag_model_client(provider_name, factories=factories)
+    selected_provider_name = resolve_rag_model_provider_name(
+        config_or_service,
+        provider_name=provider_name,
+    )
+    resolved = get_rag_model_client(selected_provider_name, factories=factories)
     payload = build_rag_answer(query, context, model_client=resolved.client)
     payload['warnings'] = _dedupe_strings([*resolved.warnings, *payload.get('warnings', [])])
     return payload

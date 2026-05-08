@@ -368,6 +368,31 @@ def test_build_rag_answer_with_provider_disabled_provider_degrades_conservativel
     assert 'Model client output was not grounded in the provided context.' in payload['warnings']
 
 
+def test_build_rag_answer_with_provider_reads_disabled_provider_from_service_config():
+    payload = build_rag_answer_with_provider(
+        'How does combat damage work?',
+        _grounded_context(),
+        config_or_service={'rag_model_provider': RAG_MODEL_PROVIDER_DISABLED},
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'Model provider is disabled.' in payload['warnings']
+
+
+def test_build_rag_answer_with_provider_ignores_request_like_provider_field_in_config():
+    payload = build_rag_answer_with_provider(
+        'How does combat damage work?',
+        _grounded_context(),
+        config_or_service={'provider_name': RAG_MODEL_PROVIDER_DISABLED},
+    )
+
+    assert payload['mode'] == 'answer'
+    assert [citation['citation_id'] for citation in payload['citations']] == ['citation-001']
+    assert 'Grounded answer from the provided current-release context' in payload['answer']
+
+
 def test_build_rag_answer_with_provider_factory_failure_falls_back_to_disabled_with_warnings():
     def _fail_factory():
         raise RuntimeError('boom')
@@ -402,14 +427,27 @@ def test_build_rag_answer_with_provider_raises_for_unknown_provider_with_grounde
         )
 
 
+def test_build_rag_answer_with_provider_raises_for_unknown_provider_from_service_config():
+    with pytest.raises(ValueError, match='Unsupported RAG model provider: future_external'):
+        build_rag_answer_with_provider(
+            'How does combat damage work?',
+            _grounded_context(),
+            config_or_service={'rag_model_provider': 'future_external'},
+        )
+
+
 def test_build_rag_answer_with_provider_does_not_call_provider_factory_for_no_current_release(monkeypatch):
     called = False
+
+    def _unexpected_resolver(*args, **kwargs):
+        raise AssertionError('provider resolver should not be called')
 
     def _unexpected_registry(*args, **kwargs):
         nonlocal called
         called = True
         raise AssertionError('provider registry should not be called')
 
+    monkeypatch.setattr(answer_module, 'resolve_rag_model_provider_name', _unexpected_resolver)
     monkeypatch.setattr(answer_module, 'get_rag_model_client', _unexpected_registry)
 
     payload = build_rag_answer_with_provider(
@@ -424,11 +462,15 @@ def test_build_rag_answer_with_provider_does_not_call_provider_factory_for_no_cu
 def test_build_rag_answer_with_provider_does_not_call_provider_factory_without_grounded_chunks(monkeypatch):
     called = False
 
+    def _unexpected_resolver(*args, **kwargs):
+        raise AssertionError('provider resolver should not be called')
+
     def _unexpected_registry(*args, **kwargs):
         nonlocal called
         called = True
         raise AssertionError('provider registry should not be called')
 
+    monkeypatch.setattr(answer_module, 'resolve_rag_model_provider_name', _unexpected_resolver)
     monkeypatch.setattr(answer_module, 'get_rag_model_client', _unexpected_registry)
 
     payload = build_rag_answer_with_provider(
