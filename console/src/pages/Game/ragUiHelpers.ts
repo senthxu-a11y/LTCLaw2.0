@@ -15,11 +15,11 @@ export interface RagCitationGroup {
 export const STRUCTURED_FACT_WARNING = "For exact numeric or row-level facts, use the structured query flow.";
 export const CHANGE_QUERY_WARNING = "For change proposals or edits, use the workbench flow.";
 
-const INSUFFICIENT_CONTEXT_NEXT_STEP_HINTS = [
-  "Try a narrower question about the current release.",
-  "Use structured query for exact row-level or numeric facts.",
-  "Use workbench flow for change or edit intent.",
-  "Check whether the current release contains the expected evidence.",
+const INSUFFICIENT_CONTEXT_NEXT_STEP_HINT_KEYS = [
+  "gameProject.ragNextStepHintNarrowCurrentRelease",
+  "gameProject.ragNextStepHintUseStructuredQuery",
+  "gameProject.ragNextStepHintUseWorkbench",
+  "gameProject.ragNextStepHintCheckReleaseEvidence",
 ];
 
 export function formatCitationValue(value?: string | number | null): string {
@@ -94,11 +94,11 @@ export function getRagDisplayState(answer: KnowledgeRagAnswerResponse): Knowledg
   return "answer";
 }
 
-export function getRagNextStepHints(answer: KnowledgeRagAnswerResponse): string[] {
+export function getRagNextStepHintKeys(answer: KnowledgeRagAnswerResponse): string[] {
   if (getRagDisplayState(answer) !== "insufficient_context") {
     return [];
   }
-  return INSUFFICIENT_CONTEXT_NEXT_STEP_HINTS;
+  return INSUFFICIENT_CONTEXT_NEXT_STEP_HINT_KEYS;
 }
 
 export function groupRagCitations(citations: KnowledgeRagCitation[]): RagCitationGroup[] {

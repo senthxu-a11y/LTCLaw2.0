@@ -38,7 +38,7 @@ import {
   buildRecentRagQuestions,
   formatCitationValue,
   getRagDisplayState,
-  getRagNextStepHints,
+  getRagNextStepHintKeys,
   groupRagCitations,
   isStructuredOrWorkbenchWarning,
   STRUCTURED_FACT_WARNING,
@@ -77,11 +77,17 @@ const NO_CURRENT_RELEASE_DETAIL = "No current knowledge release is set";
 const LOCAL_PROJECT_DIRECTORY_ERROR = "Local project directory not configured";
 const NO_FORMAL_MAP_MODE = "no_formal_map";
 const MAX_RECENT_RAG_QUESTIONS = 5;
-const RAG_EXAMPLE_QUESTIONS = [
-  "How does combat damage work in the current release?",
-  "What systems are related to skill progression?",
-  "Where is equipment enhancement described?",
+const RAG_EXAMPLE_QUESTION_KEYS = [
+  "gameProject.ragExampleQuestionCombatDamage",
+  "gameProject.ragExampleQuestionSkillProgression",
+  "gameProject.ragExampleQuestionEquipmentEnhancement",
 ];
+const RAG_NEXT_STEP_HINT_DEFAULTS: Record<string, string> = {
+  "gameProject.ragNextStepHintNarrowCurrentRelease": "Try a narrower question about the current release.",
+  "gameProject.ragNextStepHintUseStructuredQuery": "Use structured query for exact row-level or numeric facts.",
+  "gameProject.ragNextStepHintUseWorkbench": "Use workbench flow for change or edit intent.",
+  "gameProject.ragNextStepHintCheckReleaseEvidence": "Check whether the current release contains the expected evidence.",
+};
 const FORMAL_MAP_STATUS_OPTIONS: Array<{ label: KnowledgeStatus; value: KnowledgeStatus }> = [
   { label: "active", value: "active" },
   { label: "deprecated", value: "deprecated" },
@@ -216,7 +222,7 @@ export default function GameProject() {
       : null;
   const workbenchReadReason =
     hasExplicitCapabilityContext && !canReadWorkbench
-      ? t("gameWorkbench.permissionReadRequired", {
+      ? t("gameProject.workbenchReadPermissionRequired", {
           defaultValue: "Requires workbench.read permission.",
         })
       : null;
@@ -298,6 +304,54 @@ export default function GameProject() {
   const recordRecentRagQuestion = (query: string, mode: KnowledgeRagAnswerResponse["mode"]) => {
     setRecentRagQuestions((current) => buildRecentRagQuestions(current, query, mode, Date.now(), MAX_RECENT_RAG_QUESTIONS));
   };
+
+  const formatRagMode = useCallback(
+    (mode: KnowledgeRagAnswerResponse["mode"] | null | undefined) => {
+      if (mode === "answer") {
+        return t("gameProject.ragStateValueAnswer", { defaultValue: "answer" });
+      }
+      if (mode === "insufficient_context") {
+        return t("gameProject.ragStateValueInsufficientContext", { defaultValue: "insufficient context" });
+      }
+      if (mode === "no_current_release") {
+        return t("gameProject.ragStateValueNoCurrentRelease", { defaultValue: "no current release" });
+      }
+      return mode || "-";
+    },
+    [t],
+  );
+
+  const getLocalizedRagWarning = useCallback(
+    (warning: string) => {
+      if (warning === STRUCTURED_FACT_WARNING) {
+        return t("gameProject.ragStructuredGuardrail", {
+          defaultValue: "Exact numeric or row-level facts should go through structured query, not this RAG entry.",
+        });
+      }
+      if (warning === CHANGE_QUERY_WARNING) {
+        return t("gameProject.ragWorkbenchGuardrail", {
+          defaultValue: "Change or edit intent should go through the workbench flow, not this RAG entry.",
+        });
+      }
+      return warning;
+    },
+    [t],
+  );
+
+  const ragExampleQuestions = useMemo(
+    () =>
+      RAG_EXAMPLE_QUESTION_KEYS.map((key) =>
+        t(key, {
+          defaultValue:
+            key === "gameProject.ragExampleQuestionCombatDamage"
+              ? "How does combat damage work in the current release?"
+              : key === "gameProject.ragExampleQuestionSkillProgression"
+                ? "What systems are related to skill progression?"
+                : "Where is equipment enhancement described?",
+        }),
+      ),
+    [t],
+  );
 
   const clearCitationHighlight = () => {
     if (citationHighlightTimeoutRef.current !== null) {
@@ -406,7 +460,9 @@ export default function GameProject() {
 
       return (
         <span className={styles.ragReadonlyPathActions}>
-          <span className={styles.ragReadonlyPathLabel}>Structured query panel</span>
+          <span className={styles.ragReadonlyPathLabel}>
+            {t("gameProject.structuredQueryPanelPathLabel", { defaultValue: "Structured query panel" })}
+          </span>
           <Tooltip title={knowledgeReadReason || undefined}>
             <span>{button}</span>
           </Tooltip>
@@ -435,7 +491,9 @@ export default function GameProject() {
 
       return (
         <span className={styles.ragReadonlyPathActions}>
-          <span className={styles.ragReadonlyPathLabel}>Workbench flow</span>
+          <span className={styles.ragReadonlyPathLabel}>
+            {t("gameProject.ragWorkbenchPathLabel", { defaultValue: "Workbench flow" })}
+          </span>
           <Tooltip title={workbenchReadReason || undefined}>
             <span>{button}</span>
           </Tooltip>
@@ -1022,9 +1080,49 @@ export default function GameProject() {
   };
 
   const ragDisplayState = useMemo(() => (ragAnswer ? getRagDisplayState(ragAnswer) : null), [ragAnswer]);
-  const ragNextStepHints = useMemo(() => (ragAnswer ? getRagNextStepHints(ragAnswer) : []), [ragAnswer]);
+  const ragNextStepHints = useMemo(
+    () =>
+      ragAnswer
+        ? getRagNextStepHintKeys(ragAnswer).map((key) =>
+            t(key, {
+              defaultValue: RAG_NEXT_STEP_HINT_DEFAULTS[key] || key,
+            }),
+          )
+        : [],
+    [ragAnswer, t],
+  );
   const groupedRagCitations = useMemo(() => (ragAnswer ? groupRagCitations(ragAnswer.citations) : []), [ragAnswer]);
   const canSubmitStructuredQuery = !!selectedAgent && structuredQueryDraft.trim().length > 0 && (!hasExplicitCapabilityContext || canReadKnowledge);
+
+  const getStructuredQueryMessage = (response: StructuredQueryResponse) => {
+    if (response.status === "error") {
+      return t("gameProject.structuredQueryFailed", { defaultValue: "Structured query failed." });
+    }
+
+    if (response.result_mode === "exact_table") {
+      return response.items.length > 0
+        ? t("gameProject.structuredQueryExactTableSuccess", { defaultValue: "Showing exact table matches from the current structured index." })
+        : t("gameProject.structuredQueryExactTableEmpty", { defaultValue: "No exact table matches were returned for this query." });
+    }
+
+    if (response.result_mode === "exact_field") {
+      return response.items.length > 0
+        ? t("gameProject.structuredQueryExactFieldSuccess", { defaultValue: "Showing exact field matches from the current structured index." })
+        : t("gameProject.structuredQueryExactFieldEmpty", { defaultValue: "No exact field matches were returned for this query." });
+    }
+
+    if (response.result_mode === "semantic_stub") {
+      return t("gameProject.structuredQuerySemanticEmpty", { defaultValue: "No exact structured result was found for this query." });
+    }
+
+    if (response.result_mode === "not_configured") {
+      return t("gameProject.structuredQueryNotConfigured", {
+        defaultValue: "Structured query is unavailable because the current project index is not configured.",
+      });
+    }
+
+    return t("gameProject.structuredQueryUnsupported", { defaultValue: "Structured query returned an unsupported response." });
+  };
 
   const renderStructuredQueryItem = (item: StructuredQueryItem) => {
     if (item.kind === "table") {
@@ -1032,15 +1130,17 @@ export default function GameProject() {
         <div key={`table-${item.table_name}`} className={styles.structuredQueryItemCard}>
           <div className={styles.structuredQueryItemHeader}>
             <Text strong>{item.table_name}</Text>
-            <Tag color="blue">table</Tag>
+            <Tag color="blue">{t("gameProject.structuredQueryTableTag", { defaultValue: "table" })}</Tag>
           </div>
           <div className={styles.structuredQueryItemMeta}>
-            <span>source_path: {item.source_path}</span>
-            <span>system: {item.system || "-"}</span>
-            <span>row_count: {item.row_count}</span>
-            <span>primary_key: {item.primary_key}</span>
+            <span>{t("gameProject.structuredQuerySourcePathLabel", { defaultValue: "source_path" })}: {item.source_path}</span>
+            <span>{t("gameProject.structuredQuerySystemLabel", { defaultValue: "system" })}: {item.system || "-"}</span>
+            <span>{t("gameProject.structuredQueryRowCountLabel", { defaultValue: "row_count" })}: {item.row_count}</span>
+            <span>{t("gameProject.structuredQueryPrimaryKeyLabel", { defaultValue: "primary_key" })}: {item.primary_key}</span>
           </div>
-          <div className={styles.structuredQueryItemDescription}>{item.summary || "No table summary returned."}</div>
+          <div className={styles.structuredQueryItemDescription}>
+            {item.summary || t("gameProject.structuredQueryNoTableSummary", { defaultValue: "No table summary returned." })}
+          </div>
         </div>
       );
     }
@@ -1051,15 +1151,17 @@ export default function GameProject() {
           <Text strong>
             {item.table_name}.{item.field_name}
           </Text>
-          <Tag color="cyan">field</Tag>
+          <Tag color="cyan">{t("gameProject.structuredQueryFieldTag", { defaultValue: "field" })}</Tag>
         </div>
         <div className={styles.structuredQueryItemMeta}>
-          <span>type: {item.field_type}</span>
-          <span>confidence: {item.confidence}</span>
-          <span>references: {item.references.length > 0 ? item.references.join(", ") : "-"}</span>
-          <span>tags: {item.tags.length > 0 ? item.tags.join(", ") : "-"}</span>
+          <span>{t("gameProject.structuredQueryTypeLabel", { defaultValue: "type" })}: {item.field_type}</span>
+          <span>{t("gameProject.structuredQueryConfidenceLabel", { defaultValue: "confidence" })}: {item.confidence}</span>
+          <span>{t("gameProject.structuredQueryReferencesLabel", { defaultValue: "references" })}: {item.references.length > 0 ? item.references.join(", ") : "-"}</span>
+          <span>{t("gameProject.structuredQueryTagsLabel", { defaultValue: "tags" })}: {item.tags.length > 0 ? item.tags.join(", ") : "-"}</span>
         </div>
-        <div className={styles.structuredQueryItemDescription}>{item.description || "No field description returned."}</div>
+        <div className={styles.structuredQueryItemDescription}>
+          {item.description || t("gameProject.structuredQueryNoFieldDescription", { defaultValue: "No field description returned." })}
+        </div>
       </div>
     );
   };
@@ -1078,7 +1180,7 @@ export default function GameProject() {
       <Alert
         type={alertType}
         showIcon
-        message={response.message || "Structured query returned a result."}
+        message={getStructuredQueryMessage(response)}
         description={response.error || undefined}
       />
     );
@@ -1093,7 +1195,11 @@ export default function GameProject() {
       <div key={group.key} className={styles.ragCitationGroup}>
         <div className={styles.ragCitationGroupHeader}>
           <div className={styles.ragCitationGroupTitle}>
-            <Text strong>{group.label}</Text>
+            <Text strong>
+              {group.key === "other"
+                ? t("gameProject.ragCitationGroupOtherLabel", { defaultValue: "other" })
+                : group.label}
+            </Text>
             <Tag>{group.citations.length}</Tag>
           </div>
           <Text type="secondary">
@@ -1121,14 +1227,20 @@ export default function GameProject() {
                   size="small"
                   onClick={() => focusCitation(citation.citation_id)}
                 >
-                  {t("gameProject.ragFocusCitationButton", { defaultValue: "Focus" })}
+                  {t("gameProject.ragFocusCitationButton", { defaultValue: "Focus citation" })}
                 </Button>
               </div>
               <div className={styles.ragCitationMeta}>
-                <span>source_path: {formatCitationValue(citation.source_path)}</span>
-                <span>artifact_path: {formatCitationValue(citation.artifact_path)}</span>
-                <span>row: {formatCitationValue(citation.row)}</span>
-                <span>release_id: {formatCitationValue(citation.release_id)}</span>
+                <span>
+                  {t("gameProject.ragCitationSourcePathLabel", { defaultValue: "source path" })}: {formatCitationValue(citation.source_path)}
+                </span>
+                <span>
+                  {t("gameProject.ragCitationArtifactPathLabel", { defaultValue: "artifact path" })}: {formatCitationValue(citation.artifact_path)}
+                </span>
+                <span>{t("gameProject.ragCitationRowLabel", { defaultValue: "row" })}: {formatCitationValue(citation.row)}</span>
+                <span>
+                  {t("gameProject.ragCitationReleaseIdLabel", { defaultValue: "release id" })}: {formatCitationValue(citation.release_id)}
+                </span>
               </div>
             </div>
           ))}
@@ -1589,9 +1701,9 @@ export default function GameProject() {
               />
 
               <div className={styles.ragExamplesSection}>
-                <div className={styles.ragSectionLabel}>{t("gameProject.ragExamplesTitle", { defaultValue: "Examples" })}</div>
+                <div className={styles.ragSectionLabel}>{t("gameProject.ragExamplesTitle", { defaultValue: "Example questions" })}</div>
                 <div className={styles.ragExamplesList}>
-                  {RAG_EXAMPLE_QUESTIONS.map((exampleQuestion) => (
+                  {ragExampleQuestions.map((exampleQuestion) => (
                     <Button
                       key={exampleQuestion}
                       size="small"
@@ -1622,7 +1734,7 @@ export default function GameProject() {
                       >
                         <span className={styles.ragHistoryQuestion}>{item.query}</span>
                         <span className={styles.ragHistoryMeta}>
-                          <span>{item.mode}</span>
+                          <span>{formatRagMode(item.mode)}</span>
                           <span>{formatRecentQuestionTime(item.askedAt)}</span>
                         </span>
                       </button>
@@ -1692,23 +1804,23 @@ export default function GameProject() {
                     <div className={styles.structuredQueryResultBlock}>
                       <div className={styles.structuredQuerySummary}>
                         <div className={styles.releaseSummaryRow}>
-                          <div className={styles.releaseSummaryLabel}>query</div>
+                          <div className={styles.releaseSummaryLabel}>{t("gameProject.structuredQueryQueryLabel", { defaultValue: "query" })}</div>
                           <div className={styles.releaseSummaryValue}>{structuredQueryResponse.query}</div>
                         </div>
                         <div className={styles.releaseSummaryRow}>
-                          <div className={styles.releaseSummaryLabel}>request_mode</div>
+                          <div className={styles.releaseSummaryLabel}>{t("gameProject.structuredQueryRequestModeLabel", { defaultValue: "request_mode" })}</div>
                           <div className={styles.releaseSummaryValue}>{structuredQueryResponse.request_mode}</div>
                         </div>
                         <div className={styles.releaseSummaryRow}>
-                          <div className={styles.releaseSummaryLabel}>result_mode</div>
+                          <div className={styles.releaseSummaryLabel}>{t("gameProject.structuredQueryResultModeLabel", { defaultValue: "result_mode" })}</div>
                           <div className={styles.releaseSummaryValue}>{structuredQueryResponse.result_mode}</div>
                         </div>
                         <div className={styles.releaseSummaryRow}>
-                          <div className={styles.releaseSummaryLabel}>status</div>
+                          <div className={styles.releaseSummaryLabel}>{t("gameProject.structuredQueryStatusLabel", { defaultValue: "status" })}</div>
                           <div className={styles.releaseSummaryValue}>{structuredQueryResponse.status}</div>
                         </div>
                         <div className={styles.releaseSummaryRow}>
-                          <div className={styles.releaseSummaryLabel}>items</div>
+                          <div className={styles.releaseSummaryLabel}>{t("gameProject.structuredQueryItemsLabel", { defaultValue: "items" })}</div>
                           <div className={styles.releaseSummaryValue}>{structuredQueryResponse.items.length}</div>
                         </div>
                       </div>
@@ -1799,11 +1911,15 @@ export default function GameProject() {
 
                   <div className={styles.ragResultSummary}>
                     <div className={styles.releaseSummaryRow}>
-                      <div className={styles.releaseSummaryLabel}>state</div>
-                      <div className={styles.releaseSummaryValue}>{ragDisplayState || ragAnswer.mode}</div>
+                      <div className={styles.releaseSummaryLabel}>
+                        {t("gameProject.ragStateLabel", { defaultValue: "state" })}
+                      </div>
+                      <div className={styles.releaseSummaryValue}>{formatRagMode(ragDisplayState || ragAnswer.mode)}</div>
                     </div>
                     <div className={styles.releaseSummaryRow}>
-                      <div className={styles.releaseSummaryLabel}>release_id</div>
+                      <div className={styles.releaseSummaryLabel}>
+                        {t("gameProject.ragReleaseIdLabel", { defaultValue: "release id" })}
+                      </div>
                       <div className={styles.releaseSummaryValue}>{ragAnswer.release_id || "-"}</div>
                     </div>
                   </div>
@@ -1819,7 +1935,7 @@ export default function GameProject() {
                               key={warning}
                               type={alertType}
                               showIcon
-                              message={warning}
+                              message={getLocalizedRagWarning(warning)}
                               description={
                                 warning === STRUCTURED_FACT_WARNING ? (
                                   renderStructuredQueryAffordance("warning")
