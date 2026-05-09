@@ -2296,11 +2296,11 @@ Next-step note:
 2. P3.rag-model-3b should still avoid real network calls and real provider integration.
 3. Real provider implementation must remain deferred until the skeleton, credential boundary, timeout or cost policy, and grounding or citation tests are settled.
 
-### P3.rag-model-3b [S] External Provider Adapter Skeleton Implementation
+### P3.external-provider-1 / P3.rag-model-3b [S] Backend External Provider Adapter Skeleton
 
 Depends on: P3.rag-model-3a
 
-Status as of 2026-05-08: completed.
+Status as of 2026-05-09: completed.
 
 Tasks:
 
@@ -2313,16 +2313,16 @@ Tasks:
 Implemented scope note:
 
 1. This slice is closed out in docs/tasks/knowledge-p3-rag-model-3b-external-provider-adapter-skeleton-closeout-2026-05-08.md.
-2. The implementation files are src/ltclaw_gy_x/game/knowledge_rag_model_client.py and src/ltclaw_gy_x/game/knowledge_rag_external_model_client.py.
-3. The focused test files are tests/unit/game/test_knowledge_rag_answer.py and tests/unit/game/test_knowledge_rag_external_model_client.py, along with the existing model-client, registry, provider-selection, and router tests.
-4. The new adapter skeleton implements RagModelClient, accepts only bounded prompt payload shape, returns only RagModelClientResponse shape, and provides a mockable responder seam.
-5. The default skeleton implementation performs no real network I/O and returns a conservative empty response with skeleton warning.
-6. The skeleton defines injected config and secret placeholder shapes without reading environment variables, request body, or frontend state.
-7. Runtime providers remain limited to deterministic_mock and disabled, and registry allowlist remains unchanged.
-8. Router remains unchanged as a backend-owned config handoff surface only and does not call get_rag_model_client(...) directly.
-9. Request schema remains unchanged and frontend remains unchanged.
+2. This slice is also treated as P3.external-provider-1 completed.
+3. The backend skeleton module is src/ltclaw_gy_x/game/knowledge_rag_external_model_client.py.
+4. The skeleton implements RagModelClient, accepts only bounded prompt payload shape, and returns only RagModelClientResponse shape.
+5. The skeleton is not a real LLM integration and does not perform real HTTP.
+6. The skeleton does not read real credential material and does not read environment variables.
+7. The skeleton does not modify router provider selection, frontend UI, or the RAG request schema.
+8. Runtime providers remain limited to deterministic_mock and disabled, and this slice does not roll out a new runtime provider.
+9. Provider read authority remains bounded: the client does not read raw source, pending state, SVN, candidate_evidence, or release artifacts directly.
 10. Citation validation remains in the answer layer and still trusts only context.citations.
-11. Retrieval and context boundaries remain unchanged and were not widened.
+11. Retrieval, context, no_current_release, and insufficient_context boundaries remain unchanged.
 12. No real external provider was added.
 
 Acceptance:
@@ -2331,15 +2331,116 @@ Acceptance:
 2. The slice adds no frontend or request provider control.
 3. The slice keeps router, registry allowlist, retrieval, context, and citation boundaries intact.
 
-Validation note from implementation round:
+Recorded implementation validation results:
 
-1. Focused pytest result: 70 passed.
-2. git diff --check: clean.
+1. Focused pytest result: 57 passed in 0.55s.
+2. Focused pytest coverage includes tests/unit/game/test_knowledge_rag_external_model_client.py, tests/unit/game/test_knowledge_rag_model_registry.py, tests/unit/game/test_knowledge_rag_model_client.py, and tests/unit/game/test_knowledge_rag_answer.py.
+3. NUL check result: src/ltclaw_gy_x/game/knowledge_rag_external_model_client.py = 0.
+4. NUL check result: tests/unit/game/test_knowledge_rag_external_model_client.py = 0.
+5. NUL check result: tests/unit/game/test_knowledge_rag_answer.py = 0.
+6. NUL check result: tests/unit/game/test_knowledge_rag_model_client.py = 0.
+7. git diff --check reported no whitespace error for this slice.
+8. The only git diff --check output was pre-existing unrelated line-ending warnings for docs/tasks/knowledge-p3-8h-rag-mvp-interaction-validation-2026-05-09.md, scripts/README.md, scripts/migrate_to_cdev.ps1, and scripts/wheel_build.ps1.
 
 Next-step note:
 
-1. The adapter skeleton is now complete.
-2. The next larger product step may pivot to RAG product-entry UI planning or to a future provider credential or transport boundary slice.
+1. The backend external provider adapter skeleton is now complete.
+2. The next recommended slice is P3.external-provider-2 credential/config skeleton boundary review or implementation planning.
+3. The next slice should still remain backend-only and should not connect a real provider.
+4. Real external provider integration still remains unimplemented.
+
+### P3.external-provider-2 [S] Credential/Config Skeleton Implementation
+
+Depends on: P3.external-provider-1, P3.provider-credential-boundary-review
+
+Status as of 2026-05-09: completed.
+
+Tasks:
+
+1. Land the backend-owned credential/config skeleton on the external adapter boundary only.
+2. Keep the slice disabled-by-default and keep external provider behavior outside runtime rollout.
+3. Add allowlist gating ahead of credential resolver and transport.
+4. Keep GameProject, request schema, endpoint surface, router behavior, and runtime provider allowlist unchanged.
+5. Record implementation outcomes and bounded validation without authorizing real-provider rollout.
+
+Implemented scope note:
+
+1. This implementation is recorded in docs/tasks/knowledge-p3-external-provider-2-credential-config-boundary-2026-05-09.md.
+2. The backend-owned config shape now includes `enabled`, `provider_name`, optional `model_name`, `timeout_seconds`, optional `base_url`, optional `proxy`, optional `max_output_tokens`, `allowed_providers`, `allowed_models`, and an optional env config entry shape.
+3. `enabled` defaults to false, so the credential/config skeleton remains disabled-by-default.
+4. This slice is still a credential/config skeleton only and is not real external provider integration.
+5. The slice does not connect a real LLM, does not perform real HTTP, and does not read real credential material.
+6. Frontend still exposes no provider/model UI, and the RAG request schema remains unchanged.
+7. Request-like `provider_name`, `model_name`, or `api_key` fields do not participate in provider selection.
+8. Provider/model allowlist validation now occurs before credential resolver and transport, and allowlist failure safely degrades without entering the external call path.
+9. Missing credential, disabled state, and allowlist failure all degrade safely and do not generate a fake answer.
+10. `no_current_release` and `insufficient_context` still return before provider/config/credential path execution.
+11. Runtime providers remain only deterministic_mock and disabled, and this slice does not roll out a runtime external provider.
+12. The responder compatibility bridge remains limited to local fake transport and test seam compatibility.
+
+Acceptance:
+
+1. This slice implements only backend credential/config skeleton behavior and is not real external provider integration.
+2. The slice keeps external provider runtime rollout blocked.
+3. The slice keeps Ask limited to `{ query }`, keeps GameProject free of provider/model UI, and keeps router free of direct provider selection.
+
+Validation note:
+
+1. Focused pytest result from the implementation round: `59 passed in 1.04s`.
+2. NUL check result for the touched Python files: all `0`.
+3. `git diff --check` reported no whitespace error for this slice.
+4. The only `git diff --check` output was pre-existing unrelated line-ending warnings for docs/tasks/knowledge-p3-8h-rag-mvp-interaction-validation-2026-05-09.md, scripts/README.md, scripts/migrate_to_cdev.ps1, and scripts/wheel_build.ps1.
+
+Next-step note:
+
+1. The next recommended slice is backend service config handoff or assembly-point boundary review.
+2. That next slice should stay backend-only and must not become runtime rollout.
+3. Real external provider integration still remains unimplemented.
+
+### P3.external-provider-3 [S] Backend Service Config Wiring Boundary Review
+
+Depends on: P3.external-provider-2
+
+Status as of 2026-05-09: completed as a docs-only boundary review.
+
+Tasks:
+
+1. Freeze where backend-owned config may enter the live RAG answer path.
+2. Freeze router limits for service-config handoff.
+3. Freeze answer-layer responsibility for service-config interpretation and warning merge.
+4. Keep env reads, runtime rollout, frontend provider/model UI, and request-schema changes out of scope.
+5. Record the next acceptable implementation slice without authorizing real-provider rollout.
+
+Implemented scope note:
+
+1. This review is recorded in docs/tasks/knowledge-p3-external-provider-3-service-config-wiring-boundary-2026-05-09.md.
+2. The approved live handoff entry remains `build_rag_answer_with_service_config(...)`.
+3. The preferred live handoff anchor remains a backend-owned injected service object, currently `game_service`, or a backend-owned config object derived from it.
+4. Router may obtain backend-owned service/app objects only to hand off an existing backend-owned object and remains forbidden from direct `get_rag_model_client(...)` calls, provider/model resolution, request-hint parsing, resolver creation, and transport creation.
+5. The answer service remains the only approved service-config interpretation point and the only approved warning-merge point for live config handoff.
+6. `no_current_release` and `insufficient_context` must still return before any service-config/provider resolution.
+7. `ProviderManager.active_model` remains out of scope.
+8. Env reads remain unimplemented and still cannot become request-time provider selection.
+9. Runtime providers remain only deterministic_mock and disabled, and external provider still cannot enter runtime allowlist without a later rollout review.
+10. This slice does not modify src/, console/src/, request schema, runtime provider registry, router behavior, or frontend UI.
+
+Acceptance:
+
+1. The review freezes backend service-config handoff boundaries without implementing code.
+2. The review keeps router thin and keeps provider selection out of request and frontend surfaces.
+3. The review keeps runtime rollout blocked.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not run pytest.
+3. This docs-only pass does not run TypeScript.
+4. Post-edit validation for this pass is limited to documentation error checking and docs diff whitespace checking.
+
+Next-step note:
+
+1. Backend service config wiring skeleton implementation may start next.
+2. That next slice must still remain backend-only and must not become runtime rollout.
 3. Real external provider integration still remains unimplemented.
 
 ### P3.rag-ui-1 [S] Minimal Product-Entry UI On Existing Answer Endpoint
@@ -2979,6 +3080,75 @@ Validation note:
 3. `git diff --check` ran.
 4. A minimal browser smoke was attempted and reached shell-load confirmation only; full in-app interaction smoke remained limited by local frontend-backend environment issues.
 5. No backend pytest was run because this slice did not touch backend code.
+
+I18n closeout note:
+
+1. A frontend-only `P3.8` i18n closeout is now complete for the current RAG MVP interaction surface.
+2. The i18n closeout covered visible copy for `Knowledge Q&A`, `Ask`, `insufficient_context`, `no_current_release`, citations, `Open structured query`, `Structured query panel`, `Go to workbench`, `Workbench flow`, and the `knowledge.read` / `workbench.read` permission hints.
+3. The i18n closeout changed frontend copy surfaces only: `console/src/pages/Game/GameProject.tsx`, `console/src/pages/Game/ragUiHelpers.ts`, `console/src/locales/en.json`, and `console/src/locales/zh.json`.
+4. The i18n closeout added no product-logic change, no backend change, no API change, no RAG schema change, no provider change, and no SVN change.
+5. The i18n closeout validation passed JSON parse for `en.json` and `zh.json`, frontend TypeScript no-emit, targeted ESLint, `git diff --check`, and editor diagnostics.
+6. Local 8088 static-page verification must rebuild `console` first and point `QWENPAW_CONSOLE_STATIC_DIR` at the latest `console/dist`; otherwise the page may still render an old bundle.
+
+I18n runtime-fix closeout note:
+
+1. The `P3.8` RAG MVP i18n runtime-fix is now complete for the latest static-bundle validation path.
+2. The runtime-fix root cause was not the runtime language state and not a standalone `8088` old-bundle issue.
+3. The actual root cause was that the `console` subproject had not been reliably producing the latest production `dist`, so the static page did not reliably load the newest bundle.
+4. The runtime-fix round therefore closed the issue by explicitly rebuilding from the `console` directory and revalidating against the latest emitted `console/dist` bundle.
+5. This runtime-fix round only patched missing locale keys in `console/src/locales/en.json` and `console/src/locales/zh.json`: `ragCitationsTitle`, `ragCitationsHint`, and `ragEmptyState`.
+6. This runtime-fix round did not change product logic, backend code, API behavior, RAG schema, provider behavior, or SVN behavior.
+7. Static verification must explicitly run a production build inside the `console` directory and then point `QWENPAW_CONSOLE_STATIC_DIR` to the latest `console/dist`; otherwise local static verification may still surface an older bundle or English fallback copy.
+8. Latest-dist runtime revalidation on `8091` confirmed Chinese P3.8 copy for `知识问答`, `提问`, `示例问题`, `结构化查询面板`, `打开结构化查询`, `前往工作台`, and the Chinese RAG empty state.
+9. Remaining English copy such as `Knowledge Release Status` and `Formal map review` is outside the scoped `P3.8` RAG i18n surface for this round and was intentionally left unchanged.
+
+### P3.provider-credential-boundary-review [S] Provider Credential / Transport / Safety Boundary Review
+
+Depends on: P3.rag-model-3, P3.8h
+
+Status as of 2026-05-09: completed as a docs-only boundary review.
+
+Tasks:
+
+1. Freeze credential ownership and secret-source rules before any real external provider is connected.
+2. Freeze provider or model selection boundaries without adding frontend provider control.
+3. Freeze transport, timeout, retry, cost, token, logging, privacy, grounding, read, and failure boundaries.
+4. Keep the current `{ query }` RAG request boundary and keep GameProject unchanged.
+5. Keep real external provider integration out of scope.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-p3-provider-credential-boundary-review-2026-05-09.md`.
+2. Credentials are defined as backend-owned only and are explicitly disallowed from frontend request body, RAG query body, GameProject UI, or per-request provider config.
+3. Server-side config remains allowed for backend-owned selection policy and non-secret provider settings.
+4. Environment variables are not approved as live provider or model selection inputs in this slice and are allowed for future secret material only if a later implementation explicitly opts in under backend-owned startup-time constraints.
+5. A future credential store is recommended before any non-trivial real-provider rollout, but is not implemented or required in this docs-only slice.
+6. Provider and model selection remain backend-only and remain disallowed from frontend UI, request body, and `ProviderManager.active_model` in this slice.
+7. A future backend allowlist is allowed and recommended for provider and model gating.
+8. Any future external provider must remain a single injected model client behind the existing registry and answer-service boundaries.
+9. Router still must not call provider code directly, and answer service still must consume only bounded context payload plus query.
+10. Recommended first-version backend timeout is 15 seconds, with retry disabled by default because retry can amplify both latency and cost.
+11. Future real-provider path must enforce backend-owned max chunks, max chars, output-token cap, and budget controls before rollout.
+12. Logging rules remain conservative: API keys and raw secrets must never be logged, full query and full chunk logging should not be enabled by default, and redaction is required for sensitive fields.
+13. Citation grounding remains unchanged: provider output citation ids must still validate only against `context.citations`, and invalid or empty provider output must degrade safely rather than fabricate an answer.
+14. Provider client must not read raw source, pending state, SVN, `candidate_evidence`, or release artifacts directly.
+15. Required failure cases include credential missing, provider disabled, provider timeout, provider HTTP error, invalid provider response, and cost or budget exceeded, and all must return safe warnings or `insufficient_context` where appropriate rather than fake grounded answer.
+16. This slice does not modify `src/`, `console/src/`, request schema, router behavior, or frontend UI.
+17. Real external provider integration remains unimplemented.
+
+Acceptance:
+
+1. The review freezes backend-owned credential and provider-selection boundaries before real provider rollout.
+2. The review keeps Ask limited to `{ query }` and keeps GameProject free of provider or model UI.
+3. The review keeps transport, timeout, retry, cost, privacy, grounding, read, and failure boundaries conservative.
+4. The review does not implement a real provider, add a runtime provider, or add a new API.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not run pytest.
+3. This docs-only pass does not run TypeScript.
+4. Post-edit validation for this pass is limited to documentation error checking.
 
 ### P3.9 [P] Optional `table_facts.sqlite`
 

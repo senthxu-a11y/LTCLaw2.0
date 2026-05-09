@@ -56,6 +56,10 @@ The following P3 capabilities are now treated as landed:
 33. P3.8f structured-query submit contract and typing review completed as a docs-only slice and freezes the future first-version panel submit path to a typed frontend wrapper over the existing `/game/index/query` endpoint using query plus fixed `auto` mode only.
 34. P3.8g frontend-only minimal structured-query panel implementation completed and lands explicit open, optional local prefill, selected-agent-gated explicit submit, and read-only normalized result display inside GameProject without backend changes.
 35. P3.8h RAG MVP interaction validation completed and closes the current MVP interaction surface at the code-and-contract level without adding functionality.
+36. P3.provider-credential-boundary-review docs-only provider credential and transport safety boundary review completed.
+37. P3.external-provider-1 backend external provider adapter skeleton closeout completed.
+38. P3.external-provider-2 backend credential/config skeleton implementation completed.
+39. P3.external-provider-3 backend service config wiring boundary review completed as a docs-only slice.
 
 ## Current Product Truth
 
@@ -74,6 +78,8 @@ Current facts:
 The current result is not yet a full RAG product.
 
 Specifically, it does not yet provide real model execution, model-client orchestration beyond the current backend skeletons, vector retrieval, or broader frontend RAG surfaces.
+
+It also still does not provide real external provider transport rollout, real credential integration, or frontend provider or model selection.
 
 ## Still Not Implemented
 
@@ -103,7 +109,7 @@ Recommended next mainline direction:
 11. Treat `P3.rag-model-2g` as the landed minimal live config handoff implementation and keep real external providers out of scope.
 12. Treat `P3.rag-model-3` as the landed external provider adapter boundary definition and keep real external provider implementation out of scope.
 13. Treat `P3.rag-model-3a` as the landed external provider adapter implementation plan and keep real external provider implementation out of scope.
-14. Treat `P3.rag-model-3b` as the landed external provider adapter skeleton implementation and keep real external provider integration out of scope.
+14. Treat `P3.rag-model-3b`, now also recorded as `P3.external-provider-1`, as the landed backend external provider adapter skeleton implementation and keep real external provider integration out of scope.
 15. Treat `P3.rag-ui-1` as the landed minimal frontend product-entry RAG UI on the existing answer endpoint.
 16. Treat `P3.rag-ui-2` as the landed docs-only plan for pure frontend product-flow enhancement on the existing answer endpoint, with `P3.rag-ui-2a` as the next implementation target.
 17. Keep provider selection, request-schema changes, and real external provider integration out of the frontend surface.
@@ -122,6 +128,7 @@ Recommended next mainline direction:
 30. Treat `P3.8d` as the landed docs-only structured-query destination review and keep the current structured-query label read-only until a dedicated minimal destination contract exists inside the existing GameProject surface.
 31. Real external provider integration remains deferred until later dedicated slices.
 32. Treat `P3.8e` as the landed docs-only minimal structured-query panel contract review and keep any future first-version structured-query destination inside the existing GameProject surface as a read-only lookup panel with explicit open, optional prefill, and no auto-submit.
+33. Treat `P3.provider-credential-boundary-review` as the landed docs-only freeze for credential ownership, transport, timeout, cost, privacy, grounding, and failure rules before any real external provider rollout.
 
 ## Final Result
 
@@ -161,5 +168,46 @@ Recommended next mainline direction:
 34. The current MVP entry is now validated to keep Ask on `{ query }` only, keep structured query open-and-submit explicit, keep structured-query results read-only, and keep workbench handoff limited to explicit navigation to `/numeric-workbench`.
 35. The current MVP entry is now validated to preserve explicit permission gating and local trusted fallback without adding backend changes, API changes, provider or model control, or automatic governance actions.
 36. Final gate reran frontend validation and focused backend RAG plus model/provider pytest successfully and found no blocker inside the current MVP interaction slice.
-37. The current P3 RAG MVP slice is now commit-ready at the code-and-contract level.
-38. Direct real external provider integration remains deferred.
+37. A frontend-only `P3.8` i18n closeout is now also recorded for the same MVP interaction surface.
+38. The i18n closeout covers visible copy for `Knowledge Q&A`, `Ask`, `insufficient_context`, `no_current_release`, citations, `Open structured query`, `Structured query panel`, `Go to workbench`, `Workbench flow`, and `knowledge.read` / `workbench.read` permission hints.
+39. The i18n closeout changes frontend translation surfaces only and adds no product-logic change, backend change, API change, RAG schema change, provider change, or SVN change.
+40. The i18n closeout validation passed JSON parse, frontend TypeScript no-emit, targeted ESLint, `git diff --check`, and editor diagnostics, and no backend pytest was run in that follow-up round.
+41. Local verification through `ltclaw app` on port 8088 still requires rebuilding `console` and pointing `QWENPAW_CONSOLE_STATIC_DIR` to the latest `console/dist`; otherwise an older bundle may still be served.
+42. A follow-up `P3.8` i18n runtime-fix closeout is now also recorded for the latest static-bundle validation path.
+43. That runtime-fix confirms the failure was not a runtime-language issue and not just an `8088` old-bundle issue; the controlling cause was that the `console` subproject had not been reliably producing the latest production `dist`, so static validation could still load a stale bundle and show English fallback.
+44. The runtime-fix round only added missing locale keys in `console/src/locales/en.json` and `console/src/locales/zh.json`: `ragCitationsTitle`, `ragCitationsHint`, and `ragEmptyState`.
+45. The runtime-fix round added no product-logic change, backend change, API change, RAG schema change, provider change, or SVN change.
+46. Future static verification must explicitly run a production build inside the `console` directory and point `QWENPAW_CONSOLE_STATIC_DIR` at the latest `console/dist`; otherwise static validation may still show an older bundle or English fallback strings.
+47. Latest-dist revalidation on `8091` confirmed Chinese `P3.8` copy for `知识问答`, `提问`, `示例问题`, `结构化查询面板`, `打开结构化查询`, `前往工作台`, and the Chinese RAG empty state.
+48. Remaining English labels such as `Knowledge Release Status` and `Formal map review` are outside the scoped `P3.8` RAG i18n surface and remain intentionally unchanged.
+49. `P3.provider-credential-boundary-review` is now landed as the docs-only pre-rollout freeze for backend-owned credentials, backend-only provider selection, injected-client transport boundary, bounded timeout or cost policy, conservative logging/privacy rules, and safe citation-grounded failure behavior.
+50. The review keeps frontend provider/model UI, request-body provider hints, `ProviderManager.active_model`, and real external provider integration out of scope.
+51. `P3.external-provider-1`, corresponding to `P3.rag-model-3b`, is now explicitly closed out as a backend-only external provider adapter skeleton.
+52. That skeleton does not connect a real LLM, does not perform real HTTP, does not read real credential material, does not read environment variables, and does not change frontend UI or the RAG request schema.
+53. Runtime providers remain only `deterministic_mock` and `disabled`, and no runtime external-provider rollout has been added.
+54. Provider read authority remains bounded, so the client still does not read raw source, pending state, SVN, `candidate_evidence`, or release artifacts directly.
+55. Citation validation still remains owned by the answer service and still validates only against `context.citations`.
+56. Recorded implementation validation for `P3.external-provider-1` is focused pytest `57 passed in 0.55s`, NUL checks `0` for the touched Python files, and `git diff --check` with no whitespace error beyond unrelated pre-existing line-ending warnings.
+57. The next recommended step is backend service config wiring skeleton implementation rather than direct runtime rollout.
+58. The current P3 RAG MVP slice is now commit-ready at the code-and-contract level.
+59. Direct real external provider integration remains deferred.
+60. `P3.external-provider-2` is now landed as a backend-only credential/config skeleton implementation rather than a docs-only boundary freeze.
+61. The implementation is still not real external provider integration, still does not perform real HTTP, and still does not read real credential material.
+62. The implementation adds backend-owned config shape only, with `enabled` defaulting to false and with backend-owned provider, model, timeout, base_url, proxy, max_output_tokens, allowlist, and optional env entry shape.
+63. Allowlist validation now occurs before credential resolver and transport, and allowlist failure degrades safely without entering the external call path.
+64. Missing credential, disabled state, and allowlist failure all return safe non-answer behavior and do not generate a fake answer.
+65. Request-like `provider_name`, `model_name`, and `api_key` fields still do not participate in provider selection.
+66. `no_current_release` and `insufficient_context` still bypass provider, config, and credential path execution.
+67. Runtime providers still remain only `deterministic_mock` and `disabled`, and there is still no runtime provider rollout.
+68. The implementation still does not add frontend provider/model UI, does not change the RAG request schema, does not add API, and does not connect a real LLM.
+69. Recorded implementation validation for this slice is focused pytest `59 passed in 1.04s`, touched-file NUL checks `0`, and `git diff --check` with no slice-local whitespace error beyond unrelated pre-existing CRLF/LF warnings.
+70. `P3.external-provider-3` is now landed as the docs-only backend service config wiring boundary review.
+71. That review freezes `build_rag_answer_with_service_config(...)` as the only approved live handoff entry for backend-owned config.
+72. The preferred live handoff anchor remains a backend-owned injected service object, currently `game_service`, or a backend-owned config object derived from it.
+73. Router may obtain backend-owned service/app objects only to hand off an existing backend-owned object and remains forbidden from direct `get_rag_model_client(...)` calls, provider/model resolution, request-hint parsing, resolver creation, and transport creation.
+74. The answer service remains the only approved service-config interpretation point and the only approved warning-merge point.
+75. `no_current_release` and `insufficient_context` still remain ahead of any service-config or provider resolution.
+76. `ProviderManager.active_model` remains out of scope.
+77. Env reads remain unimplemented and still cannot become request-time provider selection.
+78. Runtime providers still remain only `deterministic_mock` and `disabled`, and external provider still cannot enter runtime allowlist without a later dedicated rollout review.
+79. The next recommended step is backend service config wiring skeleton implementation rather than direct runtime rollout.

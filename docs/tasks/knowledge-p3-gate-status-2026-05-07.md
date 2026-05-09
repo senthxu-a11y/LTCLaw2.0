@@ -31,8 +31,14 @@ Completed in this gate:
 10. P3.7b+ safe-build formal-map consumption boundary and backend implementation.
 11. Knowledge capability or permission boundary review.
 12. P3.permission-3 backend read capability checks plus regression repair.
+13. `P3.provider-credential-boundary-review` docs-only safety boundary review.
+14. `P3.external-provider-1` docs closeout for the backend external provider adapter skeleton.
+15. `P3.external-provider-2` backend credential/config skeleton implementation closeout.
+16. `P3.external-provider-3` docs-only backend service config wiring boundary review.
 
 This gate does not introduce a real LLM, embedding, vector store, frontend RAG UI, or SVN behavior.
+
+It also still does not introduce real external provider credentials, transport, provider rollout, or frontend provider selection.
 
 ## Completed Scope
 
@@ -370,6 +376,7 @@ The current verified summary is:
 14. The current worktree still contains historical temporary recovery scripts under `tmp/`, including `tmp/strip_nulls_p2_1.ps1`; these remain as existing workspace notes only and were not modified in this documentation slice.
 15. Frontend permission-aware coverage is still intentionally partial: it now covers GameProject release governance plus existing NumericWorkbench read or export entry points, but not proposal/SVN actions.
 16. The fixed copy baseline is now used by the implemented frontend permission slices, but any later surfaces still need to adopt it.
+17. Provider credential and transport rollout remain documentation-only; no real external provider, no credential store, no request-body provider hint, and no frontend provider/model UI are implemented.
 
 ## Still Not Implemented
 
@@ -398,6 +405,9 @@ The recommended next direction after P3.read-permission-boundary-review is:
 10. `P3.rag-model-2a` backend provider registry skeleton is now complete after a DLP/NUL clean repair and revalidation pass.
 11. `P3.rag-model-2b` service-layer provider selection skeleton is now complete.
 12. `P3.rag-ui-3a` frontend-only product experience refinement is now complete, and provider credential, transport, or real external model integration remains deferred.
+13. `P3.provider-credential-boundary-review` is now complete as a docs-only boundary freeze for backend-owned credentials, backend-only provider selection, conservative timeout/retry/cost policy, safe logging/privacy rules, and citation-grounded failure behavior before any real external provider rollout.
+14. `P3.external-provider-2` is now complete as a backend-only credential/config skeleton implementation with disabled-by-default config, backend-owned provider/model selection, allowlist-before-credential/transport interception, and safe degradation for disabled, missing-credential, and allowlist-failure cases.
+15. `P3.external-provider-3` is now complete as a docs-only backend service config wiring boundary review that freezes backend-owned live handoff through the existing answer-service entry, keeps router thin, keeps `ProviderManager.active_model` out of scope, and keeps runtime rollout blocked.
 
 ## Gate Decision
 
@@ -537,221 +547,245 @@ The current P3 gate result is:
 132. `P3.rag-model-3a` does not authorize environment-variable reads, request-body or frontend provider control, router changes, request-schema changes, ProviderManager integration, candidate_evidence RAG usage, embedding, or vector-store work.
 133. `P3.rag-model-3a` requires future tests to mock the adapter, verify no artifact or raw-source or pending-state or SVN reads, verify citation out-of-bounds degradation, verify empty-answer or no-citation degradation, verify structured-query and workbench warnings remain, and verify router or request or frontend still do not participate in provider selection.
 134. `P3.rag-model-3a` is docs-only, did not rerun pytest, and adds no backend code, no frontend code, no router change, and no public API.
-135. `P3.rag-model-3b` external provider adapter skeleton implementation is now complete.
-136. The implementation files for `P3.rag-model-3b` are `src/ltclaw_gy_x/game/knowledge_rag_model_client.py` and `src/ltclaw_gy_x/game/knowledge_rag_external_model_client.py`.
-137. The focused test files for `P3.rag-model-3b` are `tests/unit/game/test_knowledge_rag_answer.py` and `tests/unit/game/test_knowledge_rag_external_model_client.py`, with existing registry, provider-selection, model-client, and router tests re-run for regression coverage.
-138. `P3.rag-model-3b` adds a small external adapter skeleton that implements `RagModelClient`, accepts only bounded prompt payload, returns only `RagModelClientResponse`, and provides a mockable responder seam.
-139. The default skeleton implementation performs no real network I/O and returns a conservative empty response with skeleton warning.
-140. `P3.rag-model-3b` defines injected config and secret placeholder shapes without reading environment variables, request body, or frontend state.
-141. Runtime providers remain limited to `deterministic_mock` and `disabled`, and registry allowlist remains unchanged.
-142. Router remains unchanged as a backend-owned config handoff surface only, request schema remains unchanged, and frontend remains unchanged.
-143. `P3.rag-model-3b` keeps no_current_release and insufficient_context early-return behavior unchanged, keeps citation validation restricted to `context.citations`, and does not widen retrieval or context boundaries.
-144. `P3.rag-model-3b` is adapter skeleton only and is not real external provider integration.
-145. Focused pytest for the implementation round: 70 passed.
-146. `P3.rag-model-3b` `git diff --check`: clean.
-147. The current closeout pass combines code, tests, and docs rather than docs-only.
-148. The next larger step may pivot to RAG product-entry UI planning or to a future provider credential or transport boundary slice, while real external provider integration remains deferred.
-149. `P3.rag-ui-1` minimal product-entry UI on the existing answer endpoint is now complete.
-150. The implementation files for `P3.rag-ui-1` are `console/src/api/types/game.ts`, `console/src/api/modules/gameKnowledgeRelease.ts`, `console/src/pages/Game/GameProject.tsx`, and `console/src/pages/Game/GameProject.module.less`.
-151. `P3.rag-ui-1` adds the smallest GameProject knowledge Q&A surface that calls the existing `POST /api/agents/{agentId}/game/knowledge/rag/answer` endpoint.
-152. The frontend request remains limited to `query` and does not expose provider or model control.
-153. `P3.rag-ui-1` renders backend-returned `mode`, `answer`, `release_id`, `citations`, and `warnings`, and explicitly surfaces `no_current_release` and `insufficient_context` states.
-154. `P3.rag-ui-1` keeps structured-query and workbench-flow guardrail messaging explicit in the UI.
-155. The minimal Ask entry is disabled under explicit capability context when the member lacks `knowledge.read`, and the handler also blocks the API call on the same condition.
-156. `P3.rag-ui-1` adds no backend code, no router contract changes, no request-schema changes, no provider registry changes, and no real external provider integration.
-157. VS Code Problems check on touched frontend files reported no errors.
-158. Console TypeScript no-emit validation passed through the local binary: `./node_modules/.bin/tsc -b --noEmit`.
-159. Focused backend RAG regression passed: `70 passed`.
-160. `pnpm build` could not run in the current environment because `pnpm` is unavailable.
-161. `npm run build` could not run in the current environment because `npm` is unavailable.
-162. `P3.rag-ui-1` `git diff --check`: clean.
-163. `P3.rag-ui-2` product-flow UX enhancement planning is now complete as a docs-only slice.
-164. The planning file for `P3.rag-ui-2` is `docs/tasks/knowledge-p3-rag-ui-2-product-flow-plan-2026-05-08.md`.
-165. `P3.rag-ui-2` recommends prioritizing pure frontend UX enhancement on the existing answer endpoint before provider credential or transport boundary work.
-166. The planned candidate features are recent-question history, static example questions, copy answer, and citation locate or jump.
-167. The plan requires recent-question history to remain local UI state or session-level frontend state only and not enter formal knowledge, release artifacts, or SVN-adjacent flows.
-168. The plan requires example questions to remain static UI suggestions only and not act as provider hints or prompt injection.
-169. The plan requires copy-answer behavior to remain a frontend-only convenience action and not write back into knowledge storage.
-170. The plan requires citation locate or jump to stay limited to citations already returned by the backend and forbids frontend artifact or raw-source reads.
-171. The plan keeps Ask-button `knowledge.read` disablement and handler-side `knowledge.read` guard unchanged.
-172. The plan keeps the effective minimal request payload at `query` only and does not authorize provider, model, provider-hint, or service-config request fields.
-173. The plan keeps router/provider boundaries unchanged: no request-schema change, no router call to `get_rag_model_client(...)`, no change to `build_rag_answer_with_service_config(...)` as the live handoff entry, and no runtime-provider expansion beyond `deterministic_mock` and `disabled`.
-174. The plan keeps real external provider integration, `ProviderManager.active_model`, environment-variable provider sources, and frontend provider/model settings out of scope.
-175. The plan keeps structured-query and workbench-flow guardrail copy required in the UI and keeps ordinary RAG Q&A separate from administrator acceptance workflows.
-176. `P3.rag-ui-2` is docs-only and does not modify `src/` or `console/src/` files.
-177. This docs-only planning pass does not rerun pytest.
-178. `P3.rag-ui-2a` frontend UX enhancement implementation is now complete.
-179. The implementation files for `P3.rag-ui-2a` are `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/GameProject.module.less`.
-180. `P3.rag-ui-2a` adds all four planned UX features: static example questions, recent question history, copy result, and local citation focus.
-181. Example questions only populate the existing query input and do not auto-submit.
-182. Recent-question history remains component-local only, stores only query plus mode plus timestamp, is capped at 5 items, deduplicates by query, and is not persisted.
-183. Copy-result uses the browser clipboard API only and does not write files, knowledge artifacts, formal map, release notes, or release assets.
-184. Citation focus is local scroll or highlight over the returned citation list only and does not read artifacts, raw source, or any new backend endpoint.
-185. The effective frontend request payload remains limited to `query` and does not expose provider or model control.
-186. Ask-button `knowledge.read` disablement and handler-side `knowledge.read` guard remain in place.
-187. `P3.rag-ui-2a` adds no backend code, no request-schema changes, no router provider-selection changes, no runtime-provider expansion, and no real external provider integration.
-188. VS Code Problems check on touched frontend files reported no errors.
-189. Focused backend RAG regression passed: `70 passed`.
-190. Console TypeScript no-emit validation passed: `./node_modules/.bin/tsc -b --noEmit`.
-191. `P3.rag-ui-2a` `git diff --check`: clean.
-192. Optional `./node_modules/.bin/vite build` could not complete because Rollup's native optional dependency failed to load with a macOS code-signature or optional-dependency error.
-193. `P3.rag-ui-2b` frontend hardening and helper extraction is now complete.
-194. The implementation files for `P3.rag-ui-2b` are `console/src/pages/Game/GameProject.tsx`, `console/src/pages/Game/GameProject.module.less`, and `console/src/pages/Game/ragUiHelpers.ts`.
-195. `P3.rag-ui-2b` extracts pure helper logic for recent-question history shaping, copy-result text assembly, citation-value formatting, and guardrail-warning classification.
-196. `P3.rag-ui-2b` adds only minimal narrow-screen polish for example buttons, result actions, and citation metadata wrapping.
-197. The effective frontend request payload remains limited to `query`, and Ask-button `knowledge.read` disablement plus handler-side guard remain unchanged.
-198. `P3.rag-ui-2b` keeps recent history, copied output, and citation focus frontend-local only and does not add save, accept, publish, or formal-knowledge writes.
-199. `P3.rag-ui-2b` adds no backend code, no request-schema changes, no router provider-selection changes, no runtime-provider expansion, and no real external provider integration.
-200. No frontend test framework was added in `P3.rag-ui-2b` because the console workspace does not already define one.
-201. Targeted frontend ESLint passed for `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/ragUiHelpers.ts`.
-202. Console TypeScript no-emit validation passed: `./node_modules/.bin/tsc -b --noEmit`.
-203. Focused backend RAG regression passed: `70 passed`.
-204. `P3.rag-ui-2b` `git diff --check`: clean.
-205. `P3.rag-ui-3` product experience consolidation planning is now complete as a docs-only slice.
-206. The planning file for `P3.rag-ui-3` is `docs/tasks/knowledge-p3-rag-ui-3-product-experience-consolidation-plan-2026-05-08.md`.
-207. `P3.rag-ui-3` records that the current RAG MVP entry should remain inside GameProject rather than splitting into a standalone Knowledge Q&A surface at this stage.
-208. `P3.rag-ui-3` defines `answer` as the primary success state, `insufficient_context` as the primary recoverable failure state, and `no_current_release` as the primary readiness blocker state.
-209. `P3.rag-ui-3` records that `insufficient_context` should gain read-only next-step guidance before any provider credential or transport work is considered.
-210. `P3.rag-ui-3` keeps precise numeric or row-level questions routed toward structured query and keeps change or edit intent routed toward numeric workbench.
-211. `P3.rag-ui-3` recommends future citation enhancement as display grouping only and does not authorize artifact or raw-source reading behavior.
-212. `P3.rag-ui-3` records that any future citation reading view requires a separate boundary review before implementation.
-213. `P3.rag-ui-3` keeps recent-question history component-local and non-persistent by default.
-214. `P3.rag-ui-3` treats expanded copy affordances such as citation summary or markdown copy as future planning only and not the immediate next slice.
-215. `P3.rag-ui-3` records a minimum future frontend test-strategy direction including helper tests, component smoke coverage when lightweight infrastructure exists, and payload-boundary checks, but does not introduce a new test framework in this slice.
-216. `P3.rag-ui-3` explicitly recommends `P3.rag-ui-3a` as the next implementation slice.
-217. `P3.rag-ui-3a` is recommended to remain frontend-only and to focus on three-state display hierarchy refinement, read-only next-step guidance, structured-query and workbench entry affordance planning, and citation display grouping planning.
-218. `P3.rag-ui-3` explicitly recommends frontend-only product experience refinement before provider credential or transport work.
-219. `P3.rag-ui-3` keeps provider or model control closed, keeps the effective request payload limited to `query`, keeps router provider selection unchanged, and keeps runtime providers limited to `deterministic_mock` and `disabled`.
-220. `P3.rag-ui-3` keeps ordinary RAG Q&A separate from administrator acceptance and does not allow recent history, copy result, citation review, structured-query routing, or workbench routing to become acceptance or formal-knowledge entry paths.
-221. `P3.rag-ui-3` is docs-only, does not rerun pytest, does not rerun TypeScript checks, and limits post-edit validation to `git diff --check`.
-222. `P3.rag-ui-3a` frontend-only product experience refinement is now complete.
-223. The implementation files for `P3.rag-ui-3a` are `console/src/pages/Game/GameProject.tsx`, `console/src/pages/Game/GameProject.module.less`, and `console/src/pages/Game/ragUiHelpers.ts`.
-224. `P3.rag-ui-3a` keeps the RAG MVP entry inside the existing GameProject surface and does not create a standalone Knowledge Q&A page.
-225. `P3.rag-ui-3a` refines the three-state hierarchy so `answer` remains the primary success content, `insufficient_context` is a recoverable failure state, and `no_current_release` is a readiness blocker state.
-226. `P3.rag-ui-3a` keeps answer body primary, while release metadata, warnings, and citations remain auxiliary information.
-227. `P3.rag-ui-3a` adds read-only next-step hints for `insufficient_context` and does not auto-retry or fabricate an answer.
-228. `P3.rag-ui-3a` keeps structured-query and workbench guardrail copy in place and adds read-only compact path labels only.
-229. `P3.rag-ui-3a` does not navigate routes, does not write URLs, and does not trigger a workbench session.
-230. `P3.rag-ui-3a` groups citations by `source_type` for display only and derives that grouping only from returned `ragAnswer.citations`.
-231. `P3.rag-ui-3a` does not synthesize citations, does not read artifact or raw source content, and does not add a new backend endpoint.
-232. `P3.rag-ui-3a` keeps existing example questions, recent-question history, copy result, and local citation focus in place.
-233. The effective frontend request payload remains limited to `query`, and `answerRagQuestion(...)` still sends only `{ query }`.
-234. Ask-button `knowledge.read` disablement and handler-side `knowledge.read` guard remain unchanged in `P3.rag-ui-3a`.
-235. `P3.rag-ui-3a` adds no backend code, no request-schema changes, no router provider-selection changes, no runtime-provider expansion, and no real external provider integration.
-236. Targeted frontend ESLint passed for `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/ragUiHelpers.ts`.
-237. Console TypeScript no-emit validation passed: `./node_modules/.bin/tsc -b --noEmit`.
-238. Focused backend RAG regression passed: `70 passed`.
-239. `P3.rag-ui-3a` `git diff --check`: clean.
-240. `P3.8` RAG router or structured-query or workbench routing boundary planning is now complete as a docs-only slice.
-241. The planning file for `P3.8` is `docs/tasks/knowledge-p3-8-rag-routing-boundary-review-2026-05-09.md`.
-242. `P3.8` keeps ordinary current-release RAG Q&A as a read-only explanatory surface and does not allow ordinary Q&A to create test plans, release candidates, formal map, release build, or release publish actions.
-243. `P3.8` keeps structured-query routing limited to exact numeric, row-level, field-level, and value-level lookup intent only.
-244. `P3.8` keeps workbench routing limited to change or edit intent only.
-245. `P3.8` keeps administrator acceptance outside ordinary RAG Q&A, recent-question history, copy result, citation review, and routing hints.
-246. `P3.8` records that any future `Go to structured query` or `Go to workbench` action must be an explicit frontend user action and must not auto-submit, auto-write a test plan, auto-create a candidate, auto-build, or auto-publish.
-247. `P3.8` keeps the product-facing query payload limited to `{ query }` only and does not authorize provider name, model name, provider hint, or service config in request body.
-248. `P3.8` keeps router provider selection forbidden and reconfirms that router code must not call `get_rag_model_client(...)` directly.
-249. `P3.8` keeps citation grouping and local citation focus derived only from returned citations and authorizes no new citation artifact or raw-source reading endpoint.
-250. `P3.8` adds no `src/` change, no `console/src/` change, no new API, no real provider, and no RAG request-schema change.
-251. `P3.8` is docs-only and does not rerun pytest.
-252. `P3.8b` workbench affordance boundary review is now complete as a docs-only slice.
-253. The review file for `P3.8b` is `docs/tasks/knowledge-p3-8b-workbench-affordance-boundary-review-2026-05-09.md`.
-254. `P3.8b` keeps the future `Go to workbench` affordance as a workbench-only routing review and does not authorize a combined structured-query plus workbench implementation.
-255. `P3.8b` keeps the first-version workbench affordance limited to explicit workbench or change-intent guardrail surfaces only.
-256. `P3.8b` explicitly rejects generic `insufficient_context` next-step hints as a first-version trigger for the workbench affordance.
-257. `P3.8b` keeps any future affordance user-triggered only and forbids automatic redirect, auto-submit, automatic test-plan creation, automatic candidate creation, automatic build, and automatic publish.
-258. `P3.8b` keeps the recommended first version limited to plain navigation to `/numeric-workbench` only.
-259. `P3.8b` does not recommend freeform-query handoff because current NumericWorkbench deep-link support is explicit only for `session`, `table`, `row`, and `field`.
-260. `P3.8b` keeps `workbench.read` as the destination-entry permission and keeps `workbench.test.write` as the later mutation permission without requiring `knowledge.build` or `knowledge.publish`.
-261. `P3.8b` keeps structured query outside this slice as a separate destination-boundary problem.
-262. `P3.8b` adds no `src/` change, no `console/src/` change, no new API, no real provider, and no request-schema change.
-263. `P3.8b` is docs-only and does not rerun pytest.
-264. `P3.8c` frontend-only `Go to workbench` affordance implementation is now complete.
-265. The closeout file for `P3.8c` is `docs/tasks/knowledge-p3-8c-go-to-workbench-closeout-2026-05-09.md`.
-266. `P3.8c` adds the workbench affordance only in the static workbench guardrail block and in warning rows using the existing workbench warning.
-267. `P3.8c` does not add the affordance to generic `insufficient_context` next-step hints.
-268. `P3.8c` keeps navigation explicit user click only and navigates only to `/numeric-workbench`.
-269. `P3.8c` does not pass freeform query text, does not auto-submit workbench chat or changes, and does not auto-create test plans or candidates.
-270. `P3.8c` does not build, publish, or trigger SVN behavior.
-271. `P3.8c` preserves local trusted fallback when capability context is absent.
-272. `P3.8c` disables the button only when capability context exists and `workbench.read` is missing, with fixed copy `Requires workbench.read permission.`.
-273. `P3.8c` does not require `knowledge.build` or `knowledge.publish`, and `workbench.test.write` continues to govern later workbench write behavior only.
-274. `P3.8c` adds no backend code, no new API, no request-schema change, no provider or model control, no structured-query affordance, and no real LLM integration.
-275. Frontend TypeScript no-emit validation ran with no output.
-276. Targeted ESLint for `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/ragUiHelpers.ts` ran with no output.
-277. `git diff --check` ran with no output.
-278. Editor diagnostics reported no errors in `GameProject.tsx`, `ragUiHelpers.ts`, or `GameProject.module.less`.
-279. No GameProject or RAG UI frontend test suite was found for this slice, so no frontend component test was run.
-280. No backend pytest was run because this slice did not touch backend code.
-281. `P3.8d` structured-query destination discovery and boundary review is now complete as a docs-only slice.
-282. The review file for `P3.8d` is `docs/tasks/knowledge-p3-8d-structured-query-destination-discovery-2026-05-09.md`.
-283. `P3.8d` reconfirms that the current frontend has no dedicated structured-query page, route, tab, or reusable component.
-284. `P3.8d` reconfirms that `GameProject.tsx` and `ragUiHelpers.ts` still expose only read-only structured-query labels and warning copy.
-285. `P3.8d` confirms that legacy `gameApi.query(...)` has no visible call site in `console/src` and is not a sufficient structured-query product destination by itself.
-286. `P3.8d` rejects NumericWorkbench as the structured-query destination because NumericWorkbench remains the change or edit surface.
-287. `P3.8d` rejects IndexMap as the structured-query destination because IndexMap is an index-browsing surface rather than a query-execution surface.
-288. `P3.8d` recommends a new minimal structured-query panel inside the existing GameProject surface as the first explicit destination contract.
-289. `P3.8d` keeps the current read-only structured-query label in place and does not recommend immediate frontend button implementation.
-290. `P3.8d` keeps any future structured-query entry explicit-click only, non-submitting by default, non-writing by default, and separate from `knowledge.read`, `knowledge.build`, and `knowledge.publish` gating.
-291. `P3.8d` preserves the `{ query }` request boundary, adds no backend `src` change, no `console/src` change, no new API, no provider or model control, and no real LLM integration.
-292. `P3.8d` is docs-only and does not rerun pytest.
-293. `P3.8e` minimal structured-query panel contract review is now complete as a docs-only slice.
-294. The contract file for `P3.8e` is `docs/tasks/knowledge-p3-8e-structured-query-panel-contract-2026-05-09.md`.
-295. `P3.8e` freezes the first-version structured-query destination as a minimal panel inside the existing GameProject surface rather than a new global route.
-296. `P3.8e` limits the panel to exact numeric, row-level, field-level, and value-level lookup only and keeps change or edit or modify intent in workbench.
-297. `P3.8e` allows a future `Open structured query` affordance only as explicit user click in explicit structured-query warning contexts, and opening the panel must not auto-submit.
-298. `P3.8e` allows future prefill of the current RAG query only as local input state and explicitly forbids auto-submit.
-299. `P3.8e` keeps first-version structured-query results read-only and keeps test-plan creation, candidate creation, build, publish, and mutation behavior out of the panel.
-300. `P3.8e` records that the current `gameApi.query(...)` wrapper is not yet a sufficient product contract by itself because the frontend lacks typed request or response models, documented mode semantics, and a frozen read-only result shape.
-301. `P3.8e` therefore defers direct panel-submit binding to a later narrow API contract or typing review rather than authorizing immediate frontend implementation.
-302. `P3.8e` keeps `knowledge.build` and `knowledge.publish` out of the panel-entry requirement and recommends a dedicated structured-query read capability rather than treating `knowledge.read` as the permanent contract.
-303. `P3.8e` preserves the `{ query }` RAG payload boundary, changes no backend `src`, changes no `console/src`, adds no new API, and does not change `P3.8c` workbench affordance behavior.
-304. `P3.8e` is docs-only and does not rerun pytest.
-305. `P3.8f` structured-query submit contract and typing review is now complete as a docs-only slice.
-306. The review file for `P3.8f` is `docs/tasks/knowledge-p3-8f-structured-query-submit-contract-2026-05-09.md`.
-307. `P3.8f` confirms that `gameApi.query(agentId, q, mode)` currently sends `POST /agents/{agentId}/game/index/query`.
-308. `P3.8f` confirms that the current backend request shape is only `q` plus `mode`, with default mode `auto`.
-309. `P3.8f` confirms that the current backend response shape is an untyped dict with top-level `mode` and `results` only and with observed branches `not_configured`, `exact_table`, `exact_field`, and `semantic_stub`.
-310. `P3.8f` confirms that there is no stable backend enum or frontend type union for mode today and that `auto` is the only mode with explicit backend logic.
-311. `P3.8f` freezes the first-version panel submit contract to query plus fixed `auto` mode only and forbids provider, model, provider hint, service config, and write-oriented flags.
-312. `P3.8f` records that the current response is too loose for direct product use and therefore recommends a frontend typed wrapper or normalization layer over the existing endpoint rather than an immediate backend change.
-313. `P3.8f` freezes a normalized read-only panel response contract with explicit request mode, result mode, status, message, warnings, items, and error fields, plus table-result and field-result display variants.
-314. `P3.8f` allows source-like display only from already returned `source_path` and field `references` and authorizes no new citation artifact or raw-source endpoint.
-315. `P3.8f` keeps prefill allowed only as local input state and keeps submit explicit user click only.
-316. `P3.8f` keeps submit read-only and forbids test-plan creation, candidate creation, build, publish, and mutation behavior.
-317. `P3.8f` keeps `knowledge.build` and `knowledge.publish` out of the submit requirement and allows temporary `knowledge.read` only as an interim bridge until a dedicated structured-query read capability exists.
-318. `P3.8f` preserves the `{ query }` RAG boundary, changes no backend `src`, changes no `console/src`, adds no new API, and does not change `P3.8c` workbench affordance behavior.
-319. `P3.8f` is docs-only and does not rerun pytest.
-320. `P3.8g` minimal structured-query panel implementation is now complete as a frontend-only slice.
-321. The closeout file for `P3.8g` is `docs/tasks/knowledge-p3-8g-minimal-structured-query-panel-closeout-2026-05-09.md`.
-322. `P3.8g` adds `Open structured query` only to the static structured-query guardrail block and the existing `STRUCTURED_FACT_WARNING` warning row in GameProject.
-323. `P3.8g` keeps panel opening explicit user click only and allows prefill from the current RAG query only as local panel state when the local draft is still empty.
-324. `P3.8g` keeps submit explicit user click only, keeps submit disabled until a `selectedAgent` exists, and reuses `POST /agents/{agentId}/game/index/query` with only query plus fixed `auto` mode.
-325. `P3.8g` lands a frontend typed wrapper and normalization layer so the UI no longer directly depends on the raw untyped `/game/index/query` response shape.
-326. `P3.8g` normalizes read-only result display into table-result and field-result variants only.
-327. `P3.8g` keeps source-like display limited to already returned `source_path`, `references`, and `tags` fields and adds no raw-source or citation endpoint.
-328. `P3.8g` keeps local trusted fallback when explicit capability context is absent.
-329. `P3.8g` disables both `Open structured query` and panel submit when explicit capability context exists but `knowledge.read` is missing and uses `Requires knowledge.read permission.` as the disabled copy.
-330. `P3.8g` keeps `knowledge.build` and `knowledge.publish` out of the panel gate.
-331. `P3.8g` preserves the `{ query }` RAG boundary, changes no backend `src`, adds no backend API, changes no provider selection, and does not change `P3.8c` workbench affordance behavior.
-332. `P3.8g` ran frontend TypeScript no-emit, targeted ESLint, and `git diff --check`, and no frontend component test was run because no existing GameProject or RAG UI frontend test suite was found for this slice.
-333. `P3.8h` RAG MVP interaction validation and closeout is now complete.
-334. The closeout file for `P3.8h` is `docs/tasks/knowledge-p3-8h-rag-mvp-interaction-validation-2026-05-09.md`.
-335. `P3.8h` confirms that RAG Ask still sends only `{ query }`.
-336. `P3.8h` confirms that `Open structured query` appears only in the static structured guardrail block and the `STRUCTURED_FACT_WARNING` warning row.
-337. `P3.8h` confirms that opening structured query only opens the local panel and does not auto-submit, and that prefill remains local input-state only.
-338. `P3.8h` confirms that structured-query submit remains fixed to `auto` mode and that result rendering remains read-only table-result or field-result display only.
-339. `P3.8h` confirms that no test-plan, candidate, build, publish, or SVN behavior was added to the interaction surface.
-340. `P3.8h` confirms that `Go to workbench` appears only in the static workbench guardrail block and the `CHANGE_QUERY_WARNING` warning row and still navigates only to `/numeric-workbench` with no freeform-query handoff.
-341. `P3.8h` confirms that explicit capability context missing `knowledge.read` disables Ask, `Open structured query`, and `Submit structured query`, and that explicit capability context missing `workbench.read` disables `Go to workbench`.
-342. `P3.8h` confirms that capability-context absence keeps local trusted fallback intact.
-343. `P3.8h` ran frontend TypeScript no-emit, targeted ESLint, and `git diff --check` successfully.
-344. `P3.8h` attempted a minimal browser smoke and reached console-shell load only; full in-app interaction smoke was limited by local frontend-backend environment issues rather than by new code defects in this slice.
-345. `P3.8h` changes only `docs/tasks`, adds no backend code, adds no frontend behavior, adds no API, and allows `P3.8` MVP interaction to be treated as closed.
-346. Final P3 RAG MVP gate review confirms that the current worktree still keeps all `P3.8` interaction behavior inside the frozen request, provider, router, and citation boundaries.
-347. Final gate frontend validation reran successfully: TypeScript no-emit passed, targeted ESLint passed, and `git diff --check` passed.
-348. Final gate backend focused pytest passed for the current RAG interaction slice: `56 passed` for `test_knowledge_rag_context.py`, `test_knowledge_rag_answer.py`, and `test_game_knowledge_rag_router.py`.
-349. Final gate backend focused pytest also passed for the current RAG model/provider slice: `24 passed` for `test_knowledge_rag_provider_selection.py`, `test_knowledge_rag_model_registry.py`, `test_knowledge_rag_model_client.py`, and `test_knowledge_rag_external_model_client.py`.
-350. Final gate confirms that no Python file is touched in the current P3.8 worktree, so no Python-side NUL-byte check was required for this round.
-351. Final gate keeps real LLM integration, provider or model UI, raw-source or citation endpoints, and automatic test-plan, candidate, build, or publish behavior out of scope.
-352. Final gate finds no remaining blocker inside the validated P3.8 MVP interaction surface and considers the slice commit-ready.
+135. `P3.rag-model-3b`, now also recorded as `P3.external-provider-1`, backend external provider adapter skeleton implementation is complete.
+136. The backend skeleton module is `src/ltclaw_gy_x/game/knowledge_rag_external_model_client.py`.
+137. The focused pytest coverage for this slice is `tests/unit/game/test_knowledge_rag_external_model_client.py`, `tests/unit/game/test_knowledge_rag_model_registry.py`, `tests/unit/game/test_knowledge_rag_model_client.py`, and `tests/unit/game/test_knowledge_rag_answer.py`.
+138. `P3.external-provider-1` implements only a backend adapter skeleton behind the existing client and answer-service boundaries.
+139. The skeleton does not connect a real LLM, does not perform real HTTP, does not read real credential material, and does not read environment variables.
+140. Runtime providers remain limited to `deterministic_mock` and `disabled`, and there is still no runtime external-provider rollout.
+141. Router remains unchanged as a backend-owned config handoff surface only, request schema remains unchanged, and frontend remains unchanged.
+142. Provider read authority remains bounded: the client still does not read raw source, pending state, SVN, `candidate_evidence`, or release artifacts directly.
+143. Citation validation remains restricted to `context.citations` in the answer service, and retrieval or context boundaries were not widened.
+144. `P3.external-provider-1` is adapter skeleton only and is not real external provider integration.
+145. Recorded implementation validation for this slice: focused pytest `57 passed in 0.55s`.
+146. Recorded implementation validation for this slice: NUL checks are `0` for `knowledge_rag_external_model_client.py`, `test_knowledge_rag_external_model_client.py`, `test_knowledge_rag_answer.py`, and `test_knowledge_rag_model_client.py`.
+147. Recorded implementation validation for this slice: `git diff --check` reported no whitespace error, with only pre-existing unrelated line-ending warnings.
+148. `P3.external-provider-2` backend credential/config skeleton implementation is now complete.
+149. The implementation remains skeleton only and is not real external provider integration.
+150. The implementation adds backend-owned config shape only, including `enabled`, `provider_name`, optional `model_name`, `timeout_seconds`, optional `base_url`, optional `proxy`, optional `max_output_tokens`, `allowed_providers`, `allowed_models`, and optional env entry shape.
+151. `enabled` defaults to false, so external behavior remains disabled-by-default.
+152. Runtime providers still remain only `deterministic_mock` and `disabled`, and there is still no runtime provider rollout.
+153. Allowlist validation now runs before credential resolver and transport, so allowlist failure degrades safely without entering the external call path.
+154. Missing credential, disabled state, and allowlist failure all return safe non-answer behavior and do not generate a fake answer.
+155. Request-like `provider_name`, `model_name`, and `api_key` fields still do not participate in provider selection.
+156. `no_current_release` and `insufficient_context` still do not trigger provider/config/credential path execution.
+157. The slice does not add frontend provider/model UI, does not change the RAG request schema, does not add API, and does not connect a real LLM.
+158. Recorded implementation validation for this slice: focused pytest `59 passed in 1.04s`.
+159. Recorded implementation validation for this slice: NUL checks are `0` for the touched Python files.
+160. Recorded implementation validation for this slice: `git diff --check` reported no whitespace error for this slice, with only pre-existing unrelated CRLF/LF warnings.
+161. The next recommended step is backend service config handoff or assembly-point boundary review rather than direct runtime rollout.
+162. `P3.external-provider-3` backend service config wiring boundary review is now complete as a docs-only slice.
+163. The approved live handoff entry remains `build_rag_answer_with_service_config(...)`.
+164. The preferred live handoff anchor remains a backend-owned injected service object, currently `game_service`, or a backend-owned config object derived from it.
+165. Router may obtain backend-owned service/app objects only to hand off an existing backend-owned object and remains forbidden from direct `get_rag_model_client(...)` calls, provider/model resolution, request-hint parsing, resolver creation, and transport creation.
+166. The answer service remains the only approved service-config interpretation point and the only approved warning-merge point.
+167. `no_current_release` and `insufficient_context` must still return before any service-config or provider resolution.
+168. `ProviderManager.active_model` remains out of scope.
+169. Env reads remain unimplemented and still cannot become request-time provider selection.
+170. Runtime providers still remain only `deterministic_mock` and `disabled`, and external provider still cannot enter runtime allowlist without a later dedicated rollout review.
+171. The next recommended step is backend service config wiring skeleton implementation rather than runtime rollout.
+
+172. `P3.rag-ui-1` minimal product-entry UI on the existing answer endpoint is now complete.
+173. The implementation files for `P3.rag-ui-1` are `console/src/api/types/game.ts`, `console/src/api/modules/gameKnowledgeRelease.ts`, `console/src/pages/Game/GameProject.tsx`, and `console/src/pages/Game/GameProject.module.less`.
+174. `P3.rag-ui-1` adds the smallest GameProject knowledge Q&A surface that calls the existing `POST /api/agents/{agentId}/game/knowledge/rag/answer` endpoint.
+175. The frontend request remains limited to `query` and does not expose provider or model control.
+176. `P3.rag-ui-1` renders backend-returned `mode`, `answer`, `release_id`, `citations`, and `warnings`, and explicitly surfaces `no_current_release` and `insufficient_context` states.
+177. `P3.rag-ui-1` keeps structured-query and workbench-flow guardrail messaging explicit in the UI.
+178. The minimal Ask entry is disabled under explicit capability context when the member lacks `knowledge.read`, and the handler also blocks the API call on the same condition.
+179. `P3.rag-ui-1` adds no backend code, no router contract changes, no request-schema changes, no provider registry changes, and no real external provider integration.
+180. VS Code Problems check on touched frontend files reported no errors.
+181. Console TypeScript no-emit validation passed through the local binary: `./node_modules/.bin/tsc -b --noEmit`.
+182. Focused backend RAG regression passed: `70 passed`.
+183. `pnpm build` could not run in the current environment because `pnpm` is unavailable.
+184. `npm run build` could not run in the current environment because `npm` is unavailable.
+185. `P3.rag-ui-1` `git diff --check`: clean.
+186. `P3.rag-ui-2` product-flow UX enhancement planning is now complete as a docs-only slice.
+187. The planning file for `P3.rag-ui-2` is `docs/tasks/knowledge-p3-rag-ui-2-product-flow-plan-2026-05-08.md`.
+188. `P3.rag-ui-2` recommends prioritizing pure frontend UX enhancement on the existing answer endpoint before provider credential or transport boundary work.
+189. The planned candidate features are recent-question history, static example questions, copy answer, and citation locate or jump.
+190. The plan requires recent-question history to remain local UI state or session-level frontend state only and not enter formal knowledge, release artifacts, or SVN-adjacent flows.
+191. The plan requires example questions to remain static UI suggestions only and not act as provider hints or prompt injection.
+192. The plan requires copy-answer behavior to remain a frontend-only convenience action and not write back into knowledge storage.
+193. The plan requires citation locate or jump to stay limited to citations already returned by the backend and forbids frontend artifact or raw-source reads.
+194. The plan keeps Ask-button `knowledge.read` disablement and handler-side `knowledge.read` guard unchanged.
+195. The plan keeps the effective minimal request payload at `query` only and does not authorize provider, model, provider-hint, or service-config request fields.
+196. The plan keeps router/provider boundaries unchanged: no request-schema change, no router call to `get_rag_model_client(...)`, no change to `build_rag_answer_with_service_config(...)` as the live handoff entry, and no runtime-provider expansion beyond `deterministic_mock` and `disabled`.
+197. The plan keeps real external provider integration, `ProviderManager.active_model`, environment-variable provider sources, and frontend provider/model settings out of scope.
+198. The plan keeps structured-query and workbench-flow guardrail copy required in the UI and keeps ordinary RAG Q&A separate from administrator acceptance workflows.
+199. `P3.rag-ui-2` is docs-only and does not modify `src/` or `console/src/` files.
+200. This docs-only planning pass does not rerun pytest.
+201. `P3.rag-ui-2a` frontend UX enhancement implementation is now complete.
+202. The implementation files for `P3.rag-ui-2a` are `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/GameProject.module.less`.
+203. `P3.rag-ui-2a` adds all four planned UX features: static example questions, recent question history, copy result, and local citation focus.
+204. Example questions only populate the existing query input and do not auto-submit.
+205. Recent-question history remains component-local only, stores only query plus mode plus timestamp, is capped at 5 items, deduplicates by query, and is not persisted.
+206. Copy-result uses the browser clipboard API only and does not write files, knowledge artifacts, formal map, release notes, or release assets.
+207. Citation focus is local scroll or highlight over the returned citation list only and does not read artifacts, raw source, or any new backend endpoint.
+208. The effective frontend request payload remains limited to `query` and does not expose provider or model control.
+209. Ask-button `knowledge.read` disablement and handler-side `knowledge.read` guard remain in place.
+210. `P3.rag-ui-2a` adds no backend code, no request-schema changes, no router provider-selection changes, no runtime-provider expansion, and no real external provider integration.
+211. VS Code Problems check on touched frontend files reported no errors.
+212. Focused backend RAG regression passed: `70 passed`.
+213. Console TypeScript no-emit validation passed: `./node_modules/.bin/tsc -b --noEmit`.
+214. `P3.rag-ui-2a` `git diff --check`: clean.
+215. Optional `./node_modules/.bin/vite build` could not complete because Rollup's native optional dependency failed to load with a macOS code-signature or optional-dependency error.
+216. `P3.rag-ui-2b` frontend hardening and helper extraction is now complete.
+217. The implementation files for `P3.rag-ui-2b` are `console/src/pages/Game/GameProject.tsx`, `console/src/pages/Game/GameProject.module.less`, and `console/src/pages/Game/ragUiHelpers.ts`.
+218. `P3.rag-ui-2b` extracts pure helper logic for recent-question history shaping, copy-result text assembly, citation-value formatting, and guardrail-warning classification.
+219. `P3.rag-ui-2b` adds only minimal narrow-screen polish for example buttons, result actions, and citation metadata wrapping.
+220. The effective frontend request payload remains limited to `query`, and Ask-button `knowledge.read` disablement plus handler-side guard remain unchanged.
+221. `P3.rag-ui-2b` keeps recent history, copied output, and citation focus frontend-local only and does not add save, accept, publish, or formal-knowledge writes.
+222. `P3.rag-ui-2b` adds no backend code, no request-schema changes, no router provider-selection changes, no runtime-provider expansion, and no real external provider integration.
+223. No frontend test framework was added in `P3.rag-ui-2b` because the console workspace does not already define one.
+224. Targeted frontend ESLint passed for `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/ragUiHelpers.ts`.
+225. Console TypeScript no-emit validation passed: `./node_modules/.bin/tsc -b --noEmit`.
+226. Focused backend RAG regression passed: `70 passed`.
+227. `P3.rag-ui-2b` `git diff --check`: clean.
+228. `P3.rag-ui-3` product experience consolidation planning is now complete as a docs-only slice.
+229. The planning file for `P3.rag-ui-3` is `docs/tasks/knowledge-p3-rag-ui-3-product-experience-consolidation-plan-2026-05-08.md`.
+230. `P3.rag-ui-3` records that the current RAG MVP entry should remain inside GameProject rather than splitting into a standalone Knowledge Q&A surface at this stage.
+231. `P3.rag-ui-3` defines `answer` as the primary success state, `insufficient_context` as the primary recoverable failure state, and `no_current_release` as the primary readiness blocker state.
+232. `P3.rag-ui-3` records that `insufficient_context` should gain read-only next-step guidance before any provider credential or transport work is considered.
+233. `P3.rag-ui-3` keeps precise numeric or row-level questions routed toward structured query and keeps change or edit intent routed toward numeric workbench.
+234. `P3.rag-ui-3` recommends future citation enhancement as display grouping only and does not authorize artifact or raw-source reading behavior.
+235. `P3.rag-ui-3` records that any future citation reading view requires a separate boundary review before implementation.
+236. `P3.rag-ui-3` keeps recent-question history component-local and non-persistent by default.
+237. `P3.rag-ui-3` treats expanded copy affordances such as citation summary or markdown copy as future planning only and not the immediate next slice.
+238. `P3.rag-ui-3` records a minimum future frontend test-strategy direction including helper tests, component smoke coverage when lightweight infrastructure exists, and payload-boundary checks, but does not introduce a new test framework in this slice.
+239. `P3.rag-ui-3` explicitly recommends `P3.rag-ui-3a` as the next implementation slice.
+240. `P3.rag-ui-3a` is recommended to remain frontend-only and to focus on three-state display hierarchy refinement, read-only next-step guidance, structured-query and workbench entry affordance planning, and citation display grouping planning.
+241. `P3.rag-ui-3` explicitly recommends frontend-only product experience refinement before provider credential or transport work.
+242. `P3.rag-ui-3` keeps provider or model control closed, keeps the effective request payload limited to `query`, keeps router provider selection unchanged, and keeps runtime providers limited to `deterministic_mock` and `disabled`.
+243. `P3.rag-ui-3` keeps ordinary RAG Q&A separate from administrator acceptance and does not allow recent history, copy result, citation review, structured-query routing, or workbench routing to become acceptance or formal-knowledge entry paths.
+244. `P3.rag-ui-3` is docs-only, does not rerun pytest, does not rerun TypeScript checks, and limits post-edit validation to `git diff --check`.
+245. `P3.rag-ui-3a` frontend-only product experience refinement is now complete.
+246. The implementation files for `P3.rag-ui-3a` are `console/src/pages/Game/GameProject.tsx`, `console/src/pages/Game/GameProject.module.less`, and `console/src/pages/Game/ragUiHelpers.ts`.
+247. `P3.rag-ui-3a` keeps the RAG MVP entry inside the existing GameProject surface and does not create a standalone Knowledge Q&A page.
+248. `P3.rag-ui-3a` refines the three-state hierarchy so `answer` remains the primary success content, `insufficient_context` is a recoverable failure state, and `no_current_release` is a readiness blocker state.
+249. `P3.rag-ui-3a` keeps answer body primary, while release metadata, warnings, and citations remain auxiliary information.
+250. `P3.rag-ui-3a` adds read-only next-step hints for `insufficient_context` and does not auto-retry or fabricate an answer.
+251. `P3.rag-ui-3a` keeps structured-query and workbench guardrail copy in place and adds read-only compact path labels only.
+252. `P3.rag-ui-3a` does not navigate routes, does not write URLs, and does not trigger a workbench session.
+253. `P3.rag-ui-3a` groups citations by `source_type` for display only and derives that grouping only from returned `ragAnswer.citations`.
+254. `P3.rag-ui-3a` does not synthesize citations, does not read artifact or raw source content, and does not add a new backend endpoint.
+255. `P3.rag-ui-3a` keeps existing example questions, recent-question history, copy result, and local citation focus in place.
+256. The effective frontend request payload remains limited to `query`, and `answerRagQuestion(...)` still sends only `{ query }`.
+257. Ask-button `knowledge.read` disablement and handler-side `knowledge.read` guard remain unchanged in `P3.rag-ui-3a`.
+258. `P3.rag-ui-3a` adds no backend code, no request-schema changes, no router provider-selection changes, no runtime-provider expansion, and no real external provider integration.
+259. Targeted frontend ESLint passed for `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/ragUiHelpers.ts`.
+260. Console TypeScript no-emit validation passed: `./node_modules/.bin/tsc -b --noEmit`.
+261. Focused backend RAG regression passed: `70 passed`.
+262. `P3.rag-ui-3a` `git diff --check`: clean.
+263. `P3.8` RAG router or structured-query or workbench routing boundary planning is now complete as a docs-only slice.
+264. The planning file for `P3.8` is `docs/tasks/knowledge-p3-8-rag-routing-boundary-review-2026-05-09.md`.
+265. `P3.8` keeps ordinary current-release RAG Q&A as a read-only explanatory surface and does not allow ordinary Q&A to create test plans, release candidates, formal map, release build, or release publish actions.
+266. `P3.8` keeps structured-query routing limited to exact numeric, row-level, field-level, and value-level lookup intent only.
+267. `P3.8` keeps workbench routing limited to change or edit intent only.
+268. `P3.8` keeps administrator acceptance outside ordinary RAG Q&A, recent-question history, copy result, citation review, and routing hints.
+269. `P3.8` records that any future `Go to structured query` or `Go to workbench` action must be an explicit frontend user action and must not auto-submit, auto-write a test plan, auto-create a candidate, auto-build, or auto-publish.
+270. `P3.8` keeps the product-facing query payload limited to `{ query }` only and does not authorize provider name, model name, provider hint, or service config in request body.
+271. `P3.8` keeps router provider selection forbidden and reconfirms that router code must not call `get_rag_model_client(...)` directly.
+272. `P3.8` keeps citation grouping and local citation focus derived only from returned citations and authorizes no new citation artifact or raw-source reading endpoint.
+273. `P3.8` adds no `src/` change, no `console/src/` change, no new API, no real provider, and no RAG request-schema change.
+274. `P3.8` is docs-only and does not rerun pytest.
+275. `P3.8b` workbench affordance boundary review is now complete as a docs-only slice.
+276. The review file for `P3.8b` is `docs/tasks/knowledge-p3-8b-workbench-affordance-boundary-review-2026-05-09.md`.
+277. `P3.8b` keeps the future `Go to workbench` affordance as a workbench-only routing review and does not authorize a combined structured-query plus workbench implementation.
+278. `P3.8b` keeps the first-version workbench affordance limited to explicit workbench or change-intent guardrail surfaces only.
+279. `P3.8b` explicitly rejects generic `insufficient_context` next-step hints as a first-version trigger for the workbench affordance.
+280. `P3.8b` keeps any future affordance user-triggered only and forbids automatic redirect, auto-submit, automatic test-plan creation, automatic candidate creation, automatic build, and automatic publish.
+281. `P3.8b` keeps the recommended first version limited to plain navigation to `/numeric-workbench` only.
+282. `P3.8b` does not recommend freeform-query handoff because current NumericWorkbench deep-link support is explicit only for `session`, `table`, `row`, and `field`.
+283. `P3.8b` keeps `workbench.read` as the destination-entry permission and keeps `workbench.test.write` as the later mutation permission without requiring `knowledge.build` or `knowledge.publish`.
+284. `P3.8b` keeps structured query outside this slice as a separate destination-boundary problem.
+285. `P3.8b` adds no `src/` change, no `console/src/` change, no new API, no real provider, and no request-schema change.
+286. `P3.8b` is docs-only and does not rerun pytest.
+287. `P3.8c` frontend-only `Go to workbench` affordance implementation is now complete.
+288. The closeout file for `P3.8c` is `docs/tasks/knowledge-p3-8c-go-to-workbench-closeout-2026-05-09.md`.
+289. `P3.8c` adds the workbench affordance only in the static workbench guardrail block and in warning rows using the existing workbench warning.
+290. `P3.8c` does not add the affordance to generic `insufficient_context` next-step hints.
+291. `P3.8c` keeps navigation explicit user click only and navigates only to `/numeric-workbench`.
+292. `P3.8c` does not pass freeform query text, does not auto-submit workbench chat or changes, and does not auto-create test plans or candidates.
+293. `P3.8c` does not build, publish, or trigger SVN behavior.
+294. `P3.8c` preserves local trusted fallback when capability context is absent.
+295. `P3.8c` disables the button only when capability context exists and `workbench.read` is missing, with fixed copy `Requires workbench.read permission.`.
+296. `P3.8c` does not require `knowledge.build` or `knowledge.publish`, and `workbench.test.write` continues to govern later workbench write behavior only.
+297. `P3.8c` adds no backend code, no new API, no request-schema change, no provider or model control, no structured-query affordance, and no real LLM integration.
+298. Frontend TypeScript no-emit validation ran with no output.
+299. Targeted ESLint for `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/ragUiHelpers.ts` ran with no output.
+300. `git diff --check` ran with no output.
+301. Editor diagnostics reported no errors in `GameProject.tsx`, `ragUiHelpers.ts`, or `GameProject.module.less`.
+302. No GameProject or RAG UI frontend test suite was found for this slice, so no frontend component test was run.
+303. No backend pytest was run because this slice did not touch backend code.
+304. `P3.8d` structured-query destination discovery and boundary review is now complete as a docs-only slice.
+305. The review file for `P3.8d` is `docs/tasks/knowledge-p3-8d-structured-query-destination-discovery-2026-05-09.md`.
+306. `P3.8d` reconfirms that the current frontend has no dedicated structured-query page, route, tab, or reusable component.
+307. `P3.8d` reconfirms that `GameProject.tsx` and `ragUiHelpers.ts` still expose only read-only structured-query labels and warning copy.
+308. `P3.8d` confirms that legacy `gameApi.query(...)` has no visible call site in `console/src` and is not a sufficient structured-query product destination by itself.
+309. `P3.8d` rejects NumericWorkbench as the structured-query destination because NumericWorkbench remains the change or edit surface.
+310. `P3.8d` rejects IndexMap as the structured-query destination because IndexMap is an index-browsing surface rather than a query-execution surface.
+311. `P3.8d` recommends a new minimal structured-query panel inside the existing GameProject surface as the first explicit destination contract.
+312. `P3.8d` keeps the current read-only structured-query label in place and does not recommend immediate frontend button implementation.
+313. `P3.8d` keeps any future structured-query entry explicit-click only, non-submitting by default, non-writing by default, and separate from `knowledge.read`, `knowledge.build`, and `knowledge.publish` gating.
+314. `P3.8d` preserves the `{ query }` request boundary, adds no backend `src` change, no `console/src` change, no new API, no provider or model control, and no real LLM integration.
+315. `P3.8d` is docs-only and does not rerun pytest.
+316. `P3.8e` minimal structured-query panel contract review is now complete as a docs-only slice.
+317. The contract file for `P3.8e` is `docs/tasks/knowledge-p3-8e-structured-query-panel-contract-2026-05-09.md`.
+318. `P3.8e` freezes the first-version structured-query destination as a minimal panel inside the existing GameProject surface rather than a new global route.
+319. `P3.8e` limits the panel to exact numeric, row-level, field-level, and value-level lookup only and keeps change or edit or modify intent in workbench.
+320. `P3.8e` allows a future `Open structured query` affordance only as explicit user click in explicit structured-query warning contexts, and opening the panel must not auto-submit.
+321. `P3.8e` allows future prefill of the current RAG query only as local input state and explicitly forbids auto-submit.
+322. `P3.8e` keeps first-version structured-query results read-only and keeps test-plan creation, candidate creation, build, publish, and mutation behavior out of the panel.
+323. `P3.8e` records that the current `gameApi.query(...)` wrapper is not yet a sufficient product contract by itself because the frontend lacks typed request or response models, documented mode semantics, and a frozen read-only result shape.
+324. `P3.8e` therefore defers direct panel-submit binding to a later narrow API contract or typing review rather than authorizing immediate frontend implementation.
+325. `P3.8e` keeps `knowledge.build` and `knowledge.publish` out of the panel-entry requirement and recommends a dedicated structured-query read capability rather than treating `knowledge.read` as the permanent contract.
+326. `P3.8e` preserves the `{ query }` RAG payload boundary, changes no backend `src`, changes no `console/src`, adds no new API, and does not change `P3.8c` workbench affordance behavior.
+327. `P3.8e` is docs-only and does not rerun pytest.
+328. `P3.8f` structured-query submit contract and typing review is now complete as a docs-only slice.
+329. The review file for `P3.8f` is `docs/tasks/knowledge-p3-8f-structured-query-submit-contract-2026-05-09.md`.
+330. `P3.8f` confirms that `gameApi.query(agentId, q, mode)` currently sends `POST /agents/{agentId}/game/index/query`.
+331. `P3.8f` confirms that the current backend request shape is only `q` plus `mode`, with default mode `auto`.
+332. `P3.8f` confirms that the current backend response shape is an untyped dict with top-level `mode` and `results` only and with observed branches `not_configured`, `exact_table`, `exact_field`, and `semantic_stub`.
+333. `P3.8f` confirms that there is no stable backend enum or frontend type union for mode today and that `auto` is the only mode with explicit backend logic.
+334. `P3.8f` freezes the first-version panel submit contract to query plus fixed `auto` mode only and forbids provider, model, provider hint, service config, and write-oriented flags.
+335. `P3.8f` records that the current response is too loose for direct product use and therefore recommends a frontend typed wrapper or normalization layer over the existing endpoint rather than an immediate backend change.
+336. `P3.8f` freezes a normalized read-only panel response contract with explicit request mode, result mode, status, message, warnings, items, and error fields, plus table-result and field-result display variants.
+337. `P3.8f` allows source-like display only from already returned `source_path` and field `references` and authorizes no new citation artifact or raw-source endpoint.
+338. `P3.8f` keeps prefill allowed only as local input state and keeps submit explicit user click only.
+339. `P3.8f` keeps submit read-only and forbids test-plan creation, candidate creation, build, publish, and mutation behavior.
+340. `P3.8f` keeps `knowledge.build` and `knowledge.publish` out of the submit requirement and allows temporary `knowledge.read` only as an interim bridge until a dedicated structured-query read capability exists.
+341. `P3.8f` preserves the `{ query }` RAG boundary, changes no backend `src`, changes no `console/src`, adds no new API, and does not change `P3.8c` workbench affordance behavior.
+342. `P3.8f` is docs-only and does not rerun pytest.
+343. `P3.8g` minimal structured-query panel implementation is now complete as a frontend-only slice.
+344. The closeout file for `P3.8g` is `docs/tasks/knowledge-p3-8g-minimal-structured-query-panel-closeout-2026-05-09.md`.
+345. `P3.8g` adds `Open structured query` only to the static structured-query guardrail block and the existing `STRUCTURED_FACT_WARNING` warning row in GameProject.
+346. `P3.8g` keeps panel opening explicit user click only and allows prefill from the current RAG query only as local panel state when the local draft is still empty.
+347. `P3.8g` keeps submit explicit user click only, keeps submit disabled until a `selectedAgent` exists, and reuses `POST /agents/{agentId}/game/index/query` with only query plus fixed `auto` mode.
+348. `P3.8g` lands a frontend typed wrapper and normalization layer so the UI no longer directly depends on the raw untyped `/game/index/query` response shape.
+349. `P3.8g` normalizes read-only result display into table-result and field-result variants only.
+350. `P3.8g` keeps source-like display limited to already returned `source_path`, `references`, and `tags` fields and adds no raw-source or citation endpoint.
+351. `P3.8g` keeps local trusted fallback when explicit capability context is absent.
+352. `P3.8g` disables both `Open structured query` and panel submit when explicit capability context exists but `knowledge.read` is missing and uses `Requires knowledge.read permission.` as the disabled copy.
+353. `P3.8g` keeps `knowledge.build` and `knowledge.publish` out of the panel gate.
+354. `P3.8g` preserves the `{ query }` RAG boundary, changes no backend `src`, adds no backend API, changes no provider selection, and does not change `P3.8c` workbench affordance behavior.
+355. `P3.8g` ran frontend TypeScript no-emit, targeted ESLint, and `git diff --check`, and no frontend component test was run because no existing GameProject or RAG UI frontend test suite was found for this slice.
+356. `P3.8h` RAG MVP interaction validation and closeout is now complete.
+357. The closeout file for `P3.8h` is `docs/tasks/knowledge-p3-8h-rag-mvp-interaction-validation-2026-05-09.md`.
+358. `P3.8h` confirms that RAG Ask still sends only `{ query }`.
+359. `P3.8h` confirms that `Open structured query` appears only in the static structured guardrail block and the `STRUCTURED_FACT_WARNING` warning row.
+360. `P3.8h` confirms that opening structured query only opens the local panel and does not auto-submit, and that prefill remains local input-state only.
+361. `P3.8h` confirms that structured-query submit remains fixed to `auto` mode and that result rendering remains read-only table-result or field-result display only.
+362. `P3.8h` confirms that no test-plan, candidate, build, publish, or SVN behavior was added to the interaction surface.
+363. `P3.8h` confirms that `Go to workbench` appears only in the static workbench guardrail block and the `CHANGE_QUERY_WARNING` warning row and still navigates only to `/numeric-workbench` with no freeform-query handoff.
+364. `P3.8h` confirms that explicit capability context missing `knowledge.read` disables Ask, `Open structured query`, and `Submit structured query`, and that explicit capability context missing `workbench.read` disables `Go to workbench`.
+365. `P3.8h` confirms that capability-context absence keeps local trusted fallback intact.
+366. `P3.8h` ran frontend TypeScript no-emit, targeted ESLint, and `git diff --check` successfully.
+367. `P3.8h` attempted a minimal browser smoke and reached console-shell load only; full in-app interaction smoke was limited by local frontend-backend environment issues rather than by new code defects in this slice.
+368. `P3.8h` changes only `docs/tasks`, adds no backend code, adds no frontend behavior, adds no API, and allows `P3.8` MVP interaction to be treated as closed.
+369. Final P3 RAG MVP gate review confirms that the current worktree still keeps all `P3.8` interaction behavior inside the frozen request, provider, router, and citation boundaries.
+370. Final gate frontend validation reran successfully: TypeScript no-emit passed, targeted ESLint passed, and `git diff --check` passed.
+371. Final gate backend focused pytest passed for the current RAG interaction slice: `56 passed` for `test_knowledge_rag_context.py`, `test_knowledge_rag_answer.py`, and `test_game_knowledge_rag_router.py`.
+372. Final gate backend focused pytest also passed for the current RAG model/provider slice: `24 passed` for `test_knowledge_rag_provider_selection.py`, `test_knowledge_rag_model_registry.py`, `test_knowledge_rag_model_client.py`, and `test_knowledge_rag_external_model_client.py`.
+373. Final gate confirms that no Python file is touched in the current P3.8 worktree, so no Python-side NUL-byte check was required for this round.
+374. Final gate keeps real LLM integration, provider or model UI, raw-source or citation endpoints, and automatic test-plan, candidate, build, or publish behavior out of scope.
+375. Final gate finds no remaining blocker inside the validated P3.8 MVP interaction surface and considers the slice commit-ready.
