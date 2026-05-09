@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from ltclaw_gy_x.game.knowledge_rag_provider_selection import resolve_rag_model_provider_name
+from ltclaw_gy_x.game.knowledge_rag_external_model_client import ExternalRagModelClientConfig, ExternalRagModelEnvConfig
+from ltclaw_gy_x.game.knowledge_rag_provider_selection import (
+    resolve_external_rag_model_client_config,
+    resolve_rag_model_provider_name,
+)
 
 
 def test_resolve_rag_model_provider_name_returns_none_without_config():
@@ -30,6 +34,57 @@ def test_resolve_rag_model_provider_name_reads_nested_service_config_field():
     )
 
     assert provider_name == 'deterministic_mock'
+
+
+def test_resolve_rag_model_provider_name_reads_external_provider_config_when_backend_owned():
+    provider_name = resolve_rag_model_provider_name(
+        {
+            'external_provider_config': {
+                'enabled': False,
+                'provider_name': 'future_external',
+            }
+        }
+    )
+
+    assert provider_name == 'future_external'
+
+
+def test_resolve_external_rag_model_client_config_reads_nested_backend_owned_config():
+    external_config = resolve_external_rag_model_client_config(
+        SimpleNamespace(
+            service_config=SimpleNamespace(
+                external_provider_config={
+                    'enabled': True,
+                    'provider_name': 'future_external',
+                    'model_name': 'stub-model',
+                    'allowed_providers': ['future_external'],
+                    'allowed_models': ('stub-model',),
+                    'env': {'api_key_env_var': 'QWENPAW_RAG_API_KEY'},
+                }
+            )
+        )
+    )
+
+    assert external_config == ExternalRagModelClientConfig(
+        enabled=True,
+        provider_name='future_external',
+        model_name='stub-model',
+        allowed_providers=('future_external',),
+        allowed_models=('stub-model',),
+        env=ExternalRagModelEnvConfig(api_key_env_var='QWENPAW_RAG_API_KEY'),
+    )
+
+
+def test_resolve_external_rag_model_client_config_ignores_request_like_shape_without_backend_field():
+    external_config = resolve_external_rag_model_client_config(
+        {
+            'enabled': True,
+            'provider_name': 'future_external',
+            'model_name': 'stub-model',
+        }
+    )
+
+    assert external_config is None
 
 
 def test_resolve_rag_model_provider_name_ignores_request_like_provider_field():

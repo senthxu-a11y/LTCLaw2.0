@@ -3,9 +3,13 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
+from .knowledge_rag_external_model_client import ExternalRagModelClient
 from .knowledge_rag_model_client import RagModelClient, build_rag_model_prompt_payload
-from .knowledge_rag_model_registry import get_rag_model_client
-from .knowledge_rag_provider_selection import resolve_rag_model_provider_name
+from .knowledge_rag_model_registry import ResolvedRagModelClient, get_rag_model_client
+from .knowledge_rag_provider_selection import (
+    resolve_external_rag_model_client_config,
+    resolve_rag_model_provider_name,
+)
 
 
 _NO_GROUNDED_CONTEXT_WARNING = 'No grounded context was available for a safe answer.'
@@ -14,6 +18,7 @@ _MODEL_NOT_GROUNDED_WARNING = 'Model client output was not grounded in the provi
 _MODEL_OUT_OF_CONTEXT_CITATION_WARNING = 'Ignored one or more model citation ids outside the provided context.'
 _CHANGE_QUERY_WARNING = 'For change proposals or edits, use the workbench flow.'
 _STRUCTURED_FACT_WARNING = 'For exact numeric or row-level facts, use the structured query flow.'
+_EXTERNAL_PROVIDER_NAME = 'future_external'
 
 MAX_SUMMARY_CHUNKS = 2
 MAX_SUMMARY_CHARS = 220
@@ -111,7 +116,12 @@ def build_rag_answer_with_provider(
         config_or_service,
         provider_name=provider_name,
     )
-    resolved = get_rag_model_client(selected_provider_name, factories=factories)
+    external_config = resolve_external_rag_model_client_config(config_or_service)
+    resolved = _resolve_rag_model_client(
+        selected_provider_name,
+        external_config=external_config,
+        factories=factories,
+    )
     payload = build_rag_answer(query, context, model_client=resolved.client)
     payload['warnings'] = _dedupe_strings([*resolved.warnings, *payload.get('warnings', [])])
     return payload
@@ -129,6 +139,33 @@ def build_rag_answer_with_service_config(
         context,
         config_or_service=service_config,
         factories=factories,
+    )
+
+
+def _resolve_rag_model_client(
+    provider_name: str | None,
+    *,
+    external_config: Any = None,
+    factories: Mapping[str, Any] | None = None,
+) -> ResolvedRagModelClient:
+    if _normalize_text(provider_name) == _EXTERNAL_PROVIDER_NAME:
+        return _resolve_external_rag_model_client(external_config)
+
+    return get_rag_model_client(provider_name, factories=factories)
+
+
+def _resolve_external_rag_model_client(external_config: Any) -> ResolvedRagModelClient:
+    if external_config is None:
+        raise ValueError(f'Unsupported RAG model provider: {_EXTERNAL_PROVIDER_NAME}')
+
+    provider_name = _normalize_text(getattr(external_config, 'provider_name', None)) or _EXTERNAL_PROVIDER_NAME
+    if provider_name != _EXTERNAL_PROVIDER_NAME:
+        raise ValueError(f'Unsupported RAG model provider: {provider_name}')
+
+    return ResolvedRagModelClient(
+        provider_name=_EXTERNAL_PROVIDER_NAME,
+        client=ExternalRagModelClient(config=external_config),
+        warnings=(),
     )
 
 

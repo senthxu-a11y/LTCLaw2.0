@@ -144,6 +144,7 @@ def test_supported_providers_do_not_include_future_external_runtime_provider():
         RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK,
         RAG_MODEL_PROVIDER_DISABLED,
     )
+    assert len(SUPPORTED_RAG_MODEL_PROVIDERS) == 2
 
 
 def test_returned_provider_can_be_used_by_build_rag_answer():

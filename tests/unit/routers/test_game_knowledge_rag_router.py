@@ -337,11 +337,23 @@ def test_rag_answer_router_ignores_provider_field_in_request_body(monkeypatch, t
     monkeypatch.setattr(rag_router_module, 'get_agent_for_request', _get_agent)
     monkeypatch.setattr(rag_router_module, 'build_current_release_context', _build_context)
     monkeypatch.setattr(rag_router_module, 'build_rag_answer_with_service_config', _build_answer)
+    monkeypatch.setattr(
+        rag_router_module,
+        'get_rag_model_client',
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('router must not call get_rag_model_client directly')),
+        raising=False,
+    )
 
     with TestClient(_build_app()) as client:
         response = client.post(
             '/api/game/knowledge/rag/answer',
-            json={'query': 'damage', 'provider': 'disabled'},
+            json={
+                'query': 'damage',
+                'provider': 'disabled',
+                'model': 'ignored-model',
+                'provider_hint': 'ignored-hint',
+                'service_config': {'rag_model_provider': 'disabled'},
+            },
         )
 
     assert response.status_code == 200

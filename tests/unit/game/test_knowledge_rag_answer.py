@@ -413,6 +413,59 @@ def test_build_rag_answer_with_service_config_reads_disabled_provider_from_servi
     assert 'Model provider is disabled.' in payload['warnings']
 
 
+def test_build_rag_answer_with_service_config_uses_backend_owned_external_disabled_config():
+    payload = build_rag_answer_with_service_config(
+        'How does combat damage work?',
+        _grounded_context(),
+        {
+            'external_provider_config': {
+                'enabled': False,
+                'provider_name': 'future_external',
+            }
+        },
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'External provider adapter skeleton is disabled.' in payload['warnings']
+    assert 'Model client output was not grounded in the provided context.' in payload['warnings']
+
+
+def test_build_rag_answer_with_service_config_uses_backend_owned_external_enabled_config_without_credentials():
+    payload = build_rag_answer_with_service_config(
+        'How does combat damage work?',
+        _grounded_context(),
+        {
+            'external_provider_config': {
+                'enabled': True,
+                'provider_name': 'future_external',
+                'allowed_providers': ['future_external'],
+            }
+        },
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'External provider adapter skeleton is not configured.' in payload['warnings']
+    assert 'Model client output was not grounded in the provided context.' in payload['warnings']
+
+
+def test_build_rag_answer_with_service_config_raises_for_unknown_backend_owned_external_provider():
+    with pytest.raises(ValueError, match='Unsupported RAG model provider: unsupported_external'):
+        build_rag_answer_with_service_config(
+            'How does combat damage work?',
+            _grounded_context(),
+            {
+                'external_provider_config': {
+                    'enabled': True,
+                    'provider_name': 'unsupported_external',
+                }
+            },
+        )
+
+
 def test_build_rag_answer_with_service_config_raises_for_unknown_provider_from_service_config():
     with pytest.raises(ValueError, match='Unsupported RAG model provider: future_external'):
         build_rag_answer_with_service_config(
@@ -631,12 +684,13 @@ def test_build_rag_answer_with_external_adapter_skeleton_degrades_without_ground
     assert payload['mode'] == 'insufficient_context'
     assert payload['answer'] == ''
     assert payload['citations'] == []
-    assert 'External provider adapter skeleton is not connected.' in payload['warnings']
+    assert 'External provider adapter skeleton is disabled.' in payload['warnings']
     assert 'Model client output was not grounded in the provided context.' in payload['warnings']
 
 
 def test_build_rag_answer_with_external_adapter_skeleton_rejects_out_of_context_citations():
     client = ExternalRagModelClientSkeleton(
+        config=ExternalRagModelClientConfig(enabled=True),
         responder=lambda payload: {
             'answer': 'Grounded-looking answer.',
             'citation_ids': ['citation-999'],
@@ -659,7 +713,7 @@ def test_build_rag_answer_with_external_adapter_skeleton_rejects_out_of_context_
 
 def test_build_rag_answer_with_external_adapter_skeleton_preserves_structured_and_workbench_warnings():
     client = ExternalRagModelClientSkeleton(
-        config=ExternalRagModelClientConfig(max_prompt_chars=20000),
+        config=ExternalRagModelClientConfig(enabled=True, max_prompt_chars=20000),
         responder=lambda payload: {
             'answer': 'Grounded adapter answer.',
             'citation_ids': ['citation-001'],
