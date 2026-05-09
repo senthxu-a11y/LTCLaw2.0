@@ -26,20 +26,20 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ── Defaults ──────────────────────────────────────────────────────────────────
+# Defaults
 $QwenpawHome     = if ($env:QWENPAW_HOME) { $env:QWENPAW_HOME } else { Join-Path $HOME ".qwenpaw" }
 $QwenpawVenv     = Join-Path $QwenpawHome "venv"
 $QwenpawBin      = Join-Path $QwenpawHome "bin"
 $PythonVersion = "3.12"
 $QwenpawRepo     = "https://github.com/agentscope-ai/QwenPaw.git"
 
-# ── Colors ────────────────────────────────────────────────────────────────────
+# Colors
 function Write-Info { param([string]$Message) Write-Host "[qwenpaw] " -ForegroundColor Green  -NoNewline; Write-Host $Message }
 function Write-Warn { param([string]$Message) Write-Host "[qwenpaw] " -ForegroundColor Yellow -NoNewline; Write-Host $Message }
 function Write-Err  { param([string]$Message) Write-Host "[qwenpaw] " -ForegroundColor Red    -NoNewline; Write-Host $Message }
 function Stop-WithError { param([string]$Message) Write-Err $Message; exit 1 }
 
-# ── Help ──────────────────────────────────────────────────────────────────────
+# Help
 if ($Help) {
     @"
 QwenPaw Installer for Windows
@@ -65,7 +65,7 @@ Write-Host "[qwenpaw] " -ForegroundColor Green -NoNewline
 Write-Host "Installing QwenPaw into " -NoNewline
 Write-Host "$QwenpawHome" -ForegroundColor White
 
-# ── Execution Policy Check ────────────────────────────────────────────────────
+# Execution policy check
 $policy = Get-ExecutionPolicy
 if ($policy -eq "Restricted") {
     Write-Info "Execution policy is 'Restricted', setting to RemoteSigned for current user..."
@@ -82,7 +82,7 @@ if ($policy -eq "Restricted") {
     }
 }
 
-# ── Step 1: Ensure uv is available ───────────────────────────────────────────
+# Step 1: Ensure uv is available
 
 function Invoke-UvFromGitHub {
     # Downloads uv from GitHub Releases and prepends its directory to PATH.
@@ -241,20 +241,20 @@ function Prepare-Console {
         return
     }
 
-    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-        Write-Warn "npm not found - skipping console frontend build."
+    if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) {
+        Write-Warn "npm.cmd not found - skipping console frontend build."
         Write-Warn "Install Node.js from https://nodejs.org/ then re-run this installer,"
-        Write-Warn "or run 'cd console && npm ci && npm run build' manually."
+        Write-Warn "or run 'cd console && npm.cmd ci && npm.cmd run build' manually."
         return
     }
 
-    Write-Info "Building console frontend (npm ci && npm run build)..."
+    Write-Info "Building console frontend (npm.cmd ci && npm.cmd run build)..."
     Push-Location (Join-Path $RepoDir "console")
     try {
-        npm ci
-        if ($LASTEXITCODE -ne 0) { Write-Warn "npm ci failed - the web UI won't be available."; return }
-        npm run build
-        if ($LASTEXITCODE -ne 0) { Write-Warn "npm run build failed - the web UI won't be available."; return }
+        npm.cmd ci
+        if ($LASTEXITCODE -ne 0) { Write-Warn "npm.cmd ci failed - the web UI won't be available."; return }
+        npm.cmd run build
+        if ($LASTEXITCODE -ne 0) { Write-Warn "npm.cmd run build failed - the web UI won't be available."; return }
     } finally {
         Pop-Location
     }

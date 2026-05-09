@@ -57,13 +57,15 @@ favicon_ico.save(icon_dir / "favicon.ico", format="ICO")
 print(f"✓ Created: favicon.ico (64x64)")
 "@
 
+$ConvertScript = $ConvertScript.Replace("✓ Created:", "Created:")
+
 $ConvertScript | & $PythonExe
 
 # Copy favicon to console/public
 Write-Host "`n[3/5] Updating console favicon files..."
 $ConsolePubDir = Join-Path $RepoRoot "console\public"
 Copy-Item (Join-Path $IconDir "favicon.png") -Destination (Join-Path $ConsolePubDir "favicon.png") -Force
-Write-Host "✓ Updated: console/public/favicon.png"
+Write-Host "Updated: console/public/favicon.png"
 
 # Update HTML favicon link
 Write-Host "`n[4/5] Updating console/index.html favicon link..."
@@ -77,7 +79,7 @@ $NewLink = '<link rel="icon" type="image/png" href="/favicon.png" />'
 $HtmlContent = $HtmlContent -replace $OldLink, $NewLink
 Set-Content $HtmlFile -Value $HtmlContent -NoNewline
 
-Write-Host "✓ Updated: console/index.html favicon link to /favicon.png"
+Write-Host "Updated: console/index.html favicon link to /favicon.png"
 
 # Create SVG version for backward compatibility
 Write-Host "`n[5/5] Creating SVG version..."
@@ -104,26 +106,26 @@ $SvgContent = @"
   <rect width="1024" height="1024" rx="190" fill="#5865F2"/>
   <!-- Placeholder for updated icon -->
   <text x="512" y="512" text-anchor="middle" dominant-baseline="middle" 
-        font-size="400" font-weight="bold" fill="#FFFFFF" opacity="0.8">🐾</text>
+        font-size="280" font-weight="bold" fill="#FFFFFF" opacity="0.8">LT</text>
 </svg>
 "@
 
 $SvgFile = Join-Path $ConsolePubDir "favicon.svg"
 Set-Content $SvgFile -Value $SvgContent -Encoding UTF8
-Write-Host "✓ Created: console/public/favicon.svg"
+Write-Host "Created: console/public/favicon.svg"
 
 Write-Host "`n======================================"
-Write-Host "✓ Icon Update Complete!" -ForegroundColor Green
+Write-Host "Icon Update Complete!" -ForegroundColor Green
 Write-Host "======================================"
 Write-Host ""
 Write-Host "Summary of changes:"
-Write-Host "  1. ✓ Windows desktop shortcut icon: scripts/pack/assets/icon.ico"
-Write-Host "  2. ✓ Installer package icon: scripts/pack/assets/icon.ico"
-Write-Host "  3. ✓ Desktop packing resources: scripts/pack/assets/ (all formats)"
-Write-Host "  4. ✓ Console favicon: console/public/favicon.png & favicon.svg"
+Write-Host "  1. Windows desktop shortcut icon: scripts/pack/assets/icon.ico"
+Write-Host "  2. Installer package icon: scripts/pack/assets/icon.ico"
+Write-Host "  3. Desktop packing resources: scripts/pack/assets/ (all formats)"
+Write-Host "  4. Console favicon: console/public/favicon.png & favicon.svg"
 Write-Host "     - Updated: console/index.html favicon link"
 Write-Host ""
 Write-Host "Next steps:"
-Write-Host "  1. Run 'npm run build' in console/ to rebuild frontend"
+Write-Host "  1. Run 'npm.cmd run build' in console/ to rebuild frontend"
 Write-Host "  2. Run '.\scripts\pack\build_win.ps1' to rebuild installer with new icon"
 Write-Host ""

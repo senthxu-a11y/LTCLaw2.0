@@ -10,6 +10,12 @@ bash scripts/wheel_build.sh
 
 - Builds the console frontend (`console/`), copies `console/dist` to `src/ltclaw-gy-x/console/dist`, then builds the wheel. Output: `dist/*.whl`.
 
+## Windows PowerShell Notes
+
+- Keep `*.ps1` files in UTF-8 BOM with CRLF. The repo-wide rule lives in `.editorconfig`.
+- Prefer `npm.cmd` over `npm` inside PowerShell scripts to avoid `npm.ps1` and execution policy issues on Windows PowerShell 5.1.
+- Keep comments and user-facing PowerShell prompts ASCII where practical. This reduces display and parsing issues in older Windows PowerShell environments.
+
 ## Build website
 
 ```bash

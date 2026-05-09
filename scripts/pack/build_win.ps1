@@ -113,15 +113,15 @@ if (Test-Path $CondaUnpack) {
     
     # Verify the fix worked
     Write-Host "[build_win] Verifying fix..."
-    & $pythonExe -c "from huggingface_hub import file_download; print('✓ huggingface_hub import OK')"
+    & $pythonExe -c "from huggingface_hub import file_download; print('huggingface_hub import OK')"
     if ($LASTEXITCODE -ne 0) {
       throw "CRITICAL: huggingface_hub still has import errors after reinstall. See issue.md"
     }
-    & $pythonExe -c "import discord; print('✓ discord.py import OK')"
+    & $pythonExe -c "import discord; print('discord.py import OK')"
     if ($LASTEXITCODE -ne 0) {
       throw "CRITICAL: discord.py still has import errors after reinstall."
     }
-    Write-Host "[build_win] ✓ conda-unpack corruption fixed successfully."
+    Write-Host "[build_win] conda-unpack corruption fixed successfully."
   } else {
     Write-Host "[build_win] WARN: wheels_cache not found at $WheelsCache" -ForegroundColor Yellow
     Write-Host "[build_win] WARN: Cannot fix conda-unpack corruption. App may fail to start." -ForegroundColor Yellow
@@ -144,7 +144,7 @@ if (Test-Path $pythonExe) {
   if ($LASTEXITCODE -eq 0) {
     $compileEnd = Get-Date
     $compileTime = ($compileEnd - $compileStart).TotalSeconds
-    Write-Host "[build_win] ✓ Bytecode compilation completed in $($compileTime.ToString('F1')) seconds"
+    Write-Host "[build_win] Bytecode compilation completed in $($compileTime.ToString('F1')) seconds"
     
     # Count compiled files for reporting
     $pycCount = (Get-ChildItem -Path $EnvRoot -Recurse -Filter "*.pyc" -ErrorAction SilentlyContinue | Measure-Object).Count

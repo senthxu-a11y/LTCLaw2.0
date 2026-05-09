@@ -11,10 +11,10 @@ $ConsoleDest = Join-Path $RepoRoot "src\ltclaw_gy_x\console"
 Write-Host "[wheel_build] Building console frontend..."
 Push-Location $ConsoleDir
 try {
-  npm ci
-  if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE" }
-  npm run build
-  if ($LASTEXITCODE -ne 0) { throw "npm run build failed with exit code $LASTEXITCODE" }
+  npm.cmd ci
+  if ($LASTEXITCODE -ne 0) { throw "npm.cmd ci failed with exit code $LASTEXITCODE" }
+  npm.cmd run build
+  if ($LASTEXITCODE -ne 0) { throw "npm.cmd run build failed with exit code $LASTEXITCODE" }
 } finally {
   Pop-Location
 }
