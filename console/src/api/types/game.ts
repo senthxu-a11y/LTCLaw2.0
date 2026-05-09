@@ -265,6 +265,48 @@ export interface TableIndex {
   indexer_model: string;
 }
 
+export type StructuredQueryResultMode = "exact_table" | "exact_field" | "semantic_stub" | "not_configured" | "unknown";
+
+export type StructuredQueryStatus = "success" | "empty" | "unavailable" | "error";
+
+export interface StructuredQueryRequest {
+  query: string;
+}
+
+export interface StructuredQueryTableItem {
+  kind: "table";
+  table_name: string;
+  source_path: string;
+  system?: string | null;
+  row_count: number;
+  primary_key: string;
+  summary?: string | null;
+}
+
+export interface StructuredQueryFieldItem {
+  kind: "field";
+  table_name: string;
+  field_name: string;
+  field_type: string;
+  description?: string | null;
+  confidence: FieldConfidence;
+  references: string[];
+  tags: string[];
+}
+
+export type StructuredQueryItem = StructuredQueryTableItem | StructuredQueryFieldItem;
+
+export interface StructuredQueryResponse {
+  query: string;
+  request_mode: "auto";
+  result_mode: StructuredQueryResultMode;
+  status: StructuredQueryStatus;
+  message: string | null;
+  warnings: string[];
+  items: StructuredQueryItem[];
+  error: string | null;
+}
+
 export interface SystemGroup {
   name: string;
   tables: string[];

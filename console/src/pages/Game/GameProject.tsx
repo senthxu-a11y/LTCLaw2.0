@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Form, Input, Switch, Button, Card } from "@agentscope-ai/design";
 import { Alert, Checkbox, Modal, Select, Space, Tag, Tooltip, Typography } from "antd";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
 import type { FrontendCapabilityToken } from "@/api/types/permissions";
 import { canUseGovernanceAction, hasCapabilityContext, isPermissionDeniedError } from "@/utils/permissions";
 import { gameApi } from "../../api/modules/game";
+import { gameStructuredQueryApi } from "../../api/modules/gameStructuredQuery";
 import { gameKnowledgeReleaseApi } from "../../api/modules/gameKnowledgeRelease";
 import { agentsApi } from "../../api/modules/agents";
 import type {
@@ -24,6 +26,8 @@ import type {
   KnowledgeTableRef,
   ProjectConfig,
   ReleaseCandidateListItem,
+  StructuredQueryItem,
+  StructuredQueryResponse,
   UserGameConfig,
   ValidationIssue,
 } from "../../api/types/game";
@@ -131,6 +135,7 @@ function createDefaultReleaseId(): string {
 export default function GameProject() {
   const { t } = useTranslation();
   const { message } = useAppMessage();
+  const navigate = useNavigate();
   const { selectedAgent, agents, addAgent, setSelectedAgent } = useAgentStore();
   const [form] = Form.useForm<GameProjectFormData>();
   const [loading, setLoading] = useState(true);
@@ -166,6 +171,10 @@ export default function GameProject() {
   const [ragLoading, setRagLoading] = useState(false);
   const [ragError, setRagError] = useState<string | null>(null);
   const [ragAnswer, setRagAnswer] = useState<KnowledgeRagAnswerResponse | null>(null);
+  const [structuredQueryPanelOpen, setStructuredQueryPanelOpen] = useState(false);
+  const [structuredQueryDraft, setStructuredQueryDraft] = useState("");
+  const [structuredQueryLoading, setStructuredQueryLoading] = useState(false);
+  const [structuredQueryResponse, setStructuredQueryResponse] = useState<StructuredQueryResponse | null>(null);
   const [recentRagQuestions, setRecentRagQuestions] = useState<RecentRagQuestionItem[]>([]);
   const [highlightedCitationId, setHighlightedCitationId] = useState<string | null>(null);
   const citationsSectionRef = useRef<HTMLDivElement | null>(null);
@@ -178,6 +187,7 @@ export default function GameProject() {
   const canBuildRelease = canUseGovernanceAction(capabilities, "knowledge.build");
   const canPublishRelease = canUseGovernanceAction(capabilities, "knowledge.publish");
   const canReadKnowledge = canUseGovernanceAction(capabilities, "knowledge.read");
+  const canReadWorkbench = canUseGovernanceAction(capabilities, "workbench.read");
   const canReadReleaseCandidates = canUseGovernanceAction(capabilities, "knowledge.candidate.read");
   const canReadMap = canUseGovernanceAction(capabilities, "knowledge.map.read");
   const canEditMap = canUseGovernanceAction(capabilities, "knowledge.map.edit");
@@ -202,6 +212,12 @@ export default function GameProject() {
     hasExplicitCapabilityContext && !canReadKnowledge
       ? t("gameProject.knowledgeReadPermissionRequired", {
           defaultValue: "Requires knowledge.read permission.",
+        })
+      : null;
+  const workbenchReadReason =
+    hasExplicitCapabilityContext && !canReadWorkbench
+      ? t("gameWorkbench.permissionReadRequired", {
+          defaultValue: "Requires workbench.read permission.",
         })
       : null;
   const releaseCandidateReadReason =
@@ -340,6 +356,94 @@ export default function GameProject() {
       );
     }
   };
+
+  const handleGoToWorkbench = useCallback(() => {
+    navigate("/numeric-workbench");
+  }, [navigate]);
+
+  const handleOpenStructuredQueryPanel = useCallback(() => {
+    const nextDraft = ragQuery.trim();
+    setStructuredQueryPanelOpen(true);
+    setStructuredQueryDraft((currentDraft) => (currentDraft.trim() || !nextDraft ? currentDraft : nextDraft));
+  }, [ragQuery]);
+
+  const handleCloseStructuredQueryPanel = useCallback(() => {
+    setStructuredQueryPanelOpen(false);
+  }, []);
+
+  const handleSubmitStructuredQuery = useCallback(async () => {
+    if (!selectedAgent) {
+      return;
+    }
+
+    const query = structuredQueryDraft.trim();
+    if (!query) {
+      return;
+    }
+
+    setStructuredQueryLoading(true);
+    const response = await gameStructuredQueryApi.submit(selectedAgent, query);
+    setStructuredQueryResponse(response);
+    setStructuredQueryLoading(false);
+  }, [selectedAgent, structuredQueryDraft]);
+
+  const renderStructuredQueryAffordance = useCallback(
+    (source: "guardrail" | "warning") => {
+      const button = (
+        <Button
+          size="small"
+          onClick={handleOpenStructuredQueryPanel}
+          disabled={hasExplicitCapabilityContext && !canReadKnowledge}
+        >
+          {t(
+            source === "guardrail"
+              ? "gameProject.ragOpenStructuredQueryGuardrailButton"
+              : "gameProject.ragOpenStructuredQueryWarningButton",
+            { defaultValue: "Open structured query" },
+          )}
+        </Button>
+      );
+
+      return (
+        <span className={styles.ragReadonlyPathActions}>
+          <span className={styles.ragReadonlyPathLabel}>Structured query panel</span>
+          <Tooltip title={knowledgeReadReason || undefined}>
+            <span>{button}</span>
+          </Tooltip>
+        </span>
+      );
+    },
+    [canReadKnowledge, handleOpenStructuredQueryPanel, hasExplicitCapabilityContext, knowledgeReadReason, t],
+  );
+
+  const renderWorkbenchAffordance = useCallback(
+    (source: "guardrail" | "warning") => {
+      const button = (
+        <Button
+          size="small"
+          onClick={handleGoToWorkbench}
+          disabled={hasExplicitCapabilityContext && !canReadWorkbench}
+        >
+          {t(
+            source === "guardrail"
+              ? "gameProject.ragGoToWorkbenchGuardrailButton"
+              : "gameProject.ragGoToWorkbenchWarningButton",
+            { defaultValue: "Go to workbench" },
+          )}
+        </Button>
+      );
+
+      return (
+        <span className={styles.ragReadonlyPathActions}>
+          <span className={styles.ragReadonlyPathLabel}>Workbench flow</span>
+          <Tooltip title={workbenchReadReason || undefined}>
+            <span>{button}</span>
+          </Tooltip>
+        </span>
+      );
+    },
+    [canReadWorkbench, handleGoToWorkbench, hasExplicitCapabilityContext, t, workbenchReadReason],
+  );
 
   const fetchKnowledgeReleases = useCallback(async (agentId: string) => {
     setReleaseLoading(true);
@@ -920,6 +1024,65 @@ export default function GameProject() {
   const ragDisplayState = useMemo(() => (ragAnswer ? getRagDisplayState(ragAnswer) : null), [ragAnswer]);
   const ragNextStepHints = useMemo(() => (ragAnswer ? getRagNextStepHints(ragAnswer) : []), [ragAnswer]);
   const groupedRagCitations = useMemo(() => (ragAnswer ? groupRagCitations(ragAnswer.citations) : []), [ragAnswer]);
+  const canSubmitStructuredQuery = !!selectedAgent && structuredQueryDraft.trim().length > 0 && (!hasExplicitCapabilityContext || canReadKnowledge);
+
+  const renderStructuredQueryItem = (item: StructuredQueryItem) => {
+    if (item.kind === "table") {
+      return (
+        <div key={`table-${item.table_name}`} className={styles.structuredQueryItemCard}>
+          <div className={styles.structuredQueryItemHeader}>
+            <Text strong>{item.table_name}</Text>
+            <Tag color="blue">table</Tag>
+          </div>
+          <div className={styles.structuredQueryItemMeta}>
+            <span>source_path: {item.source_path}</span>
+            <span>system: {item.system || "-"}</span>
+            <span>row_count: {item.row_count}</span>
+            <span>primary_key: {item.primary_key}</span>
+          </div>
+          <div className={styles.structuredQueryItemDescription}>{item.summary || "No table summary returned."}</div>
+        </div>
+      );
+    }
+
+    return (
+      <div key={`field-${item.table_name}-${item.field_name}`} className={styles.structuredQueryItemCard}>
+        <div className={styles.structuredQueryItemHeader}>
+          <Text strong>
+            {item.table_name}.{item.field_name}
+          </Text>
+          <Tag color="cyan">field</Tag>
+        </div>
+        <div className={styles.structuredQueryItemMeta}>
+          <span>type: {item.field_type}</span>
+          <span>confidence: {item.confidence}</span>
+          <span>references: {item.references.length > 0 ? item.references.join(", ") : "-"}</span>
+          <span>tags: {item.tags.length > 0 ? item.tags.join(", ") : "-"}</span>
+        </div>
+        <div className={styles.structuredQueryItemDescription}>{item.description || "No field description returned."}</div>
+      </div>
+    );
+  };
+
+  const renderStructuredQueryResultStatus = (response: StructuredQueryResponse) => {
+    const alertType =
+      response.status === "success"
+        ? "success"
+        : response.status === "unavailable"
+          ? "info"
+          : response.status === "empty"
+            ? "warning"
+            : "error";
+
+    return (
+      <Alert
+        type={alertType}
+        showIcon
+        message={response.message || "Structured query returned a result."}
+        description={response.error || undefined}
+      />
+    );
+  };
 
   const renderRagCitationList = (citations: KnowledgeRagCitation[]) => {
     if (citations.length === 0) {
@@ -1223,6 +1386,13 @@ export default function GameProject() {
     setFormalMapDraft(savedFormalMap ? cloneKnowledgeMap(savedFormalMap) : null);
   }, [savedFormalMap]);
 
+  useEffect(() => {
+    setStructuredQueryPanelOpen(false);
+    setStructuredQueryDraft("");
+    setStructuredQueryLoading(false);
+    setStructuredQueryResponse(null);
+  }, [selectedAgent]);
+
   useEffect(() => () => {
     if (citationHighlightTimeoutRef.current !== null) {
       window.clearTimeout(citationHighlightTimeoutRef.current);
@@ -1468,7 +1638,7 @@ export default function GameProject() {
                   message={t("gameProject.ragStructuredGuardrail", {
                     defaultValue: "Exact numeric or row-level facts should go through structured query, not this RAG entry.",
                   })}
-                  description={<span className={styles.ragReadonlyPathLabel}>Structured query path</span>}
+                  description={renderStructuredQueryAffordance("guardrail")}
                 />
                 <Alert
                   type="info"
@@ -1476,9 +1646,89 @@ export default function GameProject() {
                   message={t("gameProject.ragWorkbenchGuardrail", {
                     defaultValue: "Change or edit intent should go through the workbench flow, not this RAG entry.",
                   })}
-                  description={<span className={styles.ragReadonlyPathLabel}>Workbench flow</span>}
+                  description={renderWorkbenchAffordance("guardrail")}
                 />
               </div>
+
+              {structuredQueryPanelOpen ? (
+                <div className={styles.structuredQueryPanel}>
+                  <div className={styles.structuredQueryPanelHeader}>
+                    <div className={styles.structuredQueryPanelTitleBlock}>
+                      <Text strong>{t("gameProject.structuredQueryPanelTitle", { defaultValue: "Structured query" })}</Text>
+                      <Text type="secondary">
+                        {t("gameProject.structuredQueryPanelHint", {
+                          defaultValue: "Read-only exact table and field lookup. Submit runs only when you click the button below.",
+                        })}
+                      </Text>
+                    </div>
+                    <Button size="small" onClick={handleCloseStructuredQueryPanel}>
+                      {t("gameProject.structuredQueryCloseButton", { defaultValue: "Close" })}
+                    </Button>
+                  </div>
+                  <TextArea
+                    value={structuredQueryDraft}
+                    onChange={(event) => setStructuredQueryDraft(event.target.value)}
+                    autoSize={{ minRows: 2, maxRows: 5 }}
+                    placeholder={t("gameProject.structuredQueryPlaceholder", {
+                      defaultValue: "Ask for an exact table or field, for example: equipment table fields",
+                    })}
+                  />
+                  <div className={styles.structuredQueryPanelActions}>
+                    <Tooltip title={knowledgeReadReason || undefined}>
+                      <span>
+                        <Button
+                          type="primary"
+                          onClick={handleSubmitStructuredQuery}
+                          loading={structuredQueryLoading}
+                          disabled={!canSubmitStructuredQuery}
+                        >
+                          {t("gameProject.structuredQuerySubmitButton", { defaultValue: "Submit structured query" })}
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  </div>
+
+                  {structuredQueryResponse ? (
+                    <div className={styles.structuredQueryResultBlock}>
+                      <div className={styles.structuredQuerySummary}>
+                        <div className={styles.releaseSummaryRow}>
+                          <div className={styles.releaseSummaryLabel}>query</div>
+                          <div className={styles.releaseSummaryValue}>{structuredQueryResponse.query}</div>
+                        </div>
+                        <div className={styles.releaseSummaryRow}>
+                          <div className={styles.releaseSummaryLabel}>request_mode</div>
+                          <div className={styles.releaseSummaryValue}>{structuredQueryResponse.request_mode}</div>
+                        </div>
+                        <div className={styles.releaseSummaryRow}>
+                          <div className={styles.releaseSummaryLabel}>result_mode</div>
+                          <div className={styles.releaseSummaryValue}>{structuredQueryResponse.result_mode}</div>
+                        </div>
+                        <div className={styles.releaseSummaryRow}>
+                          <div className={styles.releaseSummaryLabel}>status</div>
+                          <div className={styles.releaseSummaryValue}>{structuredQueryResponse.status}</div>
+                        </div>
+                        <div className={styles.releaseSummaryRow}>
+                          <div className={styles.releaseSummaryLabel}>items</div>
+                          <div className={styles.releaseSummaryValue}>{structuredQueryResponse.items.length}</div>
+                        </div>
+                      </div>
+                      {renderStructuredQueryResultStatus(structuredQueryResponse)}
+                      {structuredQueryResponse.warnings.length > 0 ? (
+                        <div className={styles.structuredQueryWarnings}>
+                          {structuredQueryResponse.warnings.map((warning) => (
+                            <Alert key={warning} type="warning" showIcon message={warning} />
+                          ))}
+                        </div>
+                      ) : null}
+                      {structuredQueryResponse.items.length > 0 ? (
+                        <div className={styles.structuredQueryItemList}>
+                          {structuredQueryResponse.items.map((item) => renderStructuredQueryItem(item))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               {ragError ? (
                 <Alert
@@ -1572,9 +1822,9 @@ export default function GameProject() {
                               message={warning}
                               description={
                                 warning === STRUCTURED_FACT_WARNING ? (
-                                  <span className={styles.ragReadonlyPathLabel}>Structured query path</span>
+                                  renderStructuredQueryAffordance("warning")
                                 ) : warning === CHANGE_QUERY_WARNING ? (
-                                  <span className={styles.ragReadonlyPathLabel}>Workbench flow</span>
+                                  renderWorkbenchAffordance("warning")
                                 ) : undefined
                               }
                             />

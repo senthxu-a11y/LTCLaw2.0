@@ -414,12 +414,111 @@
           word-break: break-word;
         }
 
+        .ragReadonlyPathActions {
+          display: inline-flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+          max-width: 100%;
+
+          :global(.ant-btn) {
+            height: auto;
+            white-space: normal;
+          }
+        }
+
         .ragAnswerBox,
         .ragWarningsBlock,
         .ragCitationsBlock {
           display: flex;
           flex-direction: column;
           gap: 10px;
+        }
+
+        .structuredQueryPanel {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          padding: 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--ant-color-info-bg) 35%, var(--ant-color-bg-container));
+          margin-bottom: 12px;
+        }
+
+        .structuredQueryPanelHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .structuredQueryPanelTitleBlock {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .structuredQueryPanelActions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+
+          :global(.ant-btn) {
+            height: auto;
+            white-space: normal;
+          }
+        }
+
+        .structuredQueryResultBlock,
+        .structuredQueryWarnings,
+        .structuredQueryItemList {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .structuredQuerySummary {
+          padding: 12px 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-fill-quaternary);
+        }
+
+        .structuredQueryItemCard {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 12px 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-bg-container);
+        }
+
+        .structuredQueryItemHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .structuredQueryItemMeta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px 12px;
+          color: var(--ant-color-text-secondary);
+          font-size: 12px;
+          line-height: 1.6;
+          word-break: break-word;
+        }
+
+        .structuredQueryItemDescription {
+          color: var(--ant-color-text);
+          line-height: 1.7;
+          word-break: break-word;
+          white-space: pre-wrap;
         }
 
         .ragAnswerText {
@@ -781,6 +880,11 @@
       }
 
       .ragCitationsHeader {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .structuredQueryPanelHeader {
         flex-direction: column;
         align-items: stretch;
       }

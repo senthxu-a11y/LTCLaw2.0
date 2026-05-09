@@ -2588,29 +2588,397 @@ Validation note from implementation round:
 3. Focused backend RAG regression: `70 passed`.
 4. `git diff --check`: clean.
 
-### P3.8 [S] RAG Router Over Current Release
+### P3.8 [S] RAG / Structured Query / Workbench Routing Boundary Planning
 
-Depends on: P1.8, P3.2, P3.4
+Depends on: P3.rag-ui-3a, P3.permission-3, P3.rag-model-2g
+
+Status as of 2026-05-09: completed as a docs-only routing boundary review.
 
 Tasks:
 
-1. Route explanation/relationship queries to release JSONL + lightweight search.
-2. Route precise value queries to structured query path.
-3. Route modification intents to workbench path.
+1. Define the product boundary between ordinary current-release RAG Q&A, structured query, and workbench flow.
+2. Keep this slice planning-only and do not implement navigation, deep links, or route handoff.
+3. Keep structured-query routing limited to exact numeric, row-level, field-level, and value-level lookup intent.
+4. Keep workbench routing limited to change or edit intent only.
+5. Keep ordinary RAG Q&A read-only and separate from test-plan, candidate, formal-map, release, and administrator-acceptance workflows.
+6. Freeze future routing constraints for any later `Go to structured query` or `Go to workbench` action.
+7. Reconfirm request, router, provider-selection, citation, and endpoint boundaries without changing code.
 
-Decision examples:
+Implemented scope note:
 
-```text
-"How does skill damage work?" -> knowledge query
-"What is SkillTable 1029 damage?" -> structured query
-"Change 1029 damage to 120" -> workbench test plan flow
-```
+1. The review is recorded in docs/tasks/knowledge-p3-8-rag-routing-boundary-review-2026-05-09.md.
+2. This slice is docs-only and does not modify backend code, frontend code, routers, request schema, or public API.
+3. Ordinary RAG Q&A is reaffirmed as a read-only explanatory surface over the current release only.
+4. Structured query is reaffirmed as the route for exact numeric, row-level, field-level, and value-level lookup behavior only.
+5. Workbench flow is reaffirmed as the route for change, edit, modify, patch, add, remove, rewrite, or set intent only.
+6. Ordinary RAG Q&A remains forbidden from automatically creating test plans, release candidates, formal map, release builds, or release publish actions.
+7. Administrator acceptance remains outside ordinary RAG Q&A, recent-question history, copy result, citation review, and routing hints.
+8. Any future `Go to structured query` or `Go to workbench` action must be explicit user-triggered frontend behavior only.
+9. Any future routing action must not auto-submit, auto-write a test plan, auto-create a candidate, auto-build, or auto-publish.
+10. Permission checks for future structured-query or workbench entry remain separate and must still be enforced explicitly.
+11. The product-facing query payload remains `{ query }` only.
+12. Request body is not authorized to carry provider name, model name, provider hint, or service config.
+13. Router remains thin and must not select provider or call `get_rag_model_client(...)` directly.
+14. `build_rag_answer_with_service_config(...)` remains the current answer handoff path.
+15. Citation grouping and citation focus remain derived only from returned citations.
+16. This slice does not authorize any citation artifact endpoint or raw-source reading endpoint.
 
 Acceptance:
 
-1. RAG does not answer precise values from semantic chunks when structured path is available.
-2. All knowledge answers include release id and source path.
-3. Ambiguous requests ask user to choose view or route.
+1. The review keeps ordinary RAG Q&A, structured query, and workbench flow explicitly separated by product role.
+2. The review keeps structured query limited to precise fact lookup and keeps workbench limited to change or edit intent.
+3. The review keeps ordinary RAG Q&A read-only and outside administrator-acceptance or release-governance workflows.
+4. The review keeps the product-facing request payload limited to `{ query }` only.
+5. The review keeps request-body provider or model control closed and keeps router provider selection forbidden.
+6. The review keeps citation grouping or focus based only on returned citations and authorizes no new artifact or raw-source reading endpoint.
+7. The review adds no backend code, no frontend code, no new API, no real provider, and no request-schema change.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not run pytest.
+3. Post-edit validation for this pass is limited to documentation error checking.
+
+### P3.8a [S] Frontend Routing Affordance Discovery / Minimal Implementation Planning
+
+Depends on: P3.8
+
+Status as of 2026-05-09: completed as a docs-only discovery and planning slice.
+
+Tasks:
+
+1. Discover whether the current console frontend already exposes a structured-query destination.
+2. Discover whether the current console frontend already exposes a reusable NumericWorkbench destination.
+3. Judge whether a future `Go to structured query` and `Go to workbench` affordance can land without backend API expansion or auto-submit behavior.
+4. Keep this slice docs-only unless both destinations are explicit enough for a narrow frontend-only implementation plan.
+
+Implemented scope note:
+
+1. The discovery report is recorded in `docs/tasks/knowledge-p3-8a-routing-affordance-discovery-2026-05-09.md`.
+2. Discovery confirms that NumericWorkbench already has an explicit frontend route at `/numeric-workbench`, existing sidebar entry, deep-link search-param support, and separate `workbench.read` or `workbench.test.write` permission handling.
+3. Discovery confirms that the current RAG UI shows only read-only structured-query labels and warning hints, not a real structured-query route or page.
+4. Discovery confirms that no dedicated structured-query page, route, tab, or component currently exists in `console/src`.
+5. Discovery notes that the legacy `gameApi.query(...)` wrapper alone is not treated as a sufficient structured-query frontend destination.
+6. The recommended outcome for this round is docs-only and not a combined `P3.8b` implementation yet.
+7. A later workbench-only affordance slice may be feasible, but a combined structured-query plus workbench affordance slice should wait until the structured-query destination is defined explicitly.
+8. This slice adds no backend code, no frontend code, no router change, no request-schema change, no provider or model control, and no API expansion.
+
+Acceptance:
+
+1. The discovery clearly lists current available frontend entry points.
+2. The discovery clearly lists gaps that block a combined implementation.
+3. The recommendation stays docs-only when the structured-query target remains unclear.
+4. The discovery preserves the `{ query }` payload boundary and all `P3.8` non-writing routing constraints.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not run pytest.
+3. Post-edit validation for this pass is limited to documentation error checking.
+
+### P3.8b [S] Workbench Affordance Boundary Review
+
+Depends on: P3.8a
+
+Status as of 2026-05-09: completed as a docs-only boundary review.
+
+Tasks:
+
+1. Define where a future `Go to workbench` affordance may appear in the current RAG MVP entry.
+2. Decide whether generic `insufficient_context` next-step hints may host the first-version affordance.
+3. Freeze the interaction and navigation boundary for a minimal workbench-only affordance.
+4. Freeze the permission boundary and keep structured query out of this slice.
+
+Implemented scope note:
+
+1. The boundary review is recorded in `docs/tasks/knowledge-p3-8b-workbench-affordance-boundary-review-2026-05-09.md`.
+2. This slice is docs-only and does not modify backend code, frontend code, routers, request schema, or public API.
+3. The first-version workbench affordance is limited to explicit workbench or change-intent guardrail surfaces only.
+4. The first-version workbench affordance is explicitly not allowed to appear from generic `insufficient_context` next-step hints alone.
+5. Any future affordance must remain explicit user click only and must not auto-jump on warning render or state render.
+6. The recommended first version may navigate only to `/numeric-workbench`.
+7. The review does not recommend freeform-query handoff because NumericWorkbench currently defines only `session`, `table`, `row`, and `field` deep-link support.
+8. Entry permission remains `workbench.read`, while later mutation inside NumericWorkbench remains controlled by `workbench.test.write`.
+9. The review keeps `knowledge.build` and `knowledge.publish` out of the workbench-entry requirement.
+10. Structured query remains outside this slice and stays a separate destination-boundary problem.
+11. This slice adds no backend code, no frontend code, no router change, no request-schema change, no provider or model control, and no API expansion.
+
+Acceptance:
+
+1. The review keeps the future affordance workbench-only rather than combined with structured query.
+2. The review limits the first version to explicit workbench guardrail surfaces.
+3. The review rejects generic `insufficient_context` hints as a first-version trigger.
+4. The review keeps the first version limited to plain navigation to `/numeric-workbench`.
+5. The review explains why freeform-query handoff is not recommended yet.
+6. The review preserves the `{ query }` payload boundary and all existing provider, router, and citation boundaries.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not run pytest.
+3. Post-edit validation for this pass is limited to documentation error checking.
+
+### P3.8c [S] Frontend-Only Go To Workbench Affordance Implementation
+
+Depends on: P3.8b
+
+Status as of 2026-05-09: completed.
+
+Tasks:
+
+1. Add the minimal `Go to workbench` affordance only in explicit workbench guardrail contexts.
+2. Keep the first version user-triggered only.
+3. Keep the first version limited to plain navigation to `/numeric-workbench`.
+4. Add explicit `workbench.read` disabled behavior when capability context exists.
+5. Keep structured query out of this implementation slice.
+
+Implemented scope note:
+
+1. This slice is closed out in `docs/tasks/knowledge-p3-8c-go-to-workbench-closeout-2026-05-09.md`.
+2. The implementation files are `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/GameProject.module.less`.
+3. A minimal `Go to workbench` button now appears only in the static workbench guardrail block and in warning rows using the existing workbench warning.
+4. Generic `insufficient_context` next-step hints remain button-free.
+5. Clicking the button navigates only to `/numeric-workbench`.
+6. The first version does not pass freeform query text and does not auto-submit anything inside NumericWorkbench.
+7. The button stays enabled when capability context is absent, preserving local trusted fallback.
+8. When capability context exists and `workbench.read` is missing, the button is disabled with fixed copy `Requires workbench.read permission.`.
+9. The entry button does not require `knowledge.build` or `knowledge.publish`, and `workbench.test.write` still governs later write actions only.
+10. This slice adds no backend code, no new API, no request-schema change, no provider or model control, no real LLM integration, and no structured-query affordance.
+
+Acceptance:
+
+1. The button appears only in explicit workbench guardrail contexts.
+2. The button does not appear from generic `insufficient_context` hints.
+3. The button navigates only after explicit user click.
+4. The first version navigates only to `/numeric-workbench`.
+5. The first version does not auto-submit, auto-create test plans or candidates, build, or publish.
+6. The slice preserves the `{ query }` request boundary and all existing provider, router, and citation boundaries.
+
+Validation note from implementation round:
+
+1. Frontend TypeScript no-emit validation ran with no output.
+2. Targeted ESLint for `console/src/pages/Game/GameProject.tsx` and `console/src/pages/Game/ragUiHelpers.ts` ran with no output.
+3. `git diff --check` ran with no output.
+4. Editor diagnostics reported no errors in `GameProject.tsx`, `ragUiHelpers.ts`, or `GameProject.module.less`.
+5. No GameProject or RAG UI frontend test suite was found for this slice, so no frontend component test was run.
+6. No backend pytest was run because this slice did not touch backend code.
+
+### P3.8d [S] Structured-Query Destination Discovery / Boundary Review
+
+Depends on: P3.8a, P3.8c
+
+Status as of 2026-05-09: completed as a docs-only discovery and boundary review slice.
+
+Tasks:
+
+1. Re-check whether the current frontend already has a dedicated structured-query destination.
+2. Judge whether legacy `gameApi.query(agentId, q, mode)` is sufficient to act as the destination contract.
+3. Freeze where a future `Go to structured query` first version should land.
+4. Decide whether the product should first add a minimal structured-query panel or keep the current read-only label.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-p3-8d-structured-query-destination-discovery-2026-05-09.md`.
+2. Discovery reconfirms that the current frontend still has no dedicated structured-query page, route, tab, or reusable component.
+3. Discovery reconfirms that `GameProject.tsx` and `ragUiHelpers.ts` expose only read-only structured-query labels and warning copy.
+4. Discovery confirms that `gameApi.query(...)` has no current visible call site in `console/src` and is therefore not a sufficient product destination by itself.
+5. Discovery rejects both NumericWorkbench and IndexMap as the current structured-query destination because one is the mutation surface and the other is an index-browsing surface rather than a query-execution surface.
+6. The recommended first explicit destination is a new minimal structured-query panel inside the existing GameProject surface.
+7. The recommended current action is still docs-only: keep the read-only label and do not implement a `Go to structured query` button yet.
+8. Any future structured-query destination must stay explicit-click only, must not auto-submit, must not auto-write test plans or candidates, and must not build or publish.
+9. Destination-entry permission must remain separate from `knowledge.read`, and this slice does not require `knowledge.build` or `knowledge.publish`.
+10. This slice adds no backend code, no frontend code, no router change, no request-schema change, no provider or model control, and no API expansion.
+
+Acceptance:
+
+1. The review confirms that no dedicated structured-query destination currently exists.
+2. The review confirms that legacy `gameApi.query(...)` is not enough by itself.
+3. The review keeps NumericWorkbench out of the structured-query destination role.
+4. The review keeps IndexMap out of the structured-query destination role.
+5. The review recommends defining a minimal structured-query panel before any frontend affordance implementation.
+6. The review preserves the `{ query }` request boundary and all existing provider, router, and citation boundaries.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not run pytest.
+3. Post-edit validation for this pass is limited to documentation error checking.
+
+### P3.8e [S] Minimal Structured-Query Panel Contract Review
+
+Depends on: P3.8d
+
+Status as of 2026-05-09: completed as a docs-only contract review slice.
+
+Tasks:
+
+1. Freeze the first-version structured-query destination as an in-page GameProject panel.
+2. Freeze first-version entry, prefill, submit, and result-display behavior.
+3. Freeze the permission boundary for the future panel without changing backend code.
+4. Judge whether the existing `gameApi.query(agentId, q, mode)` wrapper is already sufficient as a product-facing submit contract.
+
+Implemented scope note:
+
+1. The contract review is recorded in `docs/tasks/knowledge-p3-8e-structured-query-panel-contract-2026-05-09.md`.
+2. The first-version structured-query destination is defined as a minimal panel inside the existing GameProject surface, not a new global route.
+3. The first-version panel is limited to exact numeric, row-level, field-level, and value-level lookup only and explicitly excludes change or edit or modify intent.
+4. A future `Open structured query` affordance is allowed only as explicit user click inside explicit structured-query warning contexts, and opening the panel must not auto-submit.
+5. First-version prefill is allowed only as local input seeding from the current RAG query and must not auto-submit.
+6. The first-version panel remains read-only and does not create test plans or candidates and does not build or publish.
+7. The review records that the current `gameApi.query(...)` wrapper is not yet a sufficient product contract by itself because the current frontend lacks typed request or response models, documented mode semantics, and a frozen read-only result shape.
+8. The review therefore defers direct submit binding to a later narrow API contract or typing review rather than a backend redesign.
+9. The review keeps `knowledge.build` and `knowledge.publish` out of the panel-entry requirement and recommends a dedicated structured-query read capability rather than treating `knowledge.read` as the permanent destination-entry contract.
+10. The review preserves the `{ query }` RAG payload boundary, adds no backend code, adds no frontend code, adds no provider or model control, and does not change `P3.8c` workbench affordance behavior.
+
+Acceptance:
+
+1. The review freezes the first-version destination as an in-page GameProject panel.
+2. The review keeps the panel lookup-only and keeps mutation intent out.
+3. The review allows future explicit open and optional prefill but forbids auto-submit.
+4. The review keeps first-version results read-only and non-writing.
+5. The review records the specific gap that blocks immediate direct adoption of `gameApi.query(...)` as a stable product contract.
+6. The review preserves the `{ query }` request boundary and all existing provider, router, and citation boundaries.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not run pytest.
+3. Post-edit validation for this pass is limited to documentation error checking.
+
+### P3.8f [S] Structured-Query Submit Contract / Typing Review
+
+Depends on: P3.8e
+
+Status as of 2026-05-09: completed as a docs-only submit-contract and typing-review slice.
+
+Tasks:
+
+1. Freeze which backend endpoint the future minimal structured-query panel should submit to.
+2. Freeze the first-version request contract and first-version mode strategy.
+3. Freeze the frontend response typing or normalization contract needed for a read-only panel.
+4. Freeze submit-side permission expectations without changing backend code.
+
+Implemented scope note:
+
+1. The review is recorded in `docs/tasks/knowledge-p3-8f-structured-query-submit-contract-2026-05-09.md`.
+2. The review confirms that `gameApi.query(agentId, q, mode)` currently sends `POST /agents/{agentId}/game/index/query`.
+3. The review confirms that the current backend request shape is only `q: string` plus `mode: string = "auto"`.
+4. The review confirms that the current backend response shape is an untyped dict with top-level `mode` and `results` only.
+5. The review confirms that current observed backend response branches are `not_configured`, `exact_table`, `exact_field`, and `semantic_stub`.
+6. The review confirms that there is no stable backend enum or frontend type union for query mode today and that `auto` is the only mode with explicit backend logic.
+7. The review freezes the first-version panel submit contract to query plus fixed `auto` mode only, with no provider, model, provider hint, service config, or write-oriented flags.
+8. The review recommends a frontend typed wrapper or normalization layer over the existing endpoint instead of direct raw use of the current untyped `gameApi.query(...)` transport helper.
+9. The review freezes a normalized read-only panel response contract with explicit request mode, result mode, status, message, warnings, items, and error fields, and with display items normalized into table-result and field-result variants.
+10. The review keeps source-like display limited to already returned `source_path` and field `references` and does not authorize new citation artifact or raw-source endpoints.
+11. The review keeps prefill allowed only as local input state and keeps submit explicit user click only.
+12. The review keeps submit read-only and forbids test-plan creation, candidate creation, build, publish, or mutation behavior.
+13. The review records that first-version permission may temporarily use `knowledge.read` as an interim read gate if no dedicated structured-query read capability exists yet, while still keeping `knowledge.build` and `knowledge.publish` out of scope and preserving dedicated structured-query read as the preferred long-term model.
+14. The review preserves the `{ query }` RAG request boundary, does not change the RAG router, does not change provider selection, does not add real LLM integration, and does not change `P3.8c` workbench affordance behavior.
+
+Acceptance:
+
+1. The review freezes `/game/index/query` as the reuse target for the first-version panel submit path.
+2. The review freezes first-version submit request fields to query plus fixed `auto` mode only.
+3. The review records that current response shape is too loose for direct product use and therefore requires frontend normalization.
+4. The review freezes a read-only normalized response typing contract for the future panel.
+5. The review keeps submit explicit, read-only, and non-writing.
+6. The review preserves the `{ query }` request boundary and all existing provider, router, and citation boundaries.
+
+Validation note:
+
+1. This slice is docs-only.
+2. This docs-only pass does not run pytest.
+3. Post-edit validation for this pass is limited to documentation error checking.
+
+### P3.8g [F] Minimal Structured-Query Panel Implementation
+
+Depends on: P3.8f
+
+Status as of 2026-05-09: completed as a frontend-only implementation slice.
+
+Tasks:
+
+1. Add the first explicit `Open structured query` affordance only in explicit structured-query guardrail contexts.
+2. Add the first in-page GameProject structured-query panel with explicit open and explicit submit.
+3. Add the frontend typed wrapper and normalization layer over the existing `/game/index/query` endpoint.
+4. Keep the first version read-only and preserve existing RAG, workbench, router, and provider boundaries.
+
+Implemented scope note:
+
+1. The implementation is recorded in `docs/tasks/knowledge-p3-8g-minimal-structured-query-panel-closeout-2026-05-09.md`.
+2. The static structured-query guardrail and the existing `STRUCTURED_FACT_WARNING` warning row now both expose `Open structured query`.
+3. Opening the panel is user-triggered only, may prefill from the current RAG query only when the local panel draft is still empty, and does not auto-submit.
+4. Submit remains user-triggered only, stays disabled until a `selectedAgent` exists, and sends only the panel query with fixed `auto` request mode to the existing `/game/index/query` endpoint.
+5. The frontend now normalizes the returned response into explicit request mode, result mode, status, message, warnings, items, and error fields.
+6. The first version keeps display read-only and limits normalized items to exact table-result and field-result variants only.
+7. Source-like display remains limited to already returned `source_path`, `references`, and `tags` fields.
+8. If capability context is absent, local trusted fallback remains intact.
+9. If no `selectedAgent` exists, submit is disabled.
+10. If capability context exists and `knowledge.read` is missing, both open and submit are disabled with `Requires knowledge.read permission.`.
+11. This slice changes only `console/src` and `docs/tasks`, adds no backend API, changes no backend `src`, and does not change `P3.8c` workbench affordance behavior.
+
+Acceptance:
+
+1. The first explicit structured-query destination now exists inside GameProject as a minimal panel.
+2. The panel is opened only by explicit click and never auto-submits.
+3. Submit remains read-only and uses only query plus fixed `auto` mode.
+4. The frontend no longer directly relies on the raw `/game/index/query` response shape in the UI.
+5. The panel keeps mutation, candidate, build, publish, and workbench behavior out of scope.
+6. The `{ query }` RAG boundary and all existing provider, router, and citation boundaries remain unchanged.
+
+Validation note:
+
+1. Editor diagnostics ran on the touched frontend files.
+2. Frontend TypeScript no-emit validation ran.
+3. Targeted ESLint ran on `GameProject.tsx`, `ragUiHelpers.ts`, and the new structured-query helper module.
+4. `git diff --check` ran.
+5. No frontend component test was run because no existing GameProject or RAG UI frontend test suite was found for this slice.
+6. No backend pytest was run because this slice did not touch backend code.
+
+### P3.8h [S] RAG MVP Interaction Validation / Closeout
+
+Depends on: P3.8, P3.8b, P3.8c, P3.8f, P3.8g
+
+Status as of 2026-05-09: completed as a validation-and-closeout slice.
+
+Tasks:
+
+1. Re-validate the current `P3.8` interaction surface against the frozen routing and submit boundaries.
+2. Confirm that current frontend behavior remains explicit-click only and read-only where intended.
+3. Confirm that permission-gated disabled behavior and local trusted fallback remain intact.
+4. Record a closeout decision without adding new functionality.
+
+Implemented scope note:
+
+1. The validation closeout is recorded in `docs/tasks/knowledge-p3-8h-rag-mvp-interaction-validation-2026-05-09.md`.
+2. Validation confirms that RAG Ask still sends only `{ query }`.
+3. Validation confirms that `Open structured query` appears only in the static structured guardrail block and the `STRUCTURED_FACT_WARNING` warning row.
+4. Validation confirms that opening structured query only opens the local panel and does not auto-submit.
+5. Validation confirms that prefill remains local input-state only.
+6. Validation confirms that structured-query submit remains fixed to `auto` mode and that normalized output remains read-only table-result or field-result display only.
+7. Validation confirms that no test-plan, candidate, build, publish, or SVN behavior was added.
+8. Validation confirms that `Go to workbench` appears only in the static workbench guardrail block and the `CHANGE_QUERY_WARNING` warning row.
+9. Validation confirms that `Go to workbench` still navigates only to `/numeric-workbench` with no freeform-query handoff.
+10. Validation confirms that explicit capability context missing `knowledge.read` disables Ask, `Open structured query`, and `Submit structured query`.
+11. Validation confirms that explicit capability context missing `workbench.read` disables `Go to workbench`.
+12. Validation confirms that capability-context absence keeps local trusted fallback intact.
+13. This slice changes only `docs/tasks` and adds no backend or frontend behavior.
+
+Acceptance:
+
+1. The current `P3.8` interaction surface still satisfies the frozen routing and submit boundaries.
+2. The current interaction surface remains explicit-click only and non-writing by default.
+3. The current interaction surface preserves permission gating and local trusted fallback as intended.
+4. The current interaction surface adds no backend change, no API, no request-schema expansion, and no provider or model control.
+5. `P3.8` can be treated as closed from the MVP interaction perspective.
+
+Validation note:
+
+1. Frontend TypeScript no-emit validation ran.
+2. Targeted ESLint ran on the actual interaction-surface frontend files.
+3. `git diff --check` ran.
+4. A minimal browser smoke was attempted and reached shell-load confirmation only; full in-app interaction smoke remained limited by local frontend-backend environment issues.
+5. No backend pytest was run because this slice did not touch backend code.
 
 ### P3.9 [P] Optional `table_facts.sqlite`
 

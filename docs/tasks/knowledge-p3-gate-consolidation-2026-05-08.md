@@ -49,6 +49,13 @@ The following P3 capabilities are now treated as landed:
 26. P3.rag-ui-2b frontend hardening and helper-extraction slice completed.
 27. P3.rag-ui-3 product experience consolidation planning completed as a docs-only slice.
 28. P3.rag-ui-3a frontend-only product experience refinement completed.
+29. P3.8 RAG router or structured-query or workbench routing boundary planning completed as a docs-only slice.
+30. P3.8b workbench affordance boundary review completed as a docs-only slice.
+31. P3.8c frontend-only `Go to workbench` affordance implementation completed.
+32. P3.8e minimal structured-query panel contract review completed as a docs-only slice.
+33. P3.8f structured-query submit contract and typing review completed as a docs-only slice and freezes the future first-version panel submit path to a typed frontend wrapper over the existing `/game/index/query` endpoint using query plus fixed `auto` mode only.
+34. P3.8g frontend-only minimal structured-query panel implementation completed and lands explicit open, optional local prefill, selected-agent-gated explicit submit, and read-only normalized result display inside GameProject without backend changes.
+35. P3.8h RAG MVP interaction validation completed and closes the current MVP interaction surface at the code-and-contract level without adding functionality.
 
 ## Current Product Truth
 
@@ -106,7 +113,15 @@ Recommended next mainline direction:
 21. Keep the current MVP entry in GameProject and defer any standalone Knowledge Q&A panel decision until the MVP interaction model stabilizes further.
 22. Treat `P3.rag-ui-3a` as the landed frontend-only product experience refinement slice for the current GameProject MVP entry.
 23. Keep provider selection, request-schema changes, router provider selection, and real external provider integration out of this frontend surface.
-24. Real external provider integration remains deferred until later dedicated slices.
+24. Treat `P3.8` as the landed docs-only routing-boundary definition between ordinary RAG Q&A, structured query, and workbench flow.
+25. Keep future `Go to structured query` or `Go to workbench` behavior user-initiated only, non-writing by default, and still subject to separate permission checks and later route-review work.
+26. Treat `P3.8b` as the landed docs-only workbench-affordance boundary definition and keep it limited to workbench-only routing review rather than a combined structured-query plus workbench implementation.
+27. Keep any first-version workbench affordance limited to explicit workbench guardrail surfaces, plain navigation to `/numeric-workbench`, and no freeform-query handoff.
+28. Treat `P3.8c` as the landed frontend-only minimal workbench-affordance implementation and keep it limited to the existing GameProject RAG surface plus the existing NumericWorkbench route.
+29. Keep structured query out of `P3.8c` and continue treating it as a separate destination-boundary problem.
+30. Treat `P3.8d` as the landed docs-only structured-query destination review and keep the current structured-query label read-only until a dedicated minimal destination contract exists inside the existing GameProject surface.
+31. Real external provider integration remains deferred until later dedicated slices.
+32. Treat `P3.8e` as the landed docs-only minimal structured-query panel contract review and keep any future first-version structured-query destination inside the existing GameProject surface as a read-only lookup panel with explicit open, optional prefill, and no auto-submit.
 
 ## Final Result
 
@@ -133,4 +148,18 @@ Recommended next mainline direction:
 21. `P3.rag-ui-3` is now landed as the docs-only product experience consolidation plan for the current GameProject RAG MVP entry.
 22. `P3.rag-ui-3a` is now landed as the frontend-only product experience refinement slice for the current GameProject RAG MVP entry.
 23. The current MVP entry now has refined three-state hierarchy, read-only next-step hints, read-only structured-query and workbench path labels, and citation display grouping based only on returned citations.
-24. Direct real external provider integration remains deferred.
+24. `P3.8` is now landed as the docs-only routing-boundary review for ordinary RAG Q&A versus structured query versus workbench flow.
+25. The current product boundary now explicitly keeps structured query limited to exact numeric, row-level, field-level, and value-level lookup intent, and keeps workbench limited to change or edit intent.
+26. The current product boundary now explicitly forbids future routing affordances from auto-submitting, auto-writing test plans, auto-creating candidates, auto-building, or auto-publishing.
+27. `P3.8b` is now landed as the docs-only workbench-affordance boundary review for a future minimal `Go to workbench` button.
+28. The current product boundary now explicitly keeps the first-version workbench affordance tied to explicit workbench guardrails only, not generic `insufficient_context` hints.
+29. The current product boundary now explicitly keeps the first-version workbench affordance limited to plain navigation to `/numeric-workbench` with no freeform-query handoff.
+30. `P3.8c` is now landed as the frontend-only minimal `Go to workbench` affordance implementation.
+31. The current MVP entry now exposes the workbench affordance only in explicit workbench guardrail contexts and keeps generic `insufficient_context` hints button-free.
+32. The current MVP entry now navigates to the existing `/numeric-workbench` route only after explicit user click and still does not auto-submit, auto-write, build, or publish.
+33. `P3.8h` is now landed as the validation-and-closeout slice for the current MVP interaction surface.
+34. The current MVP entry is now validated to keep Ask on `{ query }` only, keep structured query open-and-submit explicit, keep structured-query results read-only, and keep workbench handoff limited to explicit navigation to `/numeric-workbench`.
+35. The current MVP entry is now validated to preserve explicit permission gating and local trusted fallback without adding backend changes, API changes, provider or model control, or automatic governance actions.
+36. Final gate reran frontend validation and focused backend RAG plus model/provider pytest successfully and found no blocker inside the current MVP interaction slice.
+37. The current P3 RAG MVP slice is now commit-ready at the code-and-contract level.
+38. Direct real external provider integration remains deferred.
