@@ -14,11 +14,12 @@ Status as of 2026-05-10:
 2. post-MVP data-backed final regression receipt completed in `docs/tasks/knowledge-post-mvp-data-backed-final-regression-receipt-2026-05-10.md`
 3. post-MVP final handoff / delivery packaging completed in `docs/tasks/knowledge-post-mvp-final-handoff-delivery-packaging-2026-05-10.md`
 4. post-MVP operator-side pilot validation completed in `docs/tasks/knowledge-post-mvp-operator-side-pilot-validation-2026-05-10.md`
-5. current pilot disposition is `Operator-side pilot pass with known limitations.` while the underlying mainline status remains `Data-backed pilot readiness pass.` and pilot usable
-6. the current state remains not production ready
-7. SVN integration remains deferred, and SVN Phase 0/1 remains deferred to a separate slice
-8. external-provider remains frozen at `P3.external-provider-19`, and `P20` remains deferred
-9. the next recommended action is controlled pilot usage on the validated target machine, then an optional separate slice such as SVN Phase 0/1 review or another post-MVP production-hardening scope decision
+5. post-MVP Windows operator-side pilot validation completed in `docs/tasks/knowledge-post-mvp-windows-operator-side-pilot-validation-2026-05-10.md`
+6. current pilot disposition is `Operator-side pilot pass with known limitations.` on the validated Mac and Windows target machines, while the underlying mainline status remains `Data-backed pilot readiness pass.` and pilot usable
+7. the current state remains not production ready
+8. SVN integration remains deferred, and SVN Phase 0/1 remains deferred to a separate slice
+9. external-provider remains frozen at `P3.external-provider-19`, and `P20` remains deferred
+10. the next recommended action is controlled pilot usage on the validated target machines, then an optional separate slice such as SVN Phase 0/1 review or another post-MVP production-hardening scope decision
 
 ---
 

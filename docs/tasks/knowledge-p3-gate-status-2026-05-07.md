@@ -47,6 +47,14 @@ This gate does not introduce a real LLM, embedding, vector store, frontend RAG U
 
 It also still does not introduce real external provider credentials, transport, provider rollout, or frontend provider selection.
 
+Later post-MVP target-machine execution updates now also exist for the accepted MVP state:
+
+1. the Mac operator-side validation closeout is recorded in `docs/tasks/knowledge-post-mvp-operator-side-pilot-validation-2026-05-10.md`
+2. the Windows operator-side validation closeout is recorded in `docs/tasks/knowledge-post-mvp-windows-operator-side-pilot-validation-2026-05-10.md`
+3. the Windows round reused the same accepted MVP/operator path, validated a real Chinese-path local project directory and real `18`-table dataset, and preserved the same non-production and deferred-scope boundaries
+4. the Windows round also records two environment-specific operational differences rather than product-scope changes: `.\.venv\Scripts\ltclaw.exe` instead of `python -m ltclaw`, and Python/urllib UTF-8 JSON instead of direct PowerShell JSON for Chinese path payloads
+5. the Windows round did not reopen P0-P3, did not add code changes, and did not change the governing MVP conclusion
+
 ## Completed Scope
 
 ### P3.1 Completed Scope
@@ -258,6 +266,10 @@ The current verified summary is:
 24. P3.7b touched Python files were rechecked as `NUL=0`.
 25. The partial P3.7b draft added no frontend change, no release mutation, no auto build, no auto set current, and no SVN read/write.
 26. P3.7b+ `tests/unit/game/test_knowledge_release_service.py`: `15 passed`.
+27. later post-MVP Mac operator-side target-machine validation is recorded as complete for the accepted MVP state.
+28. later post-MVP Windows operator-side target-machine validation is recorded as complete for the accepted MVP state.
+29. the Windows closeout records successful rebuild, formal map save, build-from-current-indexes, set current, rollback, current-release query/RAG, structured query, NumericWorkbench draft dry-run, and draft test-plan create/list on the Windows target machine.
+30. the Windows closeout also records that frontend TypeScript no-emit and targeted ESLint reran on that machine, while focused backend pytest was explicitly waived there because the configured venv did not include `pytest`.
 27. Post-MVP data-backed final regression receipt later reran focused backend regression at `179 passed`, reran frontend validation successfully, and reconfirmed real data-backed rebuild, release, rollback, query, RAG, structured query, and draft export on the real local project directory.
 28. The resulting pilot disposition remains `Data-backed pilot readiness pass.` and not production ready.
 29. Post-MVP Final Handoff / Delivery Packaging is now complete in `docs/tasks/knowledge-post-mvp-final-handoff-delivery-packaging-2026-05-10.md`.

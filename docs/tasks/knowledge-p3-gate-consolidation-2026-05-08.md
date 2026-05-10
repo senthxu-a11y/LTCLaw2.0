@@ -99,6 +99,8 @@ Current facts:
 17. That handoff explicitly keeps SVN integration deferred, keeps SVN Phase 0/1 deferred to a separate slice, and keeps `P20` deferred.
 18. Post-MVP operator-side pilot validation is now complete as the target-machine execution closeout for the same accepted MVP/pilot state.
 19. That validation records `Operator-side pilot pass with known limitations.` while preserving the same official non-production boundary and the same deferred SVN/provider scope.
+20. Post-MVP Windows operator-side pilot validation is now also complete as a second target-machine execution closeout for the same accepted MVP/pilot state.
+21. That Windows validation records the same `Operator-side pilot pass with known limitations.` conclusion on a Windows target machine while preserving the same official non-production boundary and the same deferred SVN/provider scope.
 
 ## What This Is Not Yet
 
@@ -250,7 +252,8 @@ Recommended next mainline direction:
 82. A later final handoff / delivery packaging closeout records the operator-facing startup/configuration rules, pilot operating flow, rollback/recovery guidance, permission matrix, SVN position, external-provider position, operator checklist, and next-agent handoff entry points for the same accepted MVP state.
 83. A later operator-side pilot validation closeout records that the target machine itself passed rebuild, formal map save, reversible status edit, build-from-current-indexes, set current, rollback, current-release query, current-release RAG, structured query, NumericWorkbench draft proposal dry-run, and draft test-plan create/list.
 84. That validation also reruns focused backend regression at `179 passed`, reruns frontend TypeScript / targeted ESLint / production build successfully, and records SVN CLI absence as non-blocking because full rescan fallback still works on the target machine.
-85. The resulting next action is now narrower still: start controlled pilot usage on the validated target machine first, then only an optional separately scoped slice such as SVN Phase 0/1 review or another post-MVP production-hardening scope decision.
+85. The resulting next action is now narrower still: start controlled pilot usage on the validated target machines first, then only an optional separately scoped slice such as SVN Phase 0/1 review or another post-MVP production-hardening scope decision.
+86. The Windows closeout also records environment-specific operator facts rather than new product scope: `.\.venv\Scripts\ltclaw.exe` was the working startup entry on that machine, `python -m ltclaw` was not, the real Windows dataset indexed `18` tables rather than the Mac `8`, and Python/urllib UTF-8 JSON was needed to save Chinese-path configuration reliably from the operator side.
 50. The review keeps frontend provider/model UI, request-body provider hints, `ProviderManager.active_model`, and real external provider integration out of scope.
 51. `P3.external-provider-1`, corresponding to `P3.rag-model-3b`, is now explicitly closed out as a backend-only external provider adapter skeleton.
 52. That skeleton does not connect a real LLM, does not perform real HTTP, does not read real credential material, does not read environment variables, and does not change frontend UI or the RAG request schema.
