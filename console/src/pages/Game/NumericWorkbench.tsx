@@ -94,6 +94,7 @@ export default function NumericWorkbench() {
   const hasExplicitCapabilityContext = hasCapabilityContext(capabilities);
   const canReadWorkbench = canUseGovernanceAction(capabilities, "workbench.read");
   const canWriteWorkbench = canUseGovernanceAction(capabilities, "workbench.test.write");
+  const canExportWorkbench = canUseGovernanceAction(capabilities, "workbench.test.export");
   const permissionDeniedMessage = t("gameProject.permissionDenied", {
     defaultValue: "You do not have permission to perform this action.",
   });
@@ -107,6 +108,12 @@ export default function NumericWorkbench() {
     hasExplicitCapabilityContext && !canWriteWorkbench
       ? t("gameWorkbench.permissionWriteRequired", {
           defaultValue: "Requires workbench.test.write permission.",
+        })
+      : null;
+  const workbenchExportReason =
+    hasExplicitCapabilityContext && !canExportWorkbench
+      ? t("gameWorkbench.permissionExportRequired", {
+          defaultValue: "Requires workbench.test.export permission.",
         })
       : null;
 
@@ -595,8 +602,9 @@ export default function NumericWorkbench() {
       rowKey: string,
       field: string,
       origVal: unknown,
-      _rIdx: number,
+      rowIndex: number,
     ) => {
+      void rowIndex;
       const k = dirtyKeyOf(tname, rowKey, field);
       const dItem = dirty.dirty[k];
       const isEditing =
@@ -1042,7 +1050,7 @@ export default function NumericWorkbench() {
 
   // ── 提交草稿 ─────────────────────────────────────────
   const openDraft = () => {
-    if (!canWriteWorkbench) {
+    if (!canExportWorkbench) {
       return;
     }
     if (validChanges.length === 0) {
@@ -1063,8 +1071,8 @@ export default function NumericWorkbench() {
 
   const submitDraft = async () => {
     if (!selectedAgent) return;
-    if (!canWriteWorkbench) {
-      message.warning(workbenchWriteReason || permissionDeniedMessage);
+    if (!canExportWorkbench) {
+      message.warning(workbenchExportReason || permissionDeniedMessage);
       return;
     }
     setSubmitting(true);
@@ -1613,8 +1621,8 @@ export default function NumericWorkbench() {
             saveSessionDisabled={!sessionStore.isCurrentDirtySinceSave}
             onExportDraft={openDraft}
             exporting={submitting}
-            exportDisabled={validChanges.length === 0 || !canWriteWorkbench}
-            exportDisabledReason={workbenchWriteReason || undefined}
+            exportDisabled={validChanges.length === 0 || !canExportWorkbench}
+            exportDisabledReason={workbenchExportReason || undefined}
           />
           <ImpactPanel
             preview={preview}

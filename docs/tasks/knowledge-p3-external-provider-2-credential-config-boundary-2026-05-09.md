@@ -187,14 +187,14 @@ Recorded proof shape:
 
 ## Recommended Next Slice
 
-The next reasonable step is backend service config wiring boundary review, followed by backend service config wiring skeleton implementation, still backend-only and still without runtime rollout.
+The backend service config wiring boundary review and backend service config wiring skeleton implementation are now complete. The next reasonable step is runtime allowlist boundary review, still before any real external provider rollout.
 
 That next slice should:
 
-1. freeze how backend service config is handed into the existing answer path without widening router authority
-2. keep runtime providers limited to `deterministic_mock` and `disabled`
+1. decide when `future_external` may enter the runtime provider set
+2. keep router/request/UI provider selection blocked unless a later boundary explicitly changes that
 3. keep GameProject, request schema, endpoint surface, and router boundary unchanged
-4. keep real provider rollout deferred
+4. keep real provider rollout deferred until runtime allowlist rules are accepted
 
 ## Validation Note
 

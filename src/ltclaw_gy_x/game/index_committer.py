@@ -54,6 +54,15 @@ class IndexCommitter:
         self.svn_registry_file: Optional[Path] = None
         self._setup_svn_paths()
 
+    def _can_commit_path(self, path: Path) -> bool:
+        if not self.svn:
+            return False
+        try:
+            working_copy = Path(self.svn.working_copy).resolve(strict=False)
+            return path.resolve(strict=False).is_relative_to(working_copy)
+        except Exception:
+            return False
+
     def _setup_svn_paths(self):
         if not self.index_output_dir or not self.svn:
             return
@@ -65,10 +74,9 @@ class IndexCommitter:
             self.svn_dependency_file = None
             self.svn_registry_file = None
 
-            if output_dir.is_relative_to(svn_root):
-                self.svn_tables_file = get_table_indexes_path(svn_root)
-                self.svn_dependency_file = get_dependency_graph_path(svn_root)
-                self.svn_registry_file = get_registry_path(svn_root)
+            self.svn_tables_file = get_table_indexes_path(svn_root)
+            self.svn_dependency_file = get_dependency_graph_path(svn_root)
+            self.svn_registry_file = get_registry_path(svn_root)
 
             self.svn_tables_dir.mkdir(parents=True, exist_ok=True)
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -202,7 +210,7 @@ class IndexCommitter:
             if self.svn_tables_file:
                 self._write_text_atomic(self.svn_tables_file, content)
                 msg = commit_message or f"????? ({len(tables)} tables)"
-                if not await self._commit_to_svn([self.svn_tables_file], msg):
+                if self._can_commit_path(self.svn_tables_file) and not await self._commit_to_svn([self.svn_tables_file], msg):
                     return False
             return True
         except Exception as e:
@@ -220,7 +228,7 @@ class IndexCommitter:
             if self.svn_dependency_file:
                 self._write_text_atomic(self.svn_dependency_file, content)
                 msg = commit_message or f"??????? ({len(graph.edges)} dependencies)"
-                if not await self._commit_to_svn([self.svn_dependency_file], msg):
+                if self._can_commit_path(self.svn_dependency_file) and not await self._commit_to_svn([self.svn_dependency_file], msg):
                     return False
             return True
         except Exception as e:
@@ -261,13 +269,16 @@ class IndexCommitter:
             files = []
             if self.svn_tables_file:
                 self._write_text_atomic(self.svn_tables_file, tj)
-                files.append(self.svn_tables_file)
+                if self._can_commit_path(self.svn_tables_file):
+                    files.append(self.svn_tables_file)
             if self.svn_dependency_file:
                 self._write_text_atomic(self.svn_dependency_file, gj)
-                files.append(self.svn_dependency_file)
+                if self._can_commit_path(self.svn_dependency_file):
+                    files.append(self.svn_dependency_file)
             if self.svn_registry_file:
                 self._write_text_atomic(self.svn_registry_file, rj)
-                files.append(self.svn_registry_file)
+                if self._can_commit_path(self.svn_registry_file):
+                    files.append(self.svn_registry_file)
             if files:
                 msg = commit_message or f"???????? ({len(tables)} tables, {len(graph.edges)} dependencies)"
                 if not await self._commit_to_svn(files, msg):

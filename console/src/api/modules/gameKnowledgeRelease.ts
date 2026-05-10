@@ -7,6 +7,7 @@ import type {
   KnowledgeIndexArtifact,
   KnowledgeManifest,
   KnowledgeReleasePointer,
+  KnowledgeReleaseStatusResponse,
   ReleaseCandidateListItem,
 } from '../types/game';
 
@@ -38,6 +39,10 @@ function isNoCurrentReleaseError(error: unknown): boolean {
 export const gameKnowledgeReleaseApi = {
   async listReleases(agentId: string): Promise<KnowledgeManifest[]> {
     return request<KnowledgeManifest[]>(`/agents/${agentId}/game/knowledge/releases`);
+  },
+
+  async getReleaseStatus(agentId: string): Promise<KnowledgeReleaseStatusResponse> {
+    return request<KnowledgeReleaseStatusResponse>(`/agents/${agentId}/game/knowledge/releases/status`);
   },
 
   async listBuildCandidates(agentId: string): Promise<ReleaseCandidateListItem[]> {

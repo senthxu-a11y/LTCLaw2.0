@@ -120,6 +120,20 @@ export interface KnowledgeReleasePointer {
   updated_at: string;
 }
 
+export interface KnowledgeReleaseHistoryItem {
+  release_id: string;
+  created_at: string;
+  label: string;
+  is_current: boolean;
+  indexes: Record<string, KnowledgeIndexArtifact>;
+}
+
+export interface KnowledgeReleaseStatusResponse {
+  current: KnowledgeReleaseHistoryItem | null;
+  previous: KnowledgeReleaseHistoryItem | null;
+  history: KnowledgeReleaseHistoryItem[];
+}
+
 export type KnowledgeStatus = "active" | "deprecated" | "ignored";
 
 export interface KnowledgeSystem {

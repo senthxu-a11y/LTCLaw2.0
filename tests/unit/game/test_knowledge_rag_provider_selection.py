@@ -55,6 +55,7 @@ def test_resolve_external_rag_model_client_config_reads_nested_backend_owned_con
             service_config=SimpleNamespace(
                 external_provider_config={
                     'enabled': True,
+                    'transport_enabled': True,
                     'provider_name': 'future_external',
                     'model_name': 'stub-model',
                     'allowed_providers': ['future_external'],
@@ -67,6 +68,7 @@ def test_resolve_external_rag_model_client_config_reads_nested_backend_owned_con
 
     assert external_config == ExternalRagModelClientConfig(
         enabled=True,
+        transport_enabled=True,
         provider_name='future_external',
         model_name='stub-model',
         allowed_providers=('future_external',),

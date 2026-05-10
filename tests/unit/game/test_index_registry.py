@@ -41,9 +41,10 @@ class _StubSvn:
 
 
 @pytest.fixture
-def committer(tmp_path):
+def committer(tmp_path, monkeypatch):
     src_root = tmp_path / "src"; src_root.mkdir()
     workspace = tmp_path / "ws"; workspace.mkdir()
+    monkeypatch.setenv("LTCLAW_GAME_PROJECTS_DIR", str(tmp_path / "game-projects"))
     return IndexCommitter(
         project=_project(),
         svn_client=_StubSvn(src_root),
@@ -113,7 +114,9 @@ def test_save_all_writes_registry_to_app_owned_cache(committer):
     cache = json.loads(committer.registry_file.read_text(encoding="utf-8"))
     assert cache["schema_version"] == "registry.v1"
     assert cache["dependencies_count"] == 1
-    assert committer.svn_registry_file is None
+    assert committer.svn_registry_file is not None
+    assert committer.svn_registry_file.exists()
+    assert committer._can_commit_path(committer.svn_registry_file) is False
 
 
 def test_load_registry_roundtrip(committer):

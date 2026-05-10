@@ -261,8 +261,9 @@ def rebuild_doc_chunk_index(workspace_dir: Path, game_service) -> dict[str, Any]
 
 
 def load_doc_chunk_index(workspace_dir: Path, game_service, rebuild: bool = False) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    svn_root = _resolve_svn_root(game_service)
     chunk_path = _doc_chunk_path(workspace_dir, svn_root)
-    status_path = _retrieval_status_path(workspace_dir)
+    status_path = _retrieval_status_path(workspace_dir, svn_root)
     if rebuild or not chunk_path.exists() or not status_path.exists():
         status = rebuild_doc_chunk_index(workspace_dir, game_service)
     else:

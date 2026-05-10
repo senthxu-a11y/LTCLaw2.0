@@ -6,10 +6,11 @@ import logging
 import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from ...app.agent_context import get_agent_for_request
+from ...app.capabilities import require_capability
 from ...app.approvals.service import get_approval_service
 from ...app.workspace.workspace import Workspace
 from ...game.change_proposal import (
@@ -84,8 +85,10 @@ def _relative_changed_files(svc, proposal: ChangeProposal) -> list[str]:
 @router.post("/proposals")
 async def create_proposal(
     body: ChangeProposalCreate,
+    request: Request,
     workspace: Workspace = Depends(get_agent_for_request),
 ):
+    require_capability(request, "workbench.test.export")
     svc = _service(workspace)
     store = _proposal_store(svc)
     proposal = ChangeProposal(

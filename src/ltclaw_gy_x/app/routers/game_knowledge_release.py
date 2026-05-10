@@ -64,6 +64,20 @@ class BuildKnowledgeReleaseFromCurrentIndexesRequest(BaseModel):
     created_at: datetime | None = Field(default=None)
 
 
+class KnowledgeReleaseHistoryItem(BaseModel):
+    release_id: str = Field(description='Knowledge release id')
+    created_at: datetime = Field(description='Release created_at timestamp')
+    label: str = Field(description='Release history label')
+    is_current: bool = Field(description='Whether this release is the current release')
+    indexes: dict[str, KnowledgeIndexArtifact] = Field(default_factory=dict, description='Release indexes')
+
+
+class KnowledgeReleaseStatusResponse(BaseModel):
+    current: KnowledgeReleaseHistoryItem | None = Field(default=None)
+    previous: KnowledgeReleaseHistoryItem | None = Field(default=None)
+    history: list[KnowledgeReleaseHistoryItem] = Field(default_factory=list)
+
+
 def _game_service_or_404(workspace):
     svc = getattr(workspace, 'game_service', None)
     if svc is None and hasattr(workspace, 'service_manager'):
@@ -92,6 +106,52 @@ def _project_root_or_400(game_service) -> Path:
         return Path(project_root).expanduser()
 
     raise HTTPException(status_code=400, detail='Local project directory not configured')
+
+
+def _build_release_history_item(manifest: KnowledgeManifest, *, is_current: bool) -> KnowledgeReleaseHistoryItem:
+    return KnowledgeReleaseHistoryItem(
+        release_id=manifest.release_id,
+        created_at=manifest.created_at,
+        label='current' if is_current else 'available',
+        is_current=is_current,
+        indexes=manifest.indexes,
+    )
+
+
+def _build_release_status(project_root: Path) -> KnowledgeReleaseStatusResponse:
+    manifests = sorted(
+        list_releases(project_root),
+        key=lambda manifest: (manifest.created_at, manifest.release_id),
+        reverse=True,
+    )
+
+    try:
+        current_manifest = get_current_release(project_root)
+        current_release_id = current_manifest.release_id
+    except CurrentKnowledgeReleaseNotSetError:
+        current_release_id = None
+
+    history = [
+        _build_release_history_item(manifest, is_current=manifest.release_id == current_release_id)
+        for manifest in manifests
+    ]
+    current_item = next((item for item in history if item.is_current), None)
+
+    previous_item = None
+    seen_current = current_item is None
+    for item in history:
+        if item.is_current:
+            seen_current = True
+            continue
+        if seen_current:
+            previous_item = item
+            break
+
+    return KnowledgeReleaseStatusResponse(
+        current=current_item,
+        previous=previous_item,
+        history=history,
+    )
 
 
 @router.post('/build', response_model=BuildKnowledgeReleaseResponse)
@@ -183,6 +243,21 @@ async def get_current_release_manifest(request: Request) -> KnowledgeManifest:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except KnowledgeReleaseNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail='Knowledge release metadata is invalid') from exc
+
+
+@router.get('/status', response_model=KnowledgeReleaseStatusResponse)
+async def get_release_status(request: Request) -> KnowledgeReleaseStatusResponse:
+    require_capability(request, 'knowledge.read')
+    workspace = await get_agent_for_request(request)
+    game_service = _game_service_or_404(workspace)
+    try:
+        return _build_release_status(_project_root_or_400(game_service))
+    except KnowledgeReleaseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail='Knowledge release status is unavailable') from exc
 
 
 @router.post('/{release_id}/current', response_model=KnowledgeReleasePointer)
@@ -196,6 +271,8 @@ async def set_current_release_manifest(release_id: str, request: Request) -> Kno
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail='Knowledge release metadata is invalid') from exc
 
 
 @router.get('/{release_id}/manifest', response_model=KnowledgeManifest)
@@ -209,3 +286,5 @@ async def get_release_manifest(release_id: str, request: Request) -> KnowledgeMa
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail='Knowledge release metadata is invalid') from exc

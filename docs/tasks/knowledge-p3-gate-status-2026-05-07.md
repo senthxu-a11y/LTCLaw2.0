@@ -34,7 +34,14 @@ Completed in this gate:
 13. `P3.provider-credential-boundary-review` docs-only safety boundary review.
 14. `P3.external-provider-1` docs closeout for the backend external provider adapter skeleton.
 15. `P3.external-provider-2` backend credential/config skeleton implementation closeout.
-16. `P3.external-provider-3` docs-only backend service config wiring boundary review.
+16. `P3.external-provider-3` backend service config wiring skeleton implementation.
+17. `P3.external-provider-4` runtime allowlist boundary review.
+18. `P3.external-provider-5` runtime allowlist implementation plan.
+19. `P3.external-provider-6` backend-only minimal runtime allowlist implementation.
+20. `P3.external-provider-7` real provider rollout boundary review.
+21. `P3.external-provider-8a` mocked HTTP client skeleton implementation plan.
+22. `P3.external-provider-8b` mocked HTTP client skeleton implementation.
+23. `P3.external-provider-9` real transport design review.
 
 This gate does not introduce a real LLM, embedding, vector store, frontend RAG UI, or SVN behavior.
 
@@ -251,6 +258,15 @@ The current verified summary is:
 24. P3.7b touched Python files were rechecked as `NUL=0`.
 25. The partial P3.7b draft added no frontend change, no release mutation, no auto build, no auto set current, and no SVN read/write.
 26. P3.7b+ `tests/unit/game/test_knowledge_release_service.py`: `15 passed`.
+27. Post-MVP data-backed final regression receipt later reran focused backend regression at `179 passed`, reran frontend validation successfully, and reconfirmed real data-backed rebuild, release, rollback, query, RAG, structured query, and draft export on the real local project directory.
+28. The resulting pilot disposition remains `Data-backed pilot readiness pass.` and not production ready.
+29. Post-MVP Final Handoff / Delivery Packaging is now complete in `docs/tasks/knowledge-post-mvp-final-handoff-delivery-packaging-2026-05-10.md`.
+30. That handoff keeps the official state as MVP complete, `Data-backed pilot readiness pass.`, pilot usable, and not production ready.
+31. That handoff explicitly keeps SVN integration deferred, keeps SVN Phase 0/1 deferred to a separate slice, and keeps `P20` deferred.
+32. Post-MVP operator-side pilot validation is now complete in `docs/tasks/knowledge-post-mvp-operator-side-pilot-validation-2026-05-10.md`.
+33. That target-machine validation records `Operator-side pilot pass with known limitations.` while preserving the same accepted MVP disposition: `Data-backed pilot readiness pass.`, pilot usable, and not production ready.
+34. That validation confirms live operator success for rebuild, formal map save, reversible status edit, build-from-current-indexes, set current, rollback, current-release query, current-release RAG, structured query, NumericWorkbench draft proposal dry-run, and draft test-plan create/list on the target runtime.
+35. The next recommended action after operator-side validation is controlled pilot usage on the validated target machine, followed only by an optional separately scoped slice such as SVN Phase 0/1 review or another post-MVP production-hardening scope decision.
 27. P3.7b+ focused formal-map/release/router set: `35 passed`.
 28. P3.7b+ wider `tests/unit/game` + `tests/unit/routers`: `328 passed`.
 29. P3.7b+ `git diff --check`: passed.
@@ -357,6 +373,59 @@ The current verified summary is:
 130. Relationship editor, graph canvas, and LLM map generation are not treated as blockers for P3.7 conservative completion.
 131. P3.7 is now treated as conservatively complete.
 132. The recommended next direction is broader P3 gate consolidation or the P3 RAG or model-client boundary, not more P3.7 UI expansion.
+133. P3.10 release rollback UX or API is complete and keeps rollback limited to current-pointer switch rather than rebuild or publish.
+134. P3.11 permissions hardening is now complete for the current MVP slice.
+135. The final MVP capability vocabulary is `knowledge.read`, `knowledge.build`, `knowledge.publish`, `knowledge.map.read`, `knowledge.map.edit`, `knowledge.candidate.read`, `knowledge.candidate.write`, `workbench.read`, `workbench.test.write`, and `workbench.test.export`.
+136. `knowledge.map.read` is retained rather than collapsed into `knowledge.read` because map review remains a narrower governance-oriented read surface.
+137. `knowledge.candidate.read` and `knowledge.candidate.write` are retained rather than replaced by `workbench.candidate.mark` because the current backend already distinguishes candidate read from candidate write and collapsing them would change semantics.
+138. `workbench.candidate.mark` is therefore not adopted in the current MVP capability set.
+139. Existing workbench draft export or proposal-create path is now explicitly gated by `workbench.test.export` on `POST /game/change/proposals`.
+140. Existing build and publish boundaries remain unchanged: build still requires `knowledge.build`, and set-current or rollback still requires `knowledge.publish`.
+141. Existing release, query, and RAG reads remain under `knowledge.read`; map review reads remain under `knowledge.map.read`; test-plan reads remain under `workbench.read`.
+142. Existing release-candidate routes remain under `knowledge.candidate.read` and `knowledge.candidate.write`.
+143. Existing workbench fast-test write remains separately grantable under `workbench.test.write` and still does not require `knowledge.publish`.
+144. Local trusted fallback remains unchanged and still allows requests when explicit capability context is absent.
+145. Focused backend validation for the new export gate passed in `7 passed in 2.05s` on `tests/unit/routers/test_game_change_router.py`.
+146. The next recommended step after P3.11 is now P3.12 P3 Review Gate rather than external-provider P20.
+147. P3.12 P3 Review Gate is now passed for the current P0-P3 MVP slice.
+148. The gate confirms that the current conservative map UX is sufficient for MVP closeout because saved formal map can be saved and status-edited through GameProject, while candidate-map editing and relationship editor remain explicitly deferred.
+149. The gate confirms that RAG and keyword query remain current-release-only and continue to follow the restored release after rollback.
+150. The gate confirms that precise numeric or row-level lookup remains routed to structured query rather than to the ordinary RAG entry.
+151. The gate confirms that rollback remains limited to current-pointer switch and does not rebuild, publish, or mutate formal-map or pending state.
+152. The gate confirms that the final MVP permission split remains enforced across release, map, candidate, workbench read or write, and workbench export surfaces.
+153. The only blocker found in the review round was stale P3.11 closeout wording, corrected as documentation drift only.
+154. No new product functionality was added in the P3.12 review-gate round.
+155. Post-MVP scope decision review is now complete as a docs-only slice after final handover.
+156. That review confirms that external-provider remains frozen at `P3.external-provider-19` and that `P20` real HTTP transport must not continue by default.
+157. The review evaluates `P20`, `P3.9 table_facts.sqlite`, relationship-editor or graph-governance UX, release packaging or final QA, provider admin/config boundary, and structured-query hardening as the main post-MVP candidates.
+158. The review recommends `release packaging / final QA / handoff hardening` as the next mainline because it most directly improves delivery quality without reopening secret, credential, real-HTTP, or provider-rollout risk.
+159. The review keeps `structured query hardening` as the strongest implementation-oriented alternative and keeps provider admin/config boundary plus optional `P3.9 table_facts.sqlite` planning as secondary follow-on routes.
+160. The review keeps `P20` resume, relationship editor, graph canvas, and real provider rollout deferred unless a later dedicated slice explicitly reopens them.
+161. Post-MVP pilot readiness checklist or final QA plan is now complete as a docs-only planning slice.
+162. That checklist confirms that the current phase is pilot readiness rather than new feature development and that the current goal is to decide whether the MVP can enter real-user pilot.
+163. The checklist defines pilot readiness around startup, release build, current-release query or RAG, structured query, conservative formal-map flow, NumericWorkbench fast-test flow, export draft proposal, rollback, permission clarity, and recovery clarity.
+164. The checklist records that external-provider remains frozen at `P3.external-provider-19`, that `P20` real HTTP transport remains deferred, and that `P3.9 table_facts.sqlite`, relationship editor, graph canvas, and real provider rollout are not pilot blockers.
+165. The checklist freezes the critical QA paths, pilot pass criteria, known limitations, and recommended validation commands for the next execution round without changing source, tests, Ask schema, or provider boundaries.
+166. The checklist recommends `Post-MVP Pilot QA Execution / Handoff Hardening` as the next slice and does not recommend implicit continuation of `P20`.
+167. Post-MVP pilot QA execution or handoff hardening is now complete as an execution closeout slice.
+168. That round ran focused backend regression, frontend TypeScript no-emit, targeted ESLint, production bundle build, isolated `ltclaw` startup, and browser smoke for GameProject plus NumericWorkbench.
+169. The execution round found no source-code pilot blocker; backend regression passed in `113 passed in 2.47s`, TypeScript passed, targeted ESLint had warnings only, and the latest `console/dist` bundle built successfully.
+170. The isolated smoke confirmed that GameProject and NumericWorkbench load, that structured query remains explicit-open plus explicit-submit, that workbench export remains draft-only, and that missing `local project directory` degrades with clear recoverable errors rather than a crash.
+171. The closeout therefore keeps `P20`, real provider rollout, relationship editor, graph canvas, and SVN integration deferred, and shifts the next practical step to real pilot-environment configuration rather than new implementation.
+172. Post-MVP data-backed pilot validation is now complete as a real-environment execution slice.
+173. The round configured `/Users/Admin/CodeBuddy/20260501110222/test-data` as a real local project directory and generated current indexes from 8 real `.xlsx` files.
+174. The stricter round found one configured-runtime crash in `src/ltclaw_gy_x/game/retrieval.py`, where `GET /game/index/status` raised `NameError: svn_root`, and that blocker is now fixed.
+175. The stricter round also found one current-index persistence mismatch in `src/ltclaw_gy_x/game/index_committer.py`, where rebuild artifacts were not being written to the project-level current-index path required by `build-from-current-indexes`, and that blocker is now fixed.
+176. After those fixes, real formal-map save, real release build, set-current, rollback, current-release query, structured query, current-release RAG, and NumericWorkbench draft export all succeeded against the same real data path.
+177. The data-backed closeout records real releases `pilot-real-data-r1-direct` and `pilot-real-data-r2-api`, with `table_schema` count `8` and `doc_knowledge` or `script_evidence` count `0` for this table-only validation environment.
+178. The closeout therefore upgrades the pilot evidence from isolated degraded smoke to a real data-backed path while still keeping `P20`, real provider rollout, graph canvas, relationship editor, and SVN integration deferred.
+179. Post-MVP Final Handoff / Delivery Packaging is now complete as a docs-only delivery closeout.
+180. That handoff records the delivered MVP surface, pilot environment, startup/config confirmation standards, operator flow, rollback/recovery rules, permission matrix, SVN position, external-provider position, known limitations, QA receipt summary, operator checklist, and next-agent handoff guidance.
+181. That handoff keeps the current status as `Data-backed pilot readiness pass.`, pilot usable, and not production ready.
+182. Post-MVP operator-side pilot validation is now complete as the target-machine execution closeout.
+183. That closeout records macOS target-environment facts, live startup/config state, real rebuild/query/RAG/workbench evidence, backend `179 passed`, frontend TypeScript pass, targeted ESLint `0 errors / 10 warnings`, and production build pass on the target machine.
+184. That closeout explicitly records SVN CLI absence on the target machine as non-blocking because full rescan fallback still succeeded, and also records the pre-existing NumericWorkbench `Select model` control as a non-blocking boundary note rather than GameProject provider rollout.
+185. The next recommended action after operator-side validation is controlled pilot usage on the validated target machine rather than implicit `P20` continuation or immediate SVN implementation.
 
 ## Current Risks And Notes
 
@@ -407,7 +476,7 @@ The recommended next direction after P3.read-permission-boundary-review is:
 12. `P3.rag-ui-3a` frontend-only product experience refinement is now complete, and provider credential, transport, or real external model integration remains deferred.
 13. `P3.provider-credential-boundary-review` is now complete as a docs-only boundary freeze for backend-owned credentials, backend-only provider selection, conservative timeout/retry/cost policy, safe logging/privacy rules, and citation-grounded failure behavior before any real external provider rollout.
 14. `P3.external-provider-2` is now complete as a backend-only credential/config skeleton implementation with disabled-by-default config, backend-owned provider/model selection, allowlist-before-credential/transport interception, and safe degradation for disabled, missing-credential, and allowlist-failure cases.
-15. `P3.external-provider-3` is now complete as a docs-only backend service config wiring boundary review that freezes backend-owned live handoff through the existing answer-service entry, keeps router thin, keeps `ProviderManager.active_model` out of scope, and keeps runtime rollout blocked.
+15. `P3.external-provider-3` is now complete as a backend service config wiring skeleton implementation that keeps backend-owned live handoff through the existing answer-service entry, keeps router thin, keeps request-like provider fields ignored, keeps `ProviderManager.active_model` out of scope, and keeps runtime rollout blocked.
 
 ## Gate Decision
 
@@ -583,7 +652,268 @@ The current P3 gate result is:
 168. `ProviderManager.active_model` remains out of scope.
 169. Env reads remain unimplemented and still cannot become request-time provider selection.
 170. Runtime providers still remain only `deterministic_mock` and `disabled`, and external provider still cannot enter runtime allowlist without a later dedicated rollout review.
-171. The next recommended step is backend service config wiring skeleton implementation rather than runtime rollout.
+171. `P3.external-provider-3` backend service config wiring skeleton implementation is now complete.
+    - `build_rag_answer_with_service_config(...)` remains the only live handoff entry.
+    - Backend-owned `external_provider_config` is interpreted by the answer/provider-selection layer, not by router, request body, or UI.
+    - Request-like `provider`, `model`, `provider_name`, `model_name`, and `api_key` fields still do not participate in provider selection.
+    - Router behavior is not widened: Ask still only passes `query`, and the router still does not call the provider registry directly.
+    - `future_external` still is not a runtime supported provider and cannot be directly selected at runtime.
+    - Runtime providers still remain only `deterministic_mock` and `disabled`.
+    - The slice adds no real LLM, no real HTTP, no real credential, no new API, no frontend change, and no Ask request schema change.
+    - NUL repair for related test files was validation recovery only, not logic expansion.
+    - Recorded implementation validation for this slice: focused pytest `84 passed in 11.05s`.
+    - Recorded implementation validation for this slice: 9 related files checked as `NUL=0`, and slice-related `git diff --check` had empty output.
+    - The next recommended step is runtime allowlist boundary review rather than direct real-provider connection.
+
+`P3.external-provider-4` runtime allowlist boundary review is now complete as a docs-only slice.
+
+Recorded review result:
+
+1. This slice does not change runtime allowlist membership.
+2. `future_external` still remains outside `SUPPORTED_RAG_MODEL_PROVIDERS`.
+3. Runtime providers still remain only `deterministic_mock` and `disabled`.
+4. The future runtime entry decision must remain backend-owned through config interpretation and registry decision, not through router, request body, frontend UI, or `ProviderManager.active_model`.
+5. Future runtime entry requires disabled-by-default explicit enablement, credential presence, provider allowlist, model allowlist, and explicit timeout/cost/privacy policy together.
+6. Unknown provider must clear-fail rather than silently switch.
+7. Provider init failure may only clear-fail or fall back to `disabled`, never to another real provider.
+8. `no_current_release` and `insufficient_context` still must bypass provider, credential, and transport work.
+9. Citation grounding still remains answer-service-owned and limited to `context.citations`, and `candidate_evidence` still does not automatically enter RAG.
+10. The review adds no real LLM, no real HTTP, no real credential, no new API, no frontend change, and no Ask request-schema change.
+11. The next recommended step is a runtime allowlist implementation plan rather than direct real-provider connection.
+
+`P3.external-provider-5` runtime allowlist implementation plan is now complete as a docs-only slice.
+
+Recorded plan result:
+
+1. This plan defines the minimum future backend code surface as `knowledge_rag_model_registry.py`, `knowledge_rag_answer.py`, `knowledge_rag_provider_selection.py`, `knowledge_rag_external_model_client.py`, and the existing focused test files for registry, answer, provider selection, external client, and router.
+2. This plan keeps current runtime allowlist membership unchanged.
+3. `future_external` still remains outside `SUPPORTED_RAG_MODEL_PROVIDERS` in the current code.
+4. The plan requires future tests to prove unknown-provider clear-fail, `disabled`-only fallback on init failure, request-field ignore behavior, early-return preservation, transport suppression on allowlist or credential failure, and citation-boundary preservation.
+5. The plan explicitly forbids real provider connection, real LLM execution, real HTTP, real credential integration, Ask request-schema changes, frontend provider control, router-side provider selection, and any second real-provider widening.
+6. The plan explicitly records rollback triggers for router drift, request-owned selection, early-return regression, fake-answer regression, citation-boundary regression, and accidental real-provider rollout.
+7. The next recommended step is backend-only minimal runtime allowlist implementation rather than real-provider connection.
+
+`P3.external-provider-6` backend-only minimal runtime allowlist implementation is now complete.
+
+Recorded implementation result:
+
+1. `future_external` now exists in the backend runtime provider allowlist.
+2. Runtime path entry for `future_external` still requires backend-owned `external_provider_config` and still remains backend-owned.
+3. Registry ownership now controls runtime support for `future_external`, and the prior answer-layer external-provider bypass no longer owns runtime allowlist behavior.
+4. Router remains thin and still does not choose provider or call `get_rag_model_client(...)` directly.
+5. Request-body provider/model/api_key fields still do not participate in provider selection.
+6. `ProviderManager.active_model` still remains out of scope.
+7. Missing or invalid external config for `future_external` now clear-fails rather than silently switching provider.
+8. The implementation still adds no real LLM, no real HTTP, no real credential integration, no API, no frontend change, and no Ask request-schema change.
+9. Focused validation for this slice: pytest `86 passed in 1.44s`.
+10. The next recommended step is a later dedicated rollout review rather than direct real-provider connection in this slice.
+
+`P3.external-provider-7` real provider rollout boundary review is now complete as a docs-only slice.
+
+Recorded review result:
+
+1. Real provider rollout remains unimplemented.
+2. Current backend runtime allowlist support for `future_external` is not sufficient by itself to authorize real rollout.
+3. Any future rollout must remain backend-owned across provider selection, credential resolution, transport creation, and disable-switch control.
+4. Router, request body, frontend UI, and `ProviderManager.active_model` still do not own provider selection for this path.
+5. Ask request schema still remains unchanged.
+6. The review keeps real HTTP, real credential integration, API expansion, frontend changes, and request-schema changes out of scope.
+7. The review freezes credential, allowlist, runtime, HTTP-client, logging, DLP, API, router, frontend, testing, and rollback gates before any later rollout slice.
+8. The next recommended step is a real provider rollout implementation plan or a mocked HTTP client skeleton plan rather than direct rollout.
+
+`P3.external-provider-8a` mocked HTTP client skeleton implementation plan is now complete as a docs-only slice.
+
+Recorded plan result:
+
+1. This plan is based on source code review rather than documentation assumptions alone.
+2. The plan confirms that current RAG path still has no real HTTP client and no real credential resolver.
+3. The plan explicitly records that `game/service.py` contains `SimpleModelRouter` real-provider bridge logic outside the current RAG path and treats that as a source-based risk rather than as a completed RAG capability.
+4. The plan defines the minimum next-round code surface as external client, narrow provider-selection or registry guards if needed, and the existing focused backend test files.
+5. The plan freezes mocked transport seam rules, credential-source rules, allowlist constraints, feature-flag and rollback-switch rules, logging and DLP rules, and router or frontend boundaries before implementation.
+6. This round remains docs-only, does not change runtime behavior, and does not authorize real provider rollout.
+7. The next recommended step is mocked HTTP client skeleton implementation rather than production rollout.
+
+`P3.external-provider-8b` mocked HTTP client skeleton implementation is now complete.
+
+Recorded implementation result:
+
+1. `ExternalRagModelClientConfig` now has an explicit backend-owned `transport_enabled` gate in addition to adapter `enabled`.
+2. `enabled=True` alone no longer authorizes credential resolution or transport invocation.
+3. when `transport_enabled=False`, the external client now returns `transport is not connected` before credential resolution.
+4. when `transport_enabled=False`, neither credential resolver nor injected transport is called.
+5. backend-owned `external_provider_config` coercion preserves `transport_enabled` when explicitly configured.
+6. focused validation for this slice passed in `60 passed in 0.05s` across external client, answer, and provider-selection tests.
+7. This slice remains mocked transport only and still does not authorize real provider rollout.
+
+`P3.external-provider-9` real transport design review is now complete as a docs-only slice.
+
+Recorded review result:
+
+1. This review is based on current source code and current focused tests rather than on prior documentation assumptions alone.
+2. The review confirms that the current 8b gate remains valid: `enabled=False` blocks resolver and transport, and `transport_enabled=False` returns not connected before resolver or transport runs.
+3. The review confirms that current RAG path still has no real HTTP client and no real credential resolver, and that mocked transport still enters only through injected transport or responder seams.
+4. The review records that backend-owned `external_provider_config` coercion already preserves `transport_enabled`, and that router still has no provider/model/api_key fields and still does not call `get_rag_model_client(...)` directly.
+5. The review records that `SimpleModelRouter` still contains a real-provider bridge outside the current RAG path and freezes that as a source-level risk rather than as an approved integration path.
+6. The review records that current allowlist logic still permits mocked transport when `allowed_providers` or `allowed_models` is absent, and freezes allowlist hardening as a required future step before any real transport slice.
+7. This round remains docs-only, does not change runtime behavior, and does not authorize real provider rollout.
+
+`P3.external-provider-10` allowlist hardening implementation is now complete.
+
+Recorded implementation result:
+
+1. `transport_enabled=True` now requires non-empty backend-owned `allowed_providers` and non-empty backend-owned `allowed_models` before credential resolution or injected transport can run.
+2. blank or missing `provider_name` now returns `External provider adapter skeleton provider is not allowed.` before credential resolution and transport.
+3. blank or missing `model_name` now returns `External provider adapter skeleton model is not allowed.` before credential resolution and transport.
+4. `enabled=False` and `transport_enabled=False` still short-circuit exactly as before and do not require allowlists.
+5. request-like provider, model, api_key, and service_config fields remain ignored by the current router and prompt-normalization path.
+6. focused validation for this slice passed in `95 passed in 2.02s` across external client, answer, provider-selection, model-registry, and router tests.
+7. this slice remains mocked transport only and still does not authorize real provider rollout.
+
+`P3.external-provider-11` gate-order hardening implementation is now complete.
+
+Recorded implementation result:
+
+1. `enabled=False` now returns the disabled warning before `_normalize_prompt_payload(...)` runs.
+2. `transport_enabled=False` now returns the not-connected warning before `_normalize_prompt_payload(...)` runs.
+3. malformed direct payload input in disabled and not-connected branches no longer raises payload shape errors.
+4. disabled and not-connected branches still do not call credential resolver or injected transport.
+5. only `enabled=True` plus `transport_enabled=True` still performs payload normalization and still raises the existing payload validation errors for malformed input.
+6. P10 allowlist hardening remains unchanged and still blocks resolver and transport before either can run.
+7. this slice remains mocked transport only and still does not authorize real provider rollout.
+
+`P3.external-provider-12` real transport skeleton implementation plan is now complete as a docs-only slice.
+
+Recorded plan result:
+
+1. This plan is based on current source code and current focused tests rather than on prior documentation assumptions alone.
+2. The plan confirms that P10 allowlist hardening and P11 gate-order hardening are already completed preconditions for any next-round transport skeleton work.
+3. The plan keeps the next-round implementation surface centered on `knowledge_rag_external_model_client.py`, with only narrow contingency allowance for provider-selection, model-registry, or answer-layer follow-ups if strictly necessary.
+4. The plan keeps Ask request schema, router authority, frontend, `ProviderManager.active_model`, and `SimpleModelRouter` out of scope for the next round.
+5. The plan keeps credential resolution unimplemented beyond the current injected seam and still forbids env-value reads, secret-store reads, and production transport.
+6. The plan defines transport contract, error mapping, redaction, DLP, and focused test-matrix requirements for the next round.
+7. This round remains docs-only, does not change runtime behavior, and does not authorize real provider rollout.
+
+`P3.external-provider-13` real transport skeleton implementation is now complete as a backend-only slice.
+
+Recorded implementation result:
+
+1. A named backend-only non-network transport skeleton now exists as `ExternalRagModelHttpTransportSkeleton`.
+2. The skeleton builds only a redacted request preview and removes query strings from previewed URL-like values.
+3. The skeleton does not perform real HTTP, does not open sockets, does not read files, does not read `os.environ`, and does not read a secret store.
+4. Default skeleton invocation now fails safely and is mapped to `External provider adapter skeleton request failed.` without leaking secret-like text.
+5. P10 allowlist hardening remains preserved and still blocks resolver and transport when provider or model allowlists are missing, empty, blank, or disallowed.
+6. P11 gate-order hardening remains preserved and still keeps disabled and not-connected gates ahead of payload normalization.
+7. Credential resolver behavior remains injected-only and still is not implemented as a real resolver.
+8. Ask request schema, router authority, frontend, `ProviderManager.active_model`, and `SimpleModelRouter` remain unchanged.
+9. Focused validation for this slice passed in `104 passed in 1.91s` across external client, answer, provider-selection, model-registry, and router tests.
+10. This slice remains non-production and does not authorize real provider rollout.
+
+`P3.external-provider-14` credential resolver boundary and implementation plan is now complete as a docs-only slice.
+
+Recorded plan result:
+
+1. This plan is based on current source code and current focused tests rather than on prior documentation assumptions alone.
+2. The plan confirms that P10 allowlist hardening, P11 gate-order hardening, and P13 non-network transport skeleton are already completed preconditions for any next-round credential resolver skeleton work.
+3. The plan confirms that current RAG external-provider path still uses injected credential resolver only and still has no secret-store integration, no env value reads, and no provider-manager credential loading.
+4. The plan keeps the next-round implementation surface centered on `knowledge_rag_external_model_client.py`, with only narrow contingency allowance for provider-selection, model-registry, or answer-layer follow-ups if strictly necessary.
+5. The plan freezes credential resolver contract, secret-source policy, redaction, DLP, and logging rules without authorizing any real secret source integration.
+6. The plan keeps Ask request schema, router authority, frontend, `ProviderManager.active_model`, and `SimpleModelRouter` out of scope for the next round.
+7. This round remains docs-only, does not change runtime behavior, and does not authorize credential rollout or real provider rollout.
+
+`P3.external-provider-15` credential resolver skeleton implementation is now complete as a backend-only slice.
+
+Recorded implementation result:
+
+1. A named default resolver skeleton now exists as `ExternalRagModelCredentialResolverSkeleton`.
+2. Default client construction now uses that resolver skeleton when no injected resolver seam is supplied.
+3. The resolver skeleton validates only backend-owned metadata shape and returns `None` by default.
+4. The resolver skeleton does not read env values, does not access secret store, does not read config-file secret values, does not access `ProviderManager`, and does not access `SimpleModelRouter`.
+5. Resolver exceptions now map to the existing safe not-configured warning rather than surfacing raw exception text.
+6. P10 allowlist hardening remains preserved and still blocks resolver and transport on disallowed provider or model selection.
+7. P11 gate-order hardening remains preserved and still keeps disabled and not-connected gates ahead of payload normalization.
+8. P13 transport skeleton remains non-network and still safe-fails without real HTTP.
+9. Ask request schema, router authority, frontend, `ProviderManager.active_model`, and `SimpleModelRouter` remain unchanged.
+10. Focused validation for this slice passed in `106 passed in 1.93s` across external client, answer, provider-selection, model-registry, and router tests.
+11. This slice remains backend-only and does not authorize production credential rollout or real provider rollout.
+
+`P3.external-provider-16` credential source governance boundary review is now complete as a docs-only slice.
+
+Recorded review result:
+
+1. The review confirms that after P15 the runtime still has only a resolver skeleton and still has zero real credential sources.
+2. The review confirms that `transport_enabled=True` still does not authorize any real secret source.
+3. The review confirms that current RAG path still has no env value reads, no secret-store integration, no config-file secret-value reads, no provider-manager credential loading, and no `SimpleModelRouter` integration.
+4. The review freezes credential-source ownership as backend-only and explicitly forbids request body, frontend, router, map, formal map, snapshot, export, docs, tasks, and ordinary fast-test input as credential sources.
+5. The review separates runtime credential governance from formal-knowledge acceptance and states that administrator acceptance must not be reused as credential approval or runtime provider approval.
+6. The review records future candidate source categories, source-precedence draft, DLP and redaction rules, rollback and kill-switch requirements, and a future implementation test matrix without authorizing any real source integration.
+7. Ask request schema, router authority, frontend, `ProviderManager.active_model`, and `SimpleModelRouter` remain unchanged.
+8. This round remains docs-only, does not change runtime behavior, and does not authorize production credential rollout or real provider rollout.
+
+`P3.external-provider-17` backend env-var credential source implementation plan is now complete as a docs-only slice.
+
+Recorded plan result:
+
+1. The plan confirms that after P16 the runtime still has zero real credential sources and that P17 itself does not implement env value reads.
+2. The plan selects backend env-var credential source as the minimal P18 candidate because `ExternalRagModelEnvConfig.api_key_env_var` already exists as backend-owned metadata and this path does not require router, frontend, admin UI, secret store, `ProviderManager`, or `SimpleModelRouter` integration.
+3. The plan keeps P18 implementation local to `knowledge_rag_external_model_client.py` plus focused tests and closeout docs.
+4. The plan freezes env-read ordering so that any future env value read can occur only after enabled gate, transport-enabled gate, payload normalization, and allowlist validation succeed.
+5. The plan keeps request, frontend, router, `ProviderManager`, `SimpleModelRouter`, and `secret_store` out of credential ownership for the next round.
+6. The plan keeps formal-knowledge acceptance separate from runtime credential governance and states that administrator acceptance must not be reused as credential approval or provider rollout approval.
+7. Ask request schema, router authority, frontend, `ProviderManager.active_model`, and `SimpleModelRouter` remain unchanged.
+8. This round remains docs-only, does not change runtime behavior, and does not authorize production credential rollout or real provider rollout.
+
+`P3.external-provider-18` backend env-var credential source implementation is now complete as a backend-only slice.
+
+Recorded implementation result:
+
+1. The runtime now has a named backend-only default env-aware resolver, `ExternalRagModelEnvCredentialResolver`, in `knowledge_rag_external_model_client.py`.
+2. The default resolver reads only `env.api_key_env_var` from backend-owned config and only after enabled gate, transport-enabled gate, payload normalization, and allowlist validation succeed.
+3. Missing env config, blank env-var name, missing env value, blank env value, and env read exceptions all safely degrade to `External provider adapter skeleton is not configured.`
+4. Injected resolver seams and responder seams still override the default env source unchanged.
+5. P10 allowlist hardening, P11 gate-order hardening, and the P13 non-network transport skeleton remain preserved.
+6. Ask request schema, router authority, frontend, `ProviderManager.active_model`, `SimpleModelRouter`, and `secret_store` remain unchanged.
+7. Focused validation for this slice passed in `119 passed in 2.03s` across external client, answer, provider-selection, model-registry, and router tests.
+8. This slice remains backend-only, does not add real HTTP, and does not authorize production credential rollout or real provider rollout.
+
+`P3.external-provider-19` backend-only real HTTP transport governance and implementation plan is now complete as a docs-only slice.
+
+Recorded plan result:
+
+1. The plan confirms that after P18 the current Ask RAG runtime has a backend-owned env-var credential source but still has zero real HTTP transports and zero real provider rollouts.
+2. The plan confirms that current env reads still occur only through `ExternalRagModelEnvConfig.api_key_env_var` and only after enabled gate, transport-enabled gate, payload normalization, and allowlist validation succeed.
+3. The plan keeps P20 local to `knowledge_rag_external_model_client.py` plus focused tests and closeout docs.
+4. The plan defines the future P20 transport contract, warning mapping, DLP or redaction, rollback or kill-switch requirements, and focused five-file test matrix without authorizing implementation in P19.
+5. The plan keeps Ask request schema, router authority, frontend, `ProviderManager`, `SimpleModelRouter`, and `secret_store` unchanged and out of scope for P20.
+6. The plan records the unreachable trailing `return None` in `ExternalRagModelEnvCredentialResolver` as future code cleanup only and does not authorize source change in this slice.
+7. The plan keeps formal-knowledge acceptance separate from runtime credential approval and provider rollout approval.
+8. This round remains docs-only, does not change runtime behavior, and does not authorize production HTTP transport or real provider rollout.
+
+`P3.10` release rollback UX/API is now complete for the MVP slice.
+
+Recorded implementation result:
+
+1. Backend now exposes `GET /game/knowledge/releases/status` on the existing release router and returns structured `current`, `previous`, and `history` state.
+2. Release history is derived from the existing release store and is sorted by `(created_at, release_id)` descending.
+3. History items now carry backend current marker state through `is_current`, and `previous` is derived as the first older available release after current in that history order.
+4. Rollback still reuses the existing `POST /game/knowledge/releases/{release_id}/current` endpoint and the existing `set_current_release(...)` store path.
+5. Rollback still only changes the current pointer and does not rebuild, publish, mutate release artifacts, mutate pending test plans, or mutate working formal map.
+6. GameProject now reads structured release status, displays current plus previous release explicitly, and adds an explicit `Rollback to previous` action with confirmation.
+7. Rollback remains gated by `knowledge.publish`, while read status remains gated by `knowledge.read` under explicit capability context.
+8. Focused backend validation for this slice passed in `50 passed in 1.90s` across release store, release router, current-release query router, and RAG context tests.
+9. Frontend TypeScript no-emit and targeted ESLint both passed through local `node_modules/.bin` binaries after the workspace `pnpm` wrapper path was blocked by `approve-builds` enforcement.
+10. External-provider remains frozen at `P3.external-provider-19` docs-only, and this slice does not continue P20.
+
+`P3.12` P3 Review Gate is now complete and passed for the current P0-P3 MVP mainline.
+
+Recorded closeout result:
+
+1. The closeout is recorded in `docs/tasks/knowledge-p3-12-review-gate-closeout-2026-05-10.md`.
+2. All five gate items passed: map editable through conservative saved-formal-map UX, RAG reads current release only, precise values go through structured query, release rollback works, and permission split is enforced.
+3. Focused review-gate regression passed in `68 passed in 1.98s` across release, map, current-release RAG, test plan, release candidate, and workbench export gate tests.
+4. The final MVP capability matrix remains `knowledge.read`, `knowledge.build`, `knowledge.publish`, `knowledge.map.read`, `knowledge.map.edit`, `knowledge.candidate.read`, `knowledge.candidate.write`, `workbench.read`, `workbench.test.write`, and `workbench.test.export`.
+5. Candidate-map editing, relationship editor, graph canvas, `P3.9 table_facts.sqlite`, real HTTP transport, and production provider rollout remain optional or deferred and are not blockers for P0-P3 MVP acceptance.
+6. P0-P3 final handover is recorded in `docs/tasks/knowledge-p0-p3-mvp-final-handover-2026-05-10.md`.
+7. External-provider remains frozen at `P3.external-provider-19`; `P20` is deferred until a new explicit scoped slice is opened.
 
 172. `P3.rag-ui-1` minimal product-entry UI on the existing answer endpoint is now complete.
 173. The implementation files for `P3.rag-ui-1` are `console/src/api/types/game.ts`, `console/src/api/modules/gameKnowledgeRelease.ts`, `console/src/pages/Game/GameProject.tsx`, and `console/src/pages/Game/GameProject.module.less`.

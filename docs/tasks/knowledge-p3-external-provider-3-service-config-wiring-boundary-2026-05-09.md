@@ -217,31 +217,41 @@ This slice does not authorize:
 
 ## Review Result
 
-1. `P3.external-provider-3` is complete as a docs-only backend service config wiring boundary review.
-2. Future live config should continue to enter the RAG answer path through `build_rag_answer_with_service_config(...)` using a backend-owned injected object.
-3. The preferred live handoff anchor remains the existing `game_service` or a backend-owned config object derived from it, passed explicitly by the router.
-4. The router may obtain backend-owned service/app objects but remains forbidden from provider/model resolution, request-hint parsing, resolver creation, transport creation, and direct `get_rag_model_client(...)` calls.
-5. The answer service remains the only approved live config interpretation point and the only approved warning-merge point.
-6. `ProviderManager.active_model` remains out of scope.
-7. Env reads remain unimplemented and remain disallowed as request-time provider selection.
-8. Runtime providers still remain only `deterministic_mock` and `disabled`.
-9. External provider still cannot enter runtime allowlist without a later dedicated rollout review.
+1. `P3.external-provider-3` boundary review is complete.
+2. The follow-on backend service config wiring skeleton implementation is also complete.
+3. Live config enters the RAG answer path only through `build_rag_answer_with_service_config(...)` using backend-owned service/config state.
+4. The answer/provider-selection layer interprets backend-owned `external_provider_config`.
+5. The router remains forbidden from provider/model resolution, request-hint parsing, resolver creation, transport creation, and direct `get_rag_model_client(...)` calls.
+6. Request-like `provider`, `model`, `provider_name`, `model_name`, and `api_key` fields do not participate in provider selection.
+7. Ask request schema remains query-only for this path.
+8. `future_external` may reach the external client skeleton only through backend-owned config interpretation, but it still cannot be selected as a runtime provider.
+9. Runtime providers still remain only `deterministic_mock` and `disabled`.
+10. The slice adds no real LLM, no real HTTP, no real credential, no new API, no frontend change, and no runtime rollout.
+11. `ProviderManager.active_model` remains out of scope.
+12. Env reads remain unimplemented and remain disallowed as request-time provider selection.
+13. NUL repair in related tests was validation recovery only and not logic expansion.
 
 ## Recommended Next Slice
 
-The next reasonable step is backend service config wiring skeleton implementation.
+The next reasonable step is runtime allowlist boundary review.
 
 That next slice should:
 
-1. stay backend-only
-2. keep the router thin
-3. keep `build_rag_answer_with_service_config(...)` as the only live handoff entry
-4. keep runtime providers limited to `deterministic_mock` and `disabled`
-5. keep real external provider rollout deferred
+1. decide when `future_external` may enter the runtime provider set
+2. decide the exact backend-only enablement conditions
+3. keep the router thin
+4. keep request/provider/model/api_key hints out of request body
+5. keep real external provider rollout deferred until the allowlist rule is explicitly accepted
 
 ## Validation Note
 
-This slice is docs-only.
+Implementation validation recorded for the wiring skeleton:
+
+1. focused pytest: `84 passed in 11.05s`
+2. coverage included `test_game_knowledge_rag_router.py`, `test_knowledge_rag_answer.py`, `test_knowledge_rag_provider_selection.py`, `test_knowledge_rag_model_registry.py`, and `test_knowledge_rag_external_model_client.py`
+3. focused NUL check: 9 related files were `NUL=0`
+4. slice-related `git diff --check` had empty output
+5. `test_knowledge_rag_model_registry.py` and `test_knowledge_rag_external_model_client.py` were rewritten as clean UTF-8 only to restore test collection after NUL pollution, with no logic expansion
 
 This docs-only pass does not run pytest.
 

@@ -53,8 +53,12 @@ def committer(tmp_path, monkeypatch):
 def test_setup_paths_use_central_store(committer, tmp_path):
     assert committer.svn_tables_dir is not None
     assert committer.svn_tables_dir.is_relative_to(tmp_path / "game-projects")
-    assert committer.svn_tables_file is None
-    assert committer.svn_dependency_file is None
+    assert committer.svn_tables_file is not None
+    assert committer.svn_dependency_file is not None
+    assert committer.svn_tables_file.is_relative_to(tmp_path / "game-projects")
+    assert committer.svn_dependency_file.is_relative_to(tmp_path / "game-projects")
+    assert committer._can_commit_path(committer.svn_tables_file) is False
+    assert committer._can_commit_path(committer.svn_dependency_file) is False
     assert committer.cache_dir.exists()
 
 
@@ -75,8 +79,12 @@ def test_setup_paths_use_central_store_when_configured(tmp_path, monkeypatch):
 
     assert committer.svn_tables_dir is not None
     assert committer.svn_tables_dir.is_relative_to(central_root)
-    assert committer.svn_tables_file is None
-    assert committer.svn_dependency_file is None
+    assert committer.svn_tables_file is not None
+    assert committer.svn_dependency_file is not None
+    assert committer.svn_tables_file.is_relative_to(central_root)
+    assert committer.svn_dependency_file.is_relative_to(central_root)
+    assert committer._can_commit_path(committer.svn_tables_file) is False
+    assert committer._can_commit_path(committer.svn_dependency_file) is False
 
 
 def test_serialize_deserialize_table_indexes_roundtrip(committer):

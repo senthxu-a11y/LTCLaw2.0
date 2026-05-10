@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
-from .knowledge_rag_external_model_client import ExternalRagModelClient
 from .knowledge_rag_model_client import RagModelClient, build_rag_model_prompt_payload
 from .knowledge_rag_model_registry import ResolvedRagModelClient, get_rag_model_client
 from .knowledge_rag_provider_selection import (
@@ -148,24 +147,10 @@ def _resolve_rag_model_client(
     external_config: Any = None,
     factories: Mapping[str, Any] | None = None,
 ) -> ResolvedRagModelClient:
-    if _normalize_text(provider_name) == _EXTERNAL_PROVIDER_NAME:
-        return _resolve_external_rag_model_client(external_config)
-
-    return get_rag_model_client(provider_name, factories=factories)
-
-
-def _resolve_external_rag_model_client(external_config: Any) -> ResolvedRagModelClient:
-    if external_config is None:
-        raise ValueError(f'Unsupported RAG model provider: {_EXTERNAL_PROVIDER_NAME}')
-
-    provider_name = _normalize_text(getattr(external_config, 'provider_name', None)) or _EXTERNAL_PROVIDER_NAME
-    if provider_name != _EXTERNAL_PROVIDER_NAME:
-        raise ValueError(f'Unsupported RAG model provider: {provider_name}')
-
-    return ResolvedRagModelClient(
-        provider_name=_EXTERNAL_PROVIDER_NAME,
-        client=ExternalRagModelClient(config=external_config),
-        warnings=(),
+    return get_rag_model_client(
+        provider_name,
+        factories=factories,
+        external_config=external_config,
     )
 
 

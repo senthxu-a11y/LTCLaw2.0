@@ -325,3 +325,67 @@ def test_query_current_release_still_remains_keyword_only(monkeypatch, tmp_path)
         'script_evidence',
         'table_schema',
     }
+
+
+def test_query_current_release_uses_restored_current_release_after_rollback(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+    _create_release(project_root, 'release-old')
+    _create_release(project_root, 'release-current')
+
+    (get_release_dir(project_root, 'release-old') / 'indexes' / 'doc_knowledge.jsonl').write_text(
+        '{"title":"Legacy Combat","summary":"zetaoldsignal","category":"design","tags":["legacy"],"source_path":"Docs/Combat.md","source_hash":"sha256:legacy"}\n',
+        encoding='utf-8',
+    )
+    (get_release_dir(project_root, 'release-current') / 'indexes' / 'doc_knowledge.jsonl').write_text(
+        '{"title":"Current Combat","summary":"omegacurrentsignal","category":"design","tags":["current"],"source_path":"Docs/Combat.md","source_hash":"sha256:current"}\n',
+        encoding='utf-8',
+    )
+
+    set_current_release(project_root, 'release-current')
+    before_payload = query_current_release(project_root, 'zetaoldsignal', top_k=10)
+    set_current_release(project_root, 'release-old')
+    after_payload = query_current_release(project_root, 'zetaoldsignal', top_k=10)
+
+    assert before_payload['release_id'] == 'release-current'
+    assert before_payload['count'] == 0
+    assert after_payload['release_id'] == 'release-old'
+    assert after_payload['count'] == 1
+    assert after_payload['results'][0]['title'] == 'Legacy Combat'
+
+
+def test_build_current_release_context_uses_restored_current_release_after_rollback(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+    _create_release(project_root, 'release-old')
+    _create_release(project_root, 'release-current')
+
+    (get_release_dir(project_root, 'release-old') / 'indexes' / 'doc_knowledge.jsonl').write_text(
+        '{"title":"Legacy Combat","summary":"zetaoldsignal","category":"design","tags":["legacy"],"source_path":"Docs/Combat.md","source_hash":"sha256:legacy"}\n',
+        encoding='utf-8',
+    )
+    (get_release_dir(project_root, 'release-current') / 'indexes' / 'doc_knowledge.jsonl').write_text(
+        '{"title":"Current Combat","summary":"omegacurrentsignal","category":"design","tags":["current"],"source_path":"Docs/Combat.md","source_hash":"sha256:current"}\n',
+        encoding='utf-8',
+    )
+
+    set_current_release(project_root, 'release-current')
+    before_payload = build_current_release_context(project_root, 'zetaoldsignal', max_chunks=8, max_chars=12000)
+    set_current_release(project_root, 'release-old')
+    after_payload = build_current_release_context(project_root, 'zetaoldsignal', max_chunks=8, max_chars=12000)
+
+    assert before_payload['release_id'] == 'release-current'
+    assert before_payload['chunks'] == []
+    assert after_payload['release_id'] == 'release-old'
+    assert after_payload['chunks']
+    assert any('zetaoldsignal' in chunk['text'] for chunk in after_payload['chunks'])

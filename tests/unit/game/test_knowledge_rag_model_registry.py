@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from ltclaw_gy_x.game.knowledge_rag_answer import build_rag_answer
+from ltclaw_gy_x.game.knowledge_rag_external_model_client import ExternalRagModelClient, ExternalRagModelClientConfig
 from ltclaw_gy_x.game.knowledge_rag_model_client import (
     DeterministicMockRagModelClient,
     DisabledRagModelClient,
@@ -14,6 +15,7 @@ from ltclaw_gy_x.game.knowledge_rag_model_client import (
 from ltclaw_gy_x.game.knowledge_rag_model_registry import (
     RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK,
     RAG_MODEL_PROVIDER_DISABLED,
+    RAG_MODEL_PROVIDER_FUTURE_EXTERNAL,
     SUPPORTED_RAG_MODEL_PROVIDERS,
     get_rag_model_client,
 )
@@ -93,8 +95,27 @@ def test_disabled_provider_returns_empty_answer_and_warning():
 
 
 def test_get_rag_model_client_raises_for_unknown_provider():
-    with pytest.raises(ValueError, match='Unsupported RAG model provider: future_external'):
-        get_rag_model_client('future_external')
+    with pytest.raises(ValueError, match='Unsupported RAG model provider: unsupported_provider'):
+        get_rag_model_client('unsupported_provider')
+
+
+def test_get_rag_model_client_returns_future_external_provider_when_backend_owned_config_is_present():
+    resolved = get_rag_model_client(
+        RAG_MODEL_PROVIDER_FUTURE_EXTERNAL,
+        external_config=ExternalRagModelClientConfig(
+            enabled=False,
+            provider_name=RAG_MODEL_PROVIDER_FUTURE_EXTERNAL,
+        ),
+    )
+
+    assert resolved.provider_name == RAG_MODEL_PROVIDER_FUTURE_EXTERNAL
+    assert isinstance(resolved.client, ExternalRagModelClient)
+    assert resolved.warnings == ()
+
+
+def test_get_rag_model_client_raises_for_future_external_without_backend_owned_config():
+    with pytest.raises(ValueError, match='RAG model provider is not configured: future_external'):
+        get_rag_model_client(RAG_MODEL_PROVIDER_FUTURE_EXTERNAL)
 
 
 def test_get_rag_model_client_falls_back_to_disabled_on_factory_failure():
@@ -138,13 +159,13 @@ def test_get_rag_model_client_does_not_read_files_or_env(monkeypatch):
     assert isinstance(resolved.client, DeterministicMockRagModelClient)
 
 
-def test_supported_providers_do_not_include_future_external_runtime_provider():
-    assert 'future_external' not in SUPPORTED_RAG_MODEL_PROVIDERS
+def test_supported_providers_include_future_external_runtime_provider():
     assert SUPPORTED_RAG_MODEL_PROVIDERS == (
         RAG_MODEL_PROVIDER_DETERMINISTIC_MOCK,
         RAG_MODEL_PROVIDER_DISABLED,
+        RAG_MODEL_PROVIDER_FUTURE_EXTERNAL,
     )
-    assert len(SUPPORTED_RAG_MODEL_PROVIDERS) == 2
+    assert len(SUPPORTED_RAG_MODEL_PROVIDERS) == 3
 
 
 def test_returned_provider_can_be_used_by_build_rag_answer():

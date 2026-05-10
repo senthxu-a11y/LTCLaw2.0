@@ -502,3 +502,112 @@ def test_set_current_release_allows_knowledge_publish_when_capabilities_present(
 
     assert response.status_code == 200
     assert captured == {'project_root': tmp_path / 'project-root', 'release_id': 'release-002'}
+
+
+def test_release_status_endpoint_returns_current_previous_and_history(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    release_old = _manifest('release-001').model_copy(update={'created_at': datetime(2026, 1, 1, tzinfo=timezone.utc)})
+    release_current = _manifest('release-002').model_copy(update={'created_at': datetime(2026, 1, 2, tzinfo=timezone.utc)})
+    release_newest = _manifest('release-003').model_copy(update={'created_at': datetime(2026, 1, 3, tzinfo=timezone.utc)})
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(release_router_module, 'list_releases', lambda project_root: [release_old, release_newest, release_current])
+    monkeypatch.setattr(release_router_module, 'get_current_release', lambda project_root: release_current)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.read'})) as client:
+        response = client.get('/api/game/knowledge/releases/status')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['current']['release_id'] == 'release-002'
+    assert payload['current']['label'] == 'current'
+    assert payload['current']['is_current'] is True
+    assert payload['previous']['release_id'] == 'release-001'
+    assert [item['release_id'] for item in payload['history']] == ['release-003', 'release-002', 'release-001']
+    assert [item['is_current'] for item in payload['history']] == [False, True, False]
+
+
+def test_release_status_endpoint_is_safe_when_no_previous_release(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    release_current = _manifest('release-001')
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(release_router_module, 'list_releases', lambda project_root: [release_current])
+    monkeypatch.setattr(release_router_module, 'get_current_release', lambda project_root: release_current)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.read'})) as client:
+        response = client.get('/api/game/knowledge/releases/status')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['current']['release_id'] == 'release-001'
+    assert payload['previous'] is None
+    assert len(payload['history']) == 1
+
+
+def test_release_status_endpoint_requires_knowledge_read_when_capabilities_present(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _list(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('status read should be blocked before store call')
+
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(release_router_module, 'list_releases', _list)
+
+    with TestClient(_build_app(workspace, capabilities=set())) as client:
+        response = client.get('/api/game/knowledge/releases/status')
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.read'
+    assert called is False
+
+
+def test_release_status_endpoint_hides_internal_metadata_error_details(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _list(project_root):
+        raise ValueError(f'invalid metadata under {tmp_path / "project-root" / "secret"}')
+
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(release_router_module, 'list_releases', _list)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.read'})) as client:
+        response = client.get('/api/game/knowledge/releases/status')
+
+    assert response.status_code == 500
+    assert response.json()['detail'] == 'Knowledge release status is unavailable'
+    assert str(tmp_path) not in response.json()['detail']
+
+
+def test_set_current_release_returns_404_for_missing_release(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _set_current(project_root, release_id):
+        raise release_router_module.KnowledgeReleaseNotFoundError(f'Knowledge release manifest not found: {release_id}')
+
+    monkeypatch.setattr(release_router_module, 'set_current_release', _set_current)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace, capabilities={'knowledge.publish'})) as client:
+        response = client.post('/api/game/knowledge/releases/release-missing/current')
+
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'Knowledge release manifest not found: release-missing'

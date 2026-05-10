@@ -9,13 +9,20 @@ import pytest
 from ltclaw_gy_x.game.knowledge_release_builders import build_minimal_manifest, build_minimal_map
 from ltclaw_gy_x.game.knowledge_release_store import (
     CurrentKnowledgeReleaseNotSetError,
+    KnowledgeReleaseNotFoundError,
     create_release,
     get_current_release,
     load_manifest,
     set_current_release,
 )
 from ltclaw_gy_x.game.models import KnowledgeDocRef, KnowledgeRelationship, KnowledgeScriptRef, KnowledgeSystem, KnowledgeTableRef
-from ltclaw_gy_x.game.paths import get_current_release_path, get_release_dir
+from ltclaw_gy_x.game.paths import (
+    get_current_release_path,
+    get_formal_map_path,
+    get_pending_test_plans_path,
+    get_release_candidates_path,
+    get_release_dir,
+)
 
 
 def _write_source(project_root: Path, relative_path: str, content: str) -> None:
@@ -144,6 +151,52 @@ def test_set_and_get_current_release_roundtrip(monkeypatch, tmp_path):
     assert current_payload['release_id'] == 'release-002'
     assert current_payload['manifest_path'] == 'manifest.json'
     assert current_payload['map_path'] == 'map.json'
+
+
+def test_set_current_release_updates_only_current_pointer(monkeypatch, tmp_path):
+    project_root, release_dir, _ = _create_release(monkeypatch, tmp_path, 'release-001')
+
+    pending_test_plans_path = get_pending_test_plans_path(project_root)
+    pending_test_plans_path.parent.mkdir(parents=True, exist_ok=True)
+    pending_test_plans_path.write_text('{"plan":"unchanged"}\n', encoding='utf-8')
+
+    release_candidates_path = get_release_candidates_path(project_root)
+    release_candidates_path.write_text('{"candidate":"unchanged"}\n', encoding='utf-8')
+
+    formal_map_path = get_formal_map_path(project_root)
+    formal_map_path.parent.mkdir(parents=True, exist_ok=True)
+    formal_map_path.write_text('{"mode":"formal_map"}\n', encoding='utf-8')
+
+    manifest_path = release_dir / 'manifest.json'
+    knowledge_map_path = release_dir / 'map.json'
+    release_notes_path = release_dir / 'release_notes.md'
+
+    before_manifest = manifest_path.read_text(encoding='utf-8')
+    before_map = knowledge_map_path.read_text(encoding='utf-8')
+    before_notes = release_notes_path.read_text(encoding='utf-8')
+    before_test_plans = pending_test_plans_path.read_text(encoding='utf-8')
+    before_candidates = release_candidates_path.read_text(encoding='utf-8')
+    before_formal_map = formal_map_path.read_text(encoding='utf-8')
+
+    pointer = set_current_release(project_root, 'release-001')
+
+    assert pointer.release_id == 'release-001'
+    assert manifest_path.read_text(encoding='utf-8') == before_manifest
+    assert knowledge_map_path.read_text(encoding='utf-8') == before_map
+    assert release_notes_path.read_text(encoding='utf-8') == before_notes
+    assert pending_test_plans_path.read_text(encoding='utf-8') == before_test_plans
+    assert release_candidates_path.read_text(encoding='utf-8') == before_candidates
+    assert formal_map_path.read_text(encoding='utf-8') == before_formal_map
+
+
+def test_set_current_release_missing_release_fails_without_writing_pointer(monkeypatch, tmp_path):
+    project_root, _, _ = _create_release(monkeypatch, tmp_path, 'release-001')
+    current_path = get_current_release_path(project_root)
+
+    with pytest.raises(KnowledgeReleaseNotFoundError, match='Knowledge release manifest not found: release-missing'):
+        set_current_release(project_root, 'release-missing')
+
+    assert current_path.exists() is False
 
 
 

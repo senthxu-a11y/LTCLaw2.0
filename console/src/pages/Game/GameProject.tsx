@@ -15,6 +15,7 @@ import type {
   FormalKnowledgeMapResponse,
   GameStorageSummary,
   KnowledgeDocRef,
+  KnowledgeReleaseHistoryItem,
   KnowledgeManifest,
   KnowledgeMap,
   KnowledgeRagAnswerResponse,
@@ -150,8 +151,9 @@ export default function GameProject() {
   const [storageSummary, setStorageSummary] = useState<GameStorageSummary | null>(null);
   const [releaseLoading, setReleaseLoading] = useState(true);
   const [releaseError, setReleaseError] = useState<string | null>(null);
-  const [releases, setReleases] = useState<KnowledgeManifest[]>([]);
-  const [currentRelease, setCurrentRelease] = useState<KnowledgeManifest | null>(null);
+  const [releases, setReleases] = useState<KnowledgeReleaseHistoryItem[]>([]);
+  const [currentRelease, setCurrentRelease] = useState<KnowledgeReleaseHistoryItem | null>(null);
+  const [previousRelease, setPreviousRelease] = useState<KnowledgeReleaseHistoryItem | null>(null);
   const [settingCurrentId, setSettingCurrentId] = useState<string | null>(null);
   const [buildModalOpen, setBuildModalOpen] = useState(false);
   const [buildingRelease, setBuildingRelease] = useState(false);
@@ -252,7 +254,8 @@ export default function GameProject() {
     return error instanceof Error ? error.message : fallbackMessage;
   }, [permissionDeniedMessage]);
 
-  const getIndexCount = (manifest: KnowledgeManifest | null, indexName: string) => manifest?.indexes?.[indexName]?.count ?? 0;
+  const getIndexCount = (manifest: Pick<KnowledgeManifest, "indexes"> | KnowledgeReleaseHistoryItem | null, indexName: string) =>
+    manifest?.indexes?.[indexName]?.count ?? 0;
 
   const getErrorText = useCallback(
     (error: unknown, fallbackMessage: string) =>
@@ -507,16 +510,15 @@ export default function GameProject() {
     setReleaseLoading(true);
     setReleaseError(null);
     try {
-      const [releaseList, current] = await Promise.all([
-        gameKnowledgeReleaseApi.listReleases(agentId),
-        gameKnowledgeReleaseApi.getCurrentRelease(agentId),
-      ]);
-      setReleases(releaseList);
-      setCurrentRelease(current);
+      const status = await gameKnowledgeReleaseApi.getReleaseStatus(agentId);
+      setReleases(status.history);
+      setCurrentRelease(status.current);
+      setPreviousRelease(status.previous);
     } catch (err) {
       setReleaseError(err instanceof Error ? err.message : t("gameProject.releaseLoadFailed", { defaultValue: "Failed to load knowledge release status" }));
       setReleases([]);
       setCurrentRelease(null);
+      setPreviousRelease(null);
     } finally {
       setReleaseLoading(false);
     }
@@ -597,6 +599,7 @@ export default function GameProject() {
       setReleaseError(null);
       setReleases([]);
       setCurrentRelease(null);
+      setPreviousRelease(null);
       setCandidateMap(null);
       setCandidateMapReleaseId(null);
       setCandidateMapError(null);
@@ -877,8 +880,22 @@ export default function GameProject() {
     fetchConfig();
   };
 
+  const confirmReleaseSwitch = useCallback(
+    (releaseId: string) =>
+      window.confirm(
+        t("gameProject.releaseSetCurrentConfirm", {
+          defaultValue:
+            `Switch current knowledge release to ${releaseId}? This rollback only updates the current release pointer. It does not rebuild, publish, or modify formal knowledge assets or test plans.`,
+        }),
+      ),
+    [t],
+  );
+
   const handleSetCurrentRelease = async (releaseId: string) => {
     if (!selectedAgent) {
+      return;
+    }
+    if (!confirmReleaseSwitch(releaseId)) {
       return;
     }
     try {
@@ -900,6 +917,13 @@ export default function GameProject() {
     } finally {
       setSettingCurrentId(null);
     }
+  };
+
+  const handleRollbackToPreviousRelease = () => {
+    if (!previousRelease) {
+      return;
+    }
+    void handleSetCurrentRelease(previousRelease.release_id);
   };
 
   const openBuildReleaseModal = () => {
@@ -1567,6 +1591,39 @@ export default function GameProject() {
               {buildDisabledReason ? <Text type="secondary">{buildDisabledReason}</Text> : null}
             </div>
 
+            <div className={styles.releaseActions}>
+              <Tooltip
+                title={
+                  previousRelease
+                    ? publishDisabledReason || undefined
+                    : t("gameProject.releaseRollbackUnavailable", {
+                        defaultValue: "No previous knowledge release is available for rollback.",
+                      })
+                }
+              >
+                <span>
+                  <Button
+                    size="small"
+                    onClick={handleRollbackToPreviousRelease}
+                    loading={previousRelease ? settingCurrentId === previousRelease.release_id : false}
+                    disabled={!selectedAgent || !canPublishRelease || !previousRelease}
+                  >
+                    {t("gameProject.releaseRollbackButton", { defaultValue: "Rollback to previous" })}
+                  </Button>
+                </span>
+              </Tooltip>
+              <Text type="secondary">
+                {t("gameProject.releaseRollbackHint", {
+                  defaultValue: "Rollback only switches the current release pointer. It does not rebuild, publish, or modify formal knowledge state.",
+                })}
+              </Text>
+              {!previousRelease && !releaseLoading ? (
+                <Text type="secondary">
+                  {t("gameProject.releaseNoPrevious", { defaultValue: "No previous knowledge release" })}
+                </Text>
+              ) : null}
+            </div>
+
             {releaseError ? (
               <Alert
                 type="warning"
@@ -1584,6 +1641,14 @@ export default function GameProject() {
                 </div>
                 <div className={styles.releaseSummaryValue}>
                   {releaseLoading ? t("common.loading") : currentRelease?.release_id || "No current knowledge release"}
+                </div>
+              </div>
+              <div className={styles.releaseSummaryRow}>
+                <div className={styles.releaseSummaryLabel}>
+                  {t("gameProject.releasePreviousLabel", { defaultValue: "previous release id" })}
+                </div>
+                <div className={styles.releaseSummaryValue}>
+                  {releaseLoading ? t("common.loading") : previousRelease?.release_id || "No previous knowledge release"}
                 </div>
               </div>
               <div className={styles.releaseSummaryRow}>

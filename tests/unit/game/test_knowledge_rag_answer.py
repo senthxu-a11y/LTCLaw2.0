@@ -432,7 +432,7 @@ def test_build_rag_answer_with_service_config_uses_backend_owned_external_disabl
     assert 'Model client output was not grounded in the provided context.' in payload['warnings']
 
 
-def test_build_rag_answer_with_service_config_uses_backend_owned_external_enabled_config_without_credentials():
+def test_build_rag_answer_with_service_config_requires_explicit_transport_enable_before_credentials():
     payload = build_rag_answer_with_service_config(
         'How does combat damage work?',
         _grounded_context(),
@@ -448,7 +448,51 @@ def test_build_rag_answer_with_service_config_uses_backend_owned_external_enable
     assert payload['mode'] == 'insufficient_context'
     assert payload['answer'] == ''
     assert payload['citations'] == []
-    assert 'External provider adapter skeleton is not configured.' in payload['warnings']
+    assert 'External provider adapter skeleton transport is not connected.' in payload['warnings']
+    assert 'Model client output was not grounded in the provided context.' in payload['warnings']
+
+
+def test_build_rag_answer_with_service_config_degrades_when_allowed_providers_are_missing():
+    payload = build_rag_answer_with_service_config(
+        'How does combat damage work?',
+        _grounded_context(),
+        {
+            'external_provider_config': {
+                'enabled': True,
+                'transport_enabled': True,
+                'provider_name': 'future_external',
+                'model_name': 'stub-model',
+                'allowed_models': ['stub-model'],
+            }
+        },
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'External provider adapter skeleton provider is not allowed.' in payload['warnings']
+    assert 'Model client output was not grounded in the provided context.' in payload['warnings']
+
+
+def test_build_rag_answer_with_service_config_degrades_when_allowed_models_are_missing():
+    payload = build_rag_answer_with_service_config(
+        'How does combat damage work?',
+        _grounded_context(),
+        {
+            'external_provider_config': {
+                'enabled': True,
+                'transport_enabled': True,
+                'provider_name': 'future_external',
+                'model_name': 'stub-model',
+                'allowed_providers': ['future_external'],
+            }
+        },
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'External provider adapter skeleton model is not allowed.' in payload['warnings']
     assert 'Model client output was not grounded in the provided context.' in payload['warnings']
 
 
@@ -467,7 +511,7 @@ def test_build_rag_answer_with_service_config_raises_for_unknown_backend_owned_e
 
 
 def test_build_rag_answer_with_service_config_raises_for_unknown_provider_from_service_config():
-    with pytest.raises(ValueError, match='Unsupported RAG model provider: future_external'):
+    with pytest.raises(ValueError, match='RAG model provider is not configured: future_external'):
         build_rag_answer_with_service_config(
             'How does combat damage work?',
             _grounded_context(),
@@ -585,7 +629,7 @@ def test_build_rag_answer_with_provider_factory_failure_falls_back_to_disabled_w
 
 
 def test_build_rag_answer_with_provider_raises_for_unknown_provider_with_grounded_context():
-    with pytest.raises(ValueError, match='Unsupported RAG model provider: future_external'):
+    with pytest.raises(ValueError, match='RAG model provider is not configured: future_external'):
         build_rag_answer_with_provider(
             'How does combat damage work?',
             _grounded_context(),
@@ -594,7 +638,7 @@ def test_build_rag_answer_with_provider_raises_for_unknown_provider_with_grounde
 
 
 def test_build_rag_answer_with_provider_raises_for_unknown_provider_from_service_config():
-    with pytest.raises(ValueError, match='Unsupported RAG model provider: future_external'):
+    with pytest.raises(ValueError, match='RAG model provider is not configured: future_external'):
         build_rag_answer_with_provider(
             'How does combat damage work?',
             _grounded_context(),
@@ -690,7 +734,14 @@ def test_build_rag_answer_with_external_adapter_skeleton_degrades_without_ground
 
 def test_build_rag_answer_with_external_adapter_skeleton_rejects_out_of_context_citations():
     client = ExternalRagModelClientSkeleton(
-        config=ExternalRagModelClientConfig(enabled=True),
+        config=ExternalRagModelClientConfig(
+            enabled=True,
+            transport_enabled=True,
+            provider_name='future_external',
+            model_name='stub-model',
+            allowed_providers=('future_external',),
+            allowed_models=('stub-model',),
+        ),
         responder=lambda payload: {
             'answer': 'Grounded-looking answer.',
             'citation_ids': ['citation-999'],
@@ -713,7 +764,15 @@ def test_build_rag_answer_with_external_adapter_skeleton_rejects_out_of_context_
 
 def test_build_rag_answer_with_external_adapter_skeleton_preserves_structured_and_workbench_warnings():
     client = ExternalRagModelClientSkeleton(
-        config=ExternalRagModelClientConfig(enabled=True, max_prompt_chars=20000),
+        config=ExternalRagModelClientConfig(
+            enabled=True,
+            transport_enabled=True,
+            provider_name='future_external',
+            model_name='stub-model',
+            allowed_providers=('future_external',),
+            allowed_models=('stub-model',),
+            max_prompt_chars=20000,
+        ),
         responder=lambda payload: {
             'answer': 'Grounded adapter answer.',
             'citation_ids': ['citation-001'],

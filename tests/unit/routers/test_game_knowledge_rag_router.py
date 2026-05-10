@@ -351,6 +351,7 @@ def test_rag_answer_router_ignores_provider_field_in_request_body(monkeypatch, t
                 'query': 'damage',
                 'provider': 'disabled',
                 'model': 'ignored-model',
+                'api_key': 'ignored-secret',
                 'provider_hint': 'ignored-hint',
                 'service_config': {'rag_model_provider': 'disabled'},
             },

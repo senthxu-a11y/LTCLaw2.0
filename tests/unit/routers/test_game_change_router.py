@@ -66,6 +66,7 @@ def client(app):
 async def test_create_list_and_get_happy_path(app, client):
     workspace = _workspace()
     app.dependency_overrides[get_agent_for_request] = lambda: workspace
+    app.state.capabilities = {"workbench.test.export"}
 
     async with client:
         created = await client.post(
@@ -84,6 +85,64 @@ async def test_create_list_and_get_happy_path(app, client):
     assert len(listed.json()) == 1
     assert detail.status_code == 200
     assert detail.json()["title"] == "Buff hp"
+
+
+@pytest.mark.asyncio
+async def test_create_proposal_requires_workbench_test_export_when_capabilities_present(app, client):
+    workspace = _workspace()
+    app.dependency_overrides[get_agent_for_request] = lambda: workspace
+    app.state.capabilities = {"workbench.test.write"}
+
+    async with client:
+        response = await client.post(
+            "/api/game/change/proposals",
+            json={
+                "title": "Export hp",
+                "description": "Export draft",
+                "ops": [{"op": "update_cell", "table": "Hero", "row_id": 1, "field": "HP", "new_value": 100}],
+            },
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Missing capability: workbench.test.export"
+
+
+@pytest.mark.asyncio
+async def test_create_proposal_allows_workbench_test_export_without_knowledge_publish(app, client):
+    workspace = _workspace(role="consumer")
+    app.dependency_overrides[get_agent_for_request] = lambda: workspace
+    app.state.capabilities = {"workbench.test.export"}
+
+    async with client:
+        response = await client.post(
+            "/api/game/change/proposals",
+            json={
+                "title": "Export hp",
+                "description": "Export draft",
+                "ops": [{"op": "update_cell", "table": "Hero", "row_id": 1, "field": "HP", "new_value": 100}],
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Export hp"
+
+
+@pytest.mark.asyncio
+async def test_create_proposal_allows_local_trusted_fallback_without_capability_context(app, client):
+    workspace = _workspace()
+    app.dependency_overrides[get_agent_for_request] = lambda: workspace
+
+    async with client:
+        response = await client.post(
+            "/api/game/change/proposals",
+            json={
+                "title": "Export hp",
+                "description": "Export draft",
+                "ops": [{"op": "update_cell", "table": "Hero", "row_id": 1, "field": "HP", "new_value": 100}],
+            },
+        )
+
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
