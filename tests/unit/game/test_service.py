@@ -12,6 +12,7 @@ from ltclaw_gy_x.game.config import (
     SvnConfig,
     TableConvention,
     UserGameConfig,
+    save_project_config,
 )
 from ltclaw_gy_x.game.models import ChangeSet, DependencyGraph, TableIndex
 from ltclaw_gy_x.game.service import GameService, SimpleModelRouter
@@ -114,6 +115,50 @@ def test_game_service_config_property_returns_project_config(service, tmp_path):
     service._project_config = project_config
 
     assert service.config is project_config
+
+
+@pytest.mark.asyncio
+async def test_reload_config_loads_file_backed_external_provider_config(tmp_path, monkeypatch):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir()
+    svn_root = tmp_path / 'svn'
+    svn_root.mkdir()
+    save_project_config(
+        svn_root,
+        ProjectConfig(
+            project=ProjectMeta(name='Test Game', engine='Unity', language='zh-CN'),
+            svn=SvnConfig(root=str(svn_root), poll_interval_seconds=300, jitter_seconds=30),
+            paths=[],
+            filters=FilterConfig(include_ext=['.xlsx'], exclude_glob=[]),
+            table_convention=TableConvention(),
+            doc_templates={},
+            models={},
+            external_provider_config={
+                'enabled': True,
+                'transport_enabled': True,
+                'provider_name': 'future_external',
+                'model_name': 'backend-model',
+                'allowed_providers': ['future_external'],
+                'allowed_models': ['backend-model'],
+                'base_url': 'http://127.0.0.1:8765/v1/chat/completions',
+                'env': {'api_key_env_var': 'QWENPAW_RAG_API_KEY'},
+            },
+        ),
+    )
+    service = GameService(workspace_dir=workspace, runner=None, channel_manager=None)
+
+    with patch(
+        'ltclaw_gy_x.game.service.load_user_config',
+        return_value=UserGameConfig(my_role='consumer', svn_local_root=str(svn_root)),
+    ):
+        await service.reload_config()
+
+    assert service.project_config is not None
+    assert service.project_config.external_provider_config is not None
+    assert service.project_config.external_provider_config.provider_name == 'future_external'
+    assert service.project_config.external_provider_config.env is not None
+    assert service.project_config.external_provider_config.env.api_key_env_var == 'QWENPAW_RAG_API_KEY'
 
 
 @pytest.mark.asyncio

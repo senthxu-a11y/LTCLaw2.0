@@ -9,8 +9,8 @@ import tempfile
 import yaml
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, Union
-from pydantic import BaseModel, Field
+from typing import Literal, Union
+from pydantic import BaseModel, ConfigDict, Field
 
 from .paths import (
     get_legacy_project_config_path,
@@ -115,6 +115,33 @@ class ModelSlotRef(BaseModel):
     model_id: str = Field(description="Model ID")
 
 
+class ExternalProviderEnvProjectConfig(BaseModel):
+    """Backend-owned env metadata for the RAG external provider."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    api_key_env_var: str | None = Field(default=None, description="Env var name for backend-owned API key lookup")
+
+
+class ExternalProviderProjectConfig(BaseModel):
+    """Backend-owned RAG external provider config persisted in project config."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = Field(default=False)
+    transport_enabled: bool = Field(default=False)
+    provider_name: str = Field(default="future_external")
+    model_name: str | None = Field(default=None)
+    allowed_providers: list[str] | None = Field(default=None)
+    allowed_models: list[str] | None = Field(default=None)
+    base_url: str | None = Field(default=None)
+    timeout_seconds: float = Field(default=15.0)
+    max_output_tokens: int | None = Field(default=None)
+    max_prompt_chars: int = Field(default=12000)
+    max_output_chars: int = Field(default=2000)
+    env: ExternalProviderEnvProjectConfig | None = Field(default=None)
+
+
 class ProjectConfig(BaseModel):
     """????"""
     schema_version: Literal["project-config.v1"] = Field(default="project-config.v1")
@@ -125,7 +152,10 @@ class ProjectConfig(BaseModel):
     table_convention: TableConvention = Field(default_factory=TableConvention)
     doc_templates: dict[str, str] = Field(default_factory=dict, description="??????")
     models: dict[str, ModelSlotRef] = Field(default_factory=dict, description="AI????")
-    external_provider_config: dict[str, Any] | None = Field(default=None, description="Backend-owned RAG provider config")
+    external_provider_config: ExternalProviderProjectConfig | None = Field(
+        default=None,
+        description="Backend-owned RAG provider config",
+    )
 
 
 class UserGameConfig(BaseModel):

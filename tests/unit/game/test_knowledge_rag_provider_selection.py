@@ -117,8 +117,10 @@ def test_resolve_external_rag_model_client_config_reads_game_service_config_brid
             'enabled': False,
             'transport_enabled': False,
             'provider_name': 'future_external',
+            'model_name': 'backend-model',
             'allowed_providers': ['future_external'],
-            'allowed_models': [],
+            'allowed_models': ['backend-model'],
+            'base_url': 'http://127.0.0.1:8765/v1/chat/completions',
             'env': {'api_key_env_var': 'QWENPAW_RAG_API_KEY'},
         },
     )
@@ -129,7 +131,9 @@ def test_resolve_external_rag_model_client_config_reads_game_service_config_brid
         enabled=False,
         transport_enabled=False,
         provider_name='future_external',
+        model_name='backend-model',
         allowed_providers=('future_external',),
-        allowed_models=None,
+        allowed_models=('backend-model',),
+        base_url='http://127.0.0.1:8765/v1/chat/completions',
         env=ExternalRagModelEnvConfig(api_key_env_var='QWENPAW_RAG_API_KEY'),
     )
