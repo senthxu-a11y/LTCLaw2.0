@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from ltclaw_gy_x.game.config import FilterConfig, ProjectConfig, ProjectMeta, SvnConfig, TableConvention
 from ltclaw_gy_x.game.knowledge_rag_external_model_client import ExternalRagModelClientConfig, ExternalRagModelEnvConfig
+from ltclaw_gy_x.game.service import GameService
 from ltclaw_gy_x.game.knowledge_rag_provider_selection import (
     resolve_external_rag_model_client_config,
     resolve_rag_model_provider_name,
@@ -99,3 +101,35 @@ def test_resolve_rag_model_provider_name_ignores_blank_values():
     provider_name = resolve_rag_model_provider_name({'rag_model_provider': '   '})
 
     assert provider_name is None
+
+
+def test_resolve_external_rag_model_client_config_reads_game_service_config_bridge(tmp_path):
+    service = GameService(tmp_path / 'workspace')
+    service._project_config = ProjectConfig(
+        project=ProjectMeta(name='Test Game', engine='Unity', language='zh-CN'),
+        svn=SvnConfig(root=str(tmp_path / 'svn'), poll_interval_seconds=300, jitter_seconds=30),
+        paths=[],
+        filters=FilterConfig(include_ext=['.xlsx'], exclude_glob=[]),
+        table_convention=TableConvention(),
+        doc_templates={},
+        models={},
+        external_provider_config={
+            'enabled': False,
+            'transport_enabled': False,
+            'provider_name': 'future_external',
+            'allowed_providers': ['future_external'],
+            'allowed_models': [],
+            'env': {'api_key_env_var': 'QWENPAW_RAG_API_KEY'},
+        },
+    )
+
+    external_config = resolve_external_rag_model_client_config(service)
+
+    assert external_config == ExternalRagModelClientConfig(
+        enabled=False,
+        transport_enabled=False,
+        provider_name='future_external',
+        allowed_providers=('future_external',),
+        allowed_models=None,
+        env=ExternalRagModelEnvConfig(api_key_env_var='QWENPAW_RAG_API_KEY'),
+    )

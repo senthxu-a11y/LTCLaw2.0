@@ -32,6 +32,7 @@ def service(tmp_path, isolated_home):
 
 def test_initial_state_unconfigured(service):
     assert service.configured is False
+    assert service.config is service.project_config
     assert service.project_config is None
     assert service.svn is None
     assert service.table_indexer is None
@@ -92,6 +93,27 @@ def _project_config(svn_root: Path) -> ProjectConfig:
         doc_templates={},
         models={},
     )
+
+
+def test_project_config_external_provider_config_defaults_to_none():
+    config = ProjectConfig(
+        project=ProjectMeta(name="Test Game", engine="Unity", language="zh-CN"),
+        svn=SvnConfig(root='/tmp/svn', poll_interval_seconds=300, jitter_seconds=30),
+        paths=[],
+        filters=FilterConfig(include_ext=[".xlsx", ".csv"], exclude_glob=[]),
+        table_convention=TableConvention(),
+        doc_templates={},
+        models={},
+    )
+
+    assert config.external_provider_config is None
+
+
+def test_game_service_config_property_returns_project_config(service, tmp_path):
+    project_config = _project_config(tmp_path / 'svn')
+    service._project_config = project_config
+
+    assert service.config is project_config
 
 
 @pytest.mark.asyncio

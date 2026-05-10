@@ -1,7 +1,12 @@
 # Lane B: P20 Backend-Only Real LLM Transport Minimal Implementation
 
 Date: 2026-05-10
-Status: planning guidance only.
+Status: planning guidance with completed lane-closeout reference.
+
+Dedicated checklist:
+
+1. `docs/tasks/post-mvp/lane-b-p20-backend-real-llm-transport-checklist-2026-05-10.md`
+2. `docs/tasks/post-mvp/lane-b-p20-6-lane-closeout-and-next-gate-2026-05-10.md`
 
 ## Goal
 
@@ -46,6 +51,13 @@ Status: planning guidance only.
 2. GameProject Ask behavior remains the same from the UI and API perspective.
 3. The feature can be killed by config without code changes.
 4. This is real transport enablement for a narrow backend path, not production provider rollout.
+
+## Current Closeout State
+
+1. P20 backend-only real HTTP transport lane is complete to the minimum validated state.
+2. The path remains backend-only, default-off, and not production rollout.
+3. Ask schema, frontend provider selector, router authority, ProviderManager.active_model, and SimpleModelRouter remain unchanged.
+4. Current state remains pilot usable and not production ready.
 
 ## Minimum Validation
 

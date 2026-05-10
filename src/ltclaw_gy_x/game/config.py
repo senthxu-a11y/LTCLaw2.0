@@ -9,7 +9,7 @@ import tempfile
 import yaml
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Union
+from typing import Any, Literal, Union
 from pydantic import BaseModel, Field
 
 from .paths import (
@@ -125,6 +125,7 @@ class ProjectConfig(BaseModel):
     table_convention: TableConvention = Field(default_factory=TableConvention)
     doc_templates: dict[str, str] = Field(default_factory=dict, description="??????")
     models: dict[str, ModelSlotRef] = Field(default_factory=dict, description="AI????")
+    external_provider_config: dict[str, Any] | None = Field(default=None, description="Backend-owned RAG provider config")
 
 
 class UserGameConfig(BaseModel):

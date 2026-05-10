@@ -134,6 +134,10 @@ class GameService:
         return self._project_config
 
     @property
+    def config(self):
+        return self.project_config
+
+    @property
     def user_config(self):
         return self._user_config
 
