@@ -20,6 +20,9 @@ Status as of 2026-05-10:
 8. SVN integration remains deferred, and SVN Phase 0/1 remains deferred to a separate slice
 9. external-provider remains frozen at `P3.external-provider-19`, and `P20` remains deferred
 10. the next recommended action is controlled pilot usage on the validated target machines, then an optional separate slice such as SVN Phase 0/1 review or another post-MVP production-hardening scope decision
+11. the Windows validation doc now also records the final touched-doc NUL check `all touched docs NUL=0` and keyword boundary review `clean in meaning`
+12. that Windows doc keeps the Windows-side status as `Windows operator-side pilot pass with known limitations.`, pilot usable on Windows target machine, and not production ready
+13. that Windows doc also keeps backend pytest waived on Windows because `pytest` is missing from that venv, not because tests failed
 
 ---
 

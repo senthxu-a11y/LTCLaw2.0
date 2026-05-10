@@ -279,6 +279,11 @@ The current verified summary is:
 33. That target-machine validation records `Operator-side pilot pass with known limitations.` while preserving the same accepted MVP disposition: `Data-backed pilot readiness pass.`, pilot usable, and not production ready.
 34. That validation confirms live operator success for rebuild, formal map save, reversible status edit, build-from-current-indexes, set current, rollback, current-release query, current-release RAG, structured query, NumericWorkbench draft proposal dry-run, and draft test-plan create/list on the target runtime.
 35. The next recommended action after operator-side validation is controlled pilot usage on the validated target machine, followed only by an optional separately scoped slice such as SVN Phase 0/1 review or another post-MVP production-hardening scope decision.
+36. Post-MVP Windows operator-side pilot validation final hygiene receipt is now recorded in `docs/tasks/knowledge-post-mvp-windows-operator-side-pilot-validation-2026-05-10.md`.
+37. That Windows receipt keeps the Windows-side status as `Windows operator-side pilot pass with known limitations.`, pilot usable on Windows target machine, and not production ready.
+38. That Windows receipt records touched-doc NUL check `all touched docs NUL=0` and keyword boundary review `clean in meaning`.
+39. That Windows receipt keeps backend pytest waived on Windows because `pytest` is missing from that venv, not because tests failed.
+40. The next recommended Windows-side action remains controlled pilot usage first, with SVN Phase 0/1 or production-hardening only as a later separately scoped slice.
 27. P3.7b+ focused formal-map/release/router set: `35 passed`.
 28. P3.7b+ wider `tests/unit/game` + `tests/unit/routers`: `328 passed`.
 29. P3.7b+ `git diff --check`: passed.

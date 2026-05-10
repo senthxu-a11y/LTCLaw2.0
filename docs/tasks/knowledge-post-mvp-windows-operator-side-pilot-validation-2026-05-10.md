@@ -228,3 +228,39 @@ Recommended next step after this Windows target-machine validation:
 2. keep operator runbooks aligned with the validated Windows startup path, app-owned storage path, and Chinese-path JSON-body workaround
 3. if SVN work is needed later, open SVN Phase 0/1 as a separate scoped slice
 4. if production hardening is needed later, open a separate post-MVP production-hardening scope decision instead of extending this pilot closeout
+
+## 9. Final Hygiene Receipt
+
+This round only closes the two remaining hygiene items for the touched Windows closeout docs:
+
+1. touched-doc NUL check
+2. keyword boundary review
+
+The four touched docs for this hygiene receipt are:
+
+1. `docs/tasks/knowledge-post-mvp-windows-operator-side-pilot-validation-2026-05-10.md`
+2. `docs/tasks/knowledge-p0-p3-implementation-checklist.md`
+3. `docs/tasks/knowledge-p3-gate-status-2026-05-07.md`
+4. `docs/tasks/knowledge-p3-gate-consolidation-2026-05-08.md`
+
+Hygiene result:
+
+1. touched-doc NUL check: all touched docs `NUL=0`
+2. keyword boundary review: clean in meaning
+
+Meaning-level interpretation:
+
+1. Terms such as `not production ready`, `deferred`, `P20`, `SVN Phase 0/1`, `SVN integration`, `real HTTP`, `real provider`, `real LLM`, `API key`, and `provider/model` may still appear in the touched docs.
+2. Those terms remain acceptable here only when they continue to mean deferred, not enabled, out of scope, or non-production.
+3. No touched doc upgrades the Windows pilot result to a production-ready state.
+4. No touched doc claims that Ask request now supports provider, model, or api_key.
+5. No touched doc claims that ordinary RAG Q&A writes release state.
+6. No touched doc claims that test plans enter formal knowledge by default.
+7. No touched doc claims that SVN commit integration or SVN update integration is enabled.
+
+This final hygiene receipt keeps the same controlling conclusion:
+
+1. Windows operator-side pilot pass with known limitations remains current status.
+2. Pilot usable on Windows target machine remains current status.
+3. Not production ready remains current status.
+4. Backend pytest remains waived on Windows because `pytest` is missing from that venv, not because tests failed.

@@ -99,8 +99,11 @@ Current facts:
 17. That handoff explicitly keeps SVN integration deferred, keeps SVN Phase 0/1 deferred to a separate slice, and keeps `P20` deferred.
 18. Post-MVP operator-side pilot validation is now complete as the target-machine execution closeout for the same accepted MVP/pilot state.
 19. That validation records `Operator-side pilot pass with known limitations.` while preserving the same official non-production boundary and the same deferred SVN/provider scope.
-20. Post-MVP Windows operator-side pilot validation is now also complete as a second target-machine execution closeout for the same accepted MVP/pilot state.
-21. That Windows validation records the same `Operator-side pilot pass with known limitations.` conclusion on a Windows target machine while preserving the same official non-production boundary and the same deferred SVN/provider scope.
+20. Post-MVP Windows operator-side pilot validation is now complete as a second target-machine execution closeout for the same accepted MVP/pilot state and is recorded in `docs/tasks/knowledge-post-mvp-windows-operator-side-pilot-validation-2026-05-10.md`.
+21. That Windows validation keeps the Windows-side status as `Windows operator-side pilot pass with known limitations.`, pilot usable on Windows target machine, and not production ready.
+22. That same Windows doc now also records touched-doc NUL check `all touched docs NUL=0` and keyword boundary review `clean in meaning`.
+23. That same Windows doc keeps backend pytest waived on Windows because `pytest` is missing from that venv, not because tests failed.
+24. The next recommended Windows-side action remains controlled pilot usage first, with SVN Phase 0/1 or production-hardening only as a later separately scoped slice.
 
 ## What This Is Not Yet
 
