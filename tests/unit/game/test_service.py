@@ -142,6 +142,11 @@ async def test_reload_config_loads_file_backed_external_provider_config(tmp_path
                 'allowed_providers': ['future_external'],
                 'allowed_models': ['backend-model'],
                 'base_url': 'http://127.0.0.1:8765/v1/chat/completions',
+                'timeout_seconds': 15.0,
+                'max_output_tokens': 256,
+                'max_prompt_chars': 12000,
+                'max_output_chars': 2000,
+                'api_key': 'REQUEST_SECRET_SHOULD_BE_STRIPPED',
                 'env': {'api_key_env_var': 'QWENPAW_RAG_API_KEY'},
             },
         ),
@@ -156,9 +161,14 @@ async def test_reload_config_loads_file_backed_external_provider_config(tmp_path
 
     assert service.project_config is not None
     assert service.project_config.external_provider_config is not None
+    assert service.project_config.external_provider_config.enabled is True
+    assert service.project_config.external_provider_config.transport_enabled is True
     assert service.project_config.external_provider_config.provider_name == 'future_external'
+    assert service.project_config.external_provider_config.model_name == 'backend-model'
+    assert service.project_config.external_provider_config.base_url == 'http://127.0.0.1:8765/v1/chat/completions'
     assert service.project_config.external_provider_config.env is not None
     assert service.project_config.external_provider_config.env.api_key_env_var == 'QWENPAW_RAG_API_KEY'
+    assert not hasattr(service.project_config.external_provider_config, 'api_key')
 
 
 @pytest.mark.asyncio

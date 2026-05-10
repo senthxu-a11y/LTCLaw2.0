@@ -70,6 +70,44 @@ def test_validate_project_config(sample_project_config):
     assert len(issues) == 0
 
 
+def test_project_config_external_provider_config_model_dump_is_json_safe_and_strips_request_secret(sample_project_config):
+    sample_project_config.external_provider_config = {
+        "enabled": True,
+        "transport_enabled": True,
+        "provider_name": "future_external",
+        "model_name": "backend-model",
+        "allowed_providers": ["future_external"],
+        "allowed_models": ["backend-model"],
+        "base_url": "http://127.0.0.1:8765/v1/chat/completions",
+        "timeout_seconds": 15.0,
+        "max_output_tokens": 256,
+        "max_prompt_chars": 12000,
+        "max_output_chars": 2000,
+        "api_key": "REQUEST_SECRET_SHOULD_BE_STRIPPED",
+        "env": {
+            "api_key_env_var": "QWENPAW_RAG_API_KEY",
+            "api_key": "NESTED_REQUEST_SECRET_SHOULD_BE_STRIPPED",
+        },
+    }
+
+    dumped = sample_project_config.model_dump(mode="json")
+
+    assert dumped["external_provider_config"] == {
+        "enabled": True,
+        "transport_enabled": True,
+        "provider_name": "future_external",
+        "model_name": "backend-model",
+        "allowed_providers": ["future_external"],
+        "allowed_models": ["backend-model"],
+        "base_url": "http://127.0.0.1:8765/v1/chat/completions",
+        "timeout_seconds": 15.0,
+        "max_output_tokens": 256,
+        "max_prompt_chars": 12000,
+        "max_output_chars": 2000,
+        "env": {"api_key_env_var": "QWENPAW_RAG_API_KEY"},
+    }
+
+
 def test_user_config_operations(tmp_path, monkeypatch):
     """Test user config save and load"""
     user_config_path = tmp_path / "game_user.yaml"
