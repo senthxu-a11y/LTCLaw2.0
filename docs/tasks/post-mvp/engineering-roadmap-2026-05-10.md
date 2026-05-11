@@ -33,6 +33,8 @@ local project directory
 13. The next recommended Lane B gate is `P23 Controlled Pilot With DeepSeek Backend Config`, not production rollout.
 14. `P22` closeout and provider decision are recorded at `docs/tasks/post-mvp/lane-b-p22-closeout-provider-decision-2026-05-11.md`.
 15. `P23` planning is recorded at `docs/tasks/post-mvp/lane-b-p23-controlled-pilot-deepseek-backend-config-plan-2026-05-11.md`.
+16. `P23.2` Windows controlled planner pilot passed and its receipt is synchronized in-repo.
+17. `P23.3` UX and operations review recommends `P24 Operator Startup And Secret-Management Hardening`.
 
 ## Global Rules
 
@@ -71,7 +73,7 @@ local project directory
 
 1. Start controlled Windows pilot usage immediately.
 2. Lane B P22 DeepSeek smoke pass is recorded and MiniMax remains blocked.
-3. Start Lane B next with P23.2 Windows controlled planner pilot execution under backend-only and operator-only constraints.
+3. Start Lane B next with P24 Operator Startup And Secret-Management Hardening.
 4. Open Lane C startup or doctor hardening in parallel if pilot operators hit setup friction.
 5. Open Lane E workbench practical UX only after the first real planner session identifies UX pain.
 6. Open Lane D SVN Phase 0/1 only after current delivery artifacts are stable.

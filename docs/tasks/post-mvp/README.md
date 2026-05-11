@@ -12,7 +12,8 @@ This directory is the active post-MVP planning area after the accepted Knowledge
 6. `lane-b-p22-controlled-real-provider-smoke-checklist-2026-05-11.md` is the P22 planning checklist that led to the controlled provider validation gate.
 7. `lane-b-p22-closeout-provider-decision-2026-05-11.md` records the P22 closeout, the current provider decision, and the next recommended gate.
 8. `lane-b-p23-controlled-pilot-deepseek-backend-config-plan-2026-05-11.md` is the P23 controlled planner pilot plan and checklist for DeepSeek backend config.
-9. `task-folder-archive-plan-2026-05-10.md` records the folder-organization and archive guidance for the task docs.
+9. `lane-b-p23-3-ux-ops-gap-review-2026-05-11.md` records the P23 UX and operations gap review based on the reported Windows controlled pilot pass.
+10. `task-folder-archive-plan-2026-05-10.md` records the folder-organization and archive guidance for the task docs.
 
 ## Scope Rules
 
@@ -23,5 +24,6 @@ This directory is the active post-MVP planning area after the accepted Knowledge
 5. Lane B is now closed through P21.10 at a backend-only verified state and is not production rollout.
 6. P22 DeepSeek smoke passed under backend-only and operator-only constraints.
 7. MiniMax remains blocked and is not the current pass provider.
-8. The next Lane B gate is P23 Controlled Pilot With DeepSeek Backend Config under backend-only, operator-only, single-provider, single-model constraints.
-9. P23 is planned only; it is not production rollout and not production ready.
+8. P23 Windows controlled planner pilot passed and the corresponding receipt is synchronized in-repo.
+9. The next recommended Lane B gate is P24 Operator Startup And Secret-Management Hardening.
+10. P23 is not production rollout and not production ready.
