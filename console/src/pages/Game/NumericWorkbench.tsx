@@ -133,6 +133,27 @@ export default function NumericWorkbench() {
   const dlField = searchParams.get("field") || searchParams.get("fieldKey") || "";
   const sessionParam = searchParams.get("session") || "";
   const hasDeepLink = Boolean(dlTable || dlRow || dlField);
+  const citationContext = useMemo(() => {
+    if (searchParams.get("from") !== "rag-citation" || !hasDeepLink) {
+      return null;
+    }
+
+    const title = searchParams.get("citationTitle") || "";
+    const source = searchParams.get("citationSource") || "";
+    const citationId = searchParams.get("citationId") || "";
+    if (!title && !source && !citationId && !dlTable && !dlRow && !dlField) {
+      return null;
+    }
+
+    return {
+      citationId,
+      title,
+      source,
+      table: dlTable,
+      row: dlRow,
+      field: dlField,
+    };
+  }, [dlField, dlRow, dlTable, hasDeepLink, searchParams]);
   const isWorkbenchView = Boolean(sessionParam || hasDeepLink);
 
   const sessionStore = useWorkbenchSessions();
@@ -1396,6 +1417,65 @@ export default function NumericWorkbench() {
             message={t("gameWorkbench.boundaryNotice", {
               defaultValue: "Draft-only dry-run workspace. It does not publish automatically or write formal knowledge release.",
             })}
+          />
+        </Card>
+      ) : null}
+
+      {citationContext ? (
+        <Card>
+          <Alert
+            type="info"
+            showIcon
+            message={t("gameWorkbench.citationContextTitle", {
+              defaultValue: "Opened from a RAG citation",
+            })}
+            description={
+              <Space direction="vertical" size={6}>
+                <Space size={[6, 6]} wrap>
+                  {citationContext.table ? (
+                    <Tag color="blue">
+                      {t("gameWorkbench.citationContextTable", {
+                        table: citationContext.table,
+                        defaultValue: `table: ${citationContext.table}`,
+                      })}
+                    </Tag>
+                  ) : null}
+                  {citationContext.row ? (
+                    <Tag>
+                      {t("gameWorkbench.citationContextRow", {
+                        row: citationContext.row,
+                        defaultValue: `row: ${citationContext.row}`,
+                      })}
+                    </Tag>
+                  ) : null}
+                  {citationContext.field ? (
+                    <Tag>
+                      {t("gameWorkbench.citationContextField", {
+                        field: citationContext.field,
+                        defaultValue: `field: ${citationContext.field}`,
+                      })}
+                    </Tag>
+                  ) : null}
+                  {citationContext.citationId ? <Tag>{citationContext.citationId}</Tag> : null}
+                </Space>
+                <Text type="secondary">
+                  {citationContext.title || citationContext.source
+                    ? t("gameWorkbench.citationContextSource", {
+                        title: citationContext.title || citationContext.source,
+                        source: citationContext.source,
+                        defaultValue: `Citation: ${citationContext.title || citationContext.source}${citationContext.source ? ` (${citationContext.source})` : ""}`,
+                      })
+                    : t("gameWorkbench.citationContextSourceUnknown", {
+                        defaultValue: "Citation source details were not provided.",
+                      })}
+                </Text>
+                <Text type="secondary">
+                  {t("gameWorkbench.citationContextBoundary", {
+                    defaultValue: "Use this as inspection context only. Any changes remain draft-only dry-run work and do not publish automatically.",
+                  })}
+                </Text>
+              </Space>
+            }
           />
         </Card>
       ) : null}

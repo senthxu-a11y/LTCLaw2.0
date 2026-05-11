@@ -99,6 +99,9 @@ interface CitationWorkbenchTarget {
   table: string | null;
   row: string | null;
   field: string | null;
+  citationId: string;
+  citationTitle: string | null;
+  citationSource: string | null;
 }
 
 function isLikelyWorkbenchSourcePath(value?: string | null): boolean {
@@ -139,6 +142,9 @@ function buildCitationWorkbenchTarget(citation: KnowledgeRagCitation): CitationW
     table: (canUseSourcePath ? sourcePathTable : null) || (canUseTitleField ? titleTable : null),
     row: citation.row === null || citation.row === undefined ? null : String(citation.row),
     field: canUseTitleField ? titleField : null,
+    citationId: citation.citation_id,
+    citationTitle: citation.title || null,
+    citationSource: citation.source_path || citation.artifact_path || null,
   };
 }
 
@@ -473,6 +479,14 @@ export default function GameProject() {
       }
 
       const params = new URLSearchParams({ table: target.table });
+      params.set("from", "rag-citation");
+      params.set("citationId", target.citationId);
+      if (target.citationTitle) {
+        params.set("citationTitle", target.citationTitle);
+      }
+      if (target.citationSource) {
+        params.set("citationSource", target.citationSource);
+      }
       if (target.row) {
         params.set("row", target.row);
       }
