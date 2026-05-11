@@ -17,9 +17,14 @@ The target is a backend-only, config-gated, reversible real HTTP transport path 
 3. Mac and Windows operator-side pilots passed with known limitations.
 4. Current state is pilot usable, not production ready.
 5. External-provider remains frozen at `P3.external-provider-19`.
-6. `P20` remains deferred until this checklist opens explicit scoped slices.
+6. `P20` through `P21.10` are now complete for the backend-only transport and backend-owned activation line.
 7. Ask request schema must remain unchanged.
 8. GameProject must not expose provider, model, or API-key controls.
+9. Windows fake-endpoint verification is recorded in-repo.
+10. Windows hot-reload kill-switch verification is recorded in-repo.
+11. The next gate is `P22 Controlled Real Provider Smoke Plan`, not production rollout.
+12. The P22 checklist is `docs/tasks/post-mvp/lane-b-p22-controlled-real-provider-smoke-checklist-2026-05-11.md`.
+13. P22 is planned only; real-provider smoke has not been executed.
 
 ## Non-Regression Rules
 
@@ -442,3 +447,4 @@ Lane B is complete only when:
 8. focused RAG provider suite passes
 9. closeout documents record not production ready
 10. controlled pilot can enable real LLM only by backend config
+11. Windows fake-endpoint and kill-switch receipts are recorded before any real-provider smoke planning

@@ -25,8 +25,11 @@ local project directory
 ```
 
 7. SVN is not a knowledge runtime dependency.
-8. External-provider remains frozen at `P3.external-provider-19`.
-9. `P20` is still deferred until a new explicit backend-only slice opens it.
+8. Lane B is now closed through `P21.10` for backend-only transport and controlled backend config verification.
+9. Verified Lane B state is backend-only, not production rollout, and not production ready.
+10. Windows fake-endpoint boundary verification and Windows hot-reload kill-switch verification are both recorded in-repo.
+11. The next Lane B gate is planning-only `P22 Controlled Real Provider Smoke Plan`, not production rollout.
+12. `P22` now has a dedicated checklist at `docs/tasks/post-mvp/lane-b-p22-controlled-real-provider-smoke-checklist-2026-05-11.md`.
 
 ## Global Rules
 
@@ -64,8 +67,9 @@ local project directory
 ## Recommended Next-Start Order
 
 1. Start controlled Windows pilot usage immediately.
-2. Open Lane B P20 backend-only real LLM transport as the first implementation lane because useful planner RAG depends on a real answer model.
-3. Open Lane C startup or doctor hardening in parallel if pilot operators hit setup friction.
-4. Open Lane E workbench practical UX only after the first real planner session identifies UX pain.
-5. Open Lane D SVN Phase 0/1 only after current delivery artifacts are stable.
-6. Keep Lane F as a planning gate after real pilot feedback.
+2. Lane B P20 through P21.10 is closed; the next Lane B gate is P22 Controlled Real Provider Smoke Plan under backend-only and operator-only constraints.
+3. Start Lane B next with P22.1 source and config review before any real provider call.
+4. Open Lane C startup or doctor hardening in parallel if pilot operators hit setup friction.
+5. Open Lane E workbench practical UX only after the first real planner session identifies UX pain.
+6. Open Lane D SVN Phase 0/1 only after current delivery artifacts are stable.
+7. Keep Lane F as a planning gate after real pilot feedback.
