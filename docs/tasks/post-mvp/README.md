@@ -9,8 +9,10 @@ This directory is the active post-MVP planning area after the accepted Knowledge
 3. `lane-b-p20-backend-real-llm-transport-checklist-2026-05-10.md` is the executable checklist for the Lane B real LLM transport line.
 4. `lane-b-p20-6-lane-closeout-and-next-gate-2026-05-10.md` records the P20 lane closeout, rollout boundary, and the first post-P20 gate recommendation.
 5. `lane-b-p21-11-lane-b-closeout-next-gate-decision-2026-05-11.md` records the full Lane B closeout through P21.10 and the next-gate decision.
-6. `lane-b-p22-controlled-real-provider-smoke-checklist-2026-05-11.md` is the planning checklist for the next backend-only, operator-only real-provider smoke.
-7. `task-folder-archive-plan-2026-05-10.md` records the folder-organization and archive guidance for the task docs.
+6. `lane-b-p22-controlled-real-provider-smoke-checklist-2026-05-11.md` is the P22 planning checklist that led to the controlled provider validation gate.
+7. `lane-b-p22-closeout-provider-decision-2026-05-11.md` records the P22 closeout, the current provider decision, and the next recommended gate.
+8. `lane-b-p23-controlled-pilot-deepseek-backend-config-plan-2026-05-11.md` is the P23 controlled planner pilot plan and checklist for DeepSeek backend config.
+9. `task-folder-archive-plan-2026-05-10.md` records the folder-organization and archive guidance for the task docs.
 
 ## Scope Rules
 
@@ -19,5 +21,7 @@ This directory is the active post-MVP planning area after the accepted Knowledge
 3. Production readiness may be discussed only after Lane F performs a dedicated production-hardening scope decision.
 4. The current accepted state remains pilot usable and not production ready.
 5. Lane B is now closed through P21.10 at a backend-only verified state and is not production rollout.
-6. The next Lane B gate is P22 Controlled Real Provider Smoke Plan under backend-only, operator-only, single-provider, single-model constraints.
-7. P22 is planned only; it is not executed, not production rollout, and not production ready.
+6. P22 DeepSeek smoke passed under backend-only and operator-only constraints.
+7. MiniMax remains blocked and is not the current pass provider.
+8. The next Lane B gate is P23 Controlled Pilot With DeepSeek Backend Config under backend-only, operator-only, single-provider, single-model constraints.
+9. P23 is planned only; it is not production rollout and not production ready.

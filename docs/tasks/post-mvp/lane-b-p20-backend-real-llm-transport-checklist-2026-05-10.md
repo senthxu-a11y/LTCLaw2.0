@@ -22,9 +22,12 @@ The target is a backend-only, config-gated, reversible real HTTP transport path 
 8. GameProject must not expose provider, model, or API-key controls.
 9. Windows fake-endpoint verification is recorded in-repo.
 10. Windows hot-reload kill-switch verification is recorded in-repo.
-11. The next gate is `P22 Controlled Real Provider Smoke Plan`, not production rollout.
-12. The P22 checklist is `docs/tasks/post-mvp/lane-b-p22-controlled-real-provider-smoke-checklist-2026-05-11.md`.
-13. P22 is planned only; real-provider smoke has not been executed.
+11. P22 DeepSeek controlled real-provider smoke has passed under backend-only and operator-only constraints.
+12. MiniMax remains blocked and is not the current pass provider.
+13. The P22 checklist is `docs/tasks/post-mvp/lane-b-p22-controlled-real-provider-smoke-checklist-2026-05-11.md`.
+14. P22 closeout and provider decision are recorded at `docs/tasks/post-mvp/lane-b-p22-closeout-provider-decision-2026-05-11.md`.
+15. The next recommended gate is `P23 Controlled Pilot With DeepSeek Backend Config`, not production rollout.
+16. P23 planning is recorded at `docs/tasks/post-mvp/lane-b-p23-controlled-pilot-deepseek-backend-config-plan-2026-05-11.md`.
 
 ## Non-Regression Rules
 
