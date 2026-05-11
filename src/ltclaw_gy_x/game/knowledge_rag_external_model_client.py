@@ -557,7 +557,15 @@ def _render_outbound_user_message(payload: RagAnswerPromptPayload) -> str:
 
     lines = [
         'Use only the grounded release context below.',
-        'Return a JSON object with keys "answer" and "citation_ids".',
+        'Output only valid JSON.',
+        'Do not wrap the output in markdown fences.',
+        'Do not include any prose before or after the JSON.',
+        'Use exactly this schema:',
+        '{"answer":"<grounded answer string>","citation_ids":["<allowed citation id>"],"warnings":[]}',
+        'citation_ids must be selected only from Allowed Citation IDs.',
+        'Do not invent citation ids.',
+        'If no grounded answer exists, return exactly:',
+        '{"answer":"","citation_ids":[],"warnings":["insufficient grounded context"]}',
     ]
     if release_id is not None:
         lines.append(f'Release ID: {release_id}')

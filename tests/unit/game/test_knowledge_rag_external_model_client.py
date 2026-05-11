@@ -534,15 +534,57 @@ def test_external_rag_model_http_transport_skeleton_builds_outbound_request_with
     assert request_contract['model_name'] == 'backend-model'
     assert request_contract['endpoint'] == 'https://provider.example/runtime'
     assert request_contract['proxy'] == 'https://proxy.example/forward'
+    assert set(request_contract['body']) == {'model', 'messages', 'max_tokens'}
     assert request_contract['body']['model'] == 'backend-model'
     assert request_contract['body']['messages'][0]['role'] == 'user'
     assert request_contract['body']['max_tokens'] == 256
+
+    user_message = request_contract['body']['messages'][0]['content']
+    assert 'Output only valid JSON.' in user_message
+    assert 'Do not wrap the output in markdown fences.' in user_message
+    assert 'Do not include any prose before or after the JSON.' in user_message
+    assert 'Use exactly this schema:' in user_message
+    assert '{"answer":"<grounded answer string>","citation_ids":["<allowed citation id>"],"warnings":[]}' in user_message
+    assert 'citation_ids must be selected only from Allowed Citation IDs.' in user_message
+    assert '{"answer":"","citation_ids":[],"warnings":["insufficient grounded context"]}' in user_message
+    assert 'Allowed Citation IDs:' in user_message
+    assert '- citation-001' in user_message
+    assert 'Grounded Chunks:' in user_message
+    assert '[1] citation_id=citation-001 text=Combat damage uses the current release formula.' in user_message
     assert 'request-provider' not in str(request_contract)
     assert 'request-model' not in str(request_contract)
     assert 'request-secret' not in str(request_contract)
     assert 'placeholder-secret' not in str(request_contract)
     assert 'Authorization' not in str(request_contract)
     assert 'candidate_evidence' not in str(request_contract)
+
+
+def test_external_rag_model_http_transport_skeleton_outbound_request_keeps_single_user_message_contract():
+    transport = ExternalRagModelHttpTransportSkeleton()
+
+    request_contract = transport.build_outbound_request(
+        _payload(),
+        config=ExternalRagModelClientConfig(
+            enabled=True,
+            transport_enabled=True,
+            provider_name='future_external',
+            model_name='backend-model',
+            max_output_tokens=256,
+        ),
+        credentials=ExternalRagModelClientCredentials(api_key='placeholder-secret'),
+    )
+
+    assert request_contract['body']['messages'] == [
+        {
+            'role': 'user',
+            'content': request_contract['body']['messages'][0]['content'],
+        }
+    ]
+    assert 'Release ID: release-001' in request_contract['body']['messages'][0]['content']
+    assert 'Built At: 2026-01-01T00:00:00Z' in request_contract['body']['messages'][0]['content']
+    assert 'User Query: How does combat damage work?' in request_contract['body']['messages'][0]['content']
+    assert 'Policy Hints:' in request_contract['body']['messages'][0]['content']
+    assert '- Use only grounded citations.' in request_contract['body']['messages'][0]['content']
 
 
 def test_redact_transport_locator_removes_query_string_and_userinfo():
