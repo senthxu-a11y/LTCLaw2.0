@@ -95,6 +95,53 @@ const FORMAL_MAP_STATUS_OPTIONS: Array<{ label: KnowledgeStatus; value: Knowledg
   { label: "ignored", value: "ignored" },
 ];
 
+interface CitationWorkbenchTarget {
+  table: string | null;
+  row: string | null;
+  field: string | null;
+}
+
+function isLikelyWorkbenchSourcePath(value?: string | null): boolean {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.replace(/\\/g, "/").trim().toLowerCase();
+  return /\.(xlsx|xls|csv|tsv)$/.test(normalized);
+}
+
+function normalizeWorkbenchTableName(value?: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.replace(/\\/g, "/").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const tail = normalized.split("/").filter(Boolean).pop() || normalized;
+  const withoutQuery = tail.split("?")[0]?.trim() || tail;
+  const withoutExtension = withoutQuery.replace(/\.[^.]+$/, "").trim();
+  return withoutExtension || null;
+}
+
+function buildCitationWorkbenchTarget(citation: KnowledgeRagCitation): CitationWorkbenchTarget {
+  const sourcePathTable = normalizeWorkbenchTableName(citation.source_path);
+  const titleMatch = (citation.title || "").trim().match(/^([A-Za-z0-9_-]+)\.([A-Za-z0-9_:-]+)$/);
+  const titleTable = titleMatch?.[1] || null;
+  const titleField = titleMatch?.[2] || null;
+  const sourceType = (citation.source_type || "").trim().toLowerCase();
+  const canUseSourcePath = isLikelyWorkbenchSourcePath(citation.source_path);
+  const canUseTitleField = sourceType.includes("table") || sourceType.includes("field");
+
+  return {
+    table: (canUseSourcePath ? sourcePathTable : null) || (canUseTitleField ? titleTable : null),
+    row: citation.row === null || citation.row === undefined ? null : String(citation.row),
+    field: canUseTitleField ? titleField : null,
+  };
+}
+
 function cloneKnowledgeMap(map: KnowledgeMap): KnowledgeMap {
   return JSON.parse(JSON.stringify(map)) as KnowledgeMap;
 }
@@ -417,6 +464,25 @@ export default function GameProject() {
   const handleGoToWorkbench = useCallback(() => {
     navigate("/numeric-workbench");
   }, [navigate]);
+
+  const handleOpenCitationInWorkbench = useCallback(
+    (citation: KnowledgeRagCitation) => {
+      const target = buildCitationWorkbenchTarget(citation);
+      if (!target.table) {
+        return;
+      }
+
+      const params = new URLSearchParams({ table: target.table });
+      if (target.row) {
+        params.set("row", target.row);
+      }
+      if (target.field) {
+        params.set("field", target.field);
+      }
+      navigate(`/numeric-workbench?${params.toString()}`);
+    },
+    [navigate],
+  );
 
   const handleOpenStructuredQueryPanel = useCallback(() => {
     const nextDraft = ragQuery.trim();
@@ -1234,39 +1300,69 @@ export default function GameProject() {
         </div>
         <div className={styles.ragCitationList}>
           {group.citations.map((citation) => (
-            <div
-              key={citation.citation_id}
-              ref={(element) => {
-                citationRefs.current[citation.citation_id] = element;
-              }}
-              className={`${styles.ragCitationRow} ${highlightedCitationId === citation.citation_id ? styles.ragCitationRowHighlighted : ""}`}
-              tabIndex={-1}
-            >
-              <div className={styles.ragCitationTitleRow}>
-                <div className={styles.ragCitationTitleContent}>
-                  <Text strong>{citation.title || citation.citation_id}</Text>
-                  {citation.source_type ? <Tag color="blue">{citation.source_type}</Tag> : null}
-                </div>
-                <Button
-                  size="small"
-                  onClick={() => focusCitation(citation.citation_id)}
+            (() => {
+              const workbenchTarget = buildCitationWorkbenchTarget(citation);
+              const canOpenCitationInWorkbench = !!workbenchTarget.table;
+              const workbenchDisabledReason = !canOpenCitationInWorkbench
+                ? t("gameProject.ragCitationWorkbenchUnavailable", {
+                    defaultValue: "This citation does not include enough table context to open the workbench.",
+                  })
+                : hasExplicitCapabilityContext && !canReadWorkbench
+                  ? workbenchReadReason || permissionDeniedMessage
+                  : null;
+
+              return (
+                <div
+                  key={citation.citation_id}
+                  ref={(element) => {
+                    citationRefs.current[citation.citation_id] = element;
+                  }}
+                  className={`${styles.ragCitationRow} ${highlightedCitationId === citation.citation_id ? styles.ragCitationRowHighlighted : ""}`}
+                  tabIndex={-1}
                 >
-                  {t("gameProject.ragFocusCitationButton", { defaultValue: "Focus citation" })}
-                </Button>
-              </div>
-              <div className={styles.ragCitationMeta}>
-                <span>
-                  {t("gameProject.ragCitationSourcePathLabel", { defaultValue: "source path" })}: {formatCitationValue(citation.source_path)}
-                </span>
-                <span>
-                  {t("gameProject.ragCitationArtifactPathLabel", { defaultValue: "artifact path" })}: {formatCitationValue(citation.artifact_path)}
-                </span>
-                <span>{t("gameProject.ragCitationRowLabel", { defaultValue: "row" })}: {formatCitationValue(citation.row)}</span>
-                <span>
-                  {t("gameProject.ragCitationReleaseIdLabel", { defaultValue: "release id" })}: {formatCitationValue(citation.release_id)}
-                </span>
-              </div>
-            </div>
+                  <div className={styles.ragCitationTitleRow}>
+                    <div className={styles.ragCitationTitleContent}>
+                      <Text strong>{citation.title || citation.citation_id}</Text>
+                      {citation.source_type ? <Tag color="blue">{citation.source_type}</Tag> : null}
+                    </div>
+                    <Space size={8}>
+                      <Tooltip title={workbenchDisabledReason || undefined}>
+                        <span>
+                          <Button
+                            size="small"
+                            onClick={() => handleOpenCitationInWorkbench(citation)}
+                            disabled={!!workbenchDisabledReason}
+                          >
+                            {t("gameProject.ragOpenCitationWorkbenchButton", { defaultValue: "Open in workbench" })}
+                          </Button>
+                        </span>
+                      </Tooltip>
+                      <Button
+                        size="small"
+                        onClick={() => focusCitation(citation.citation_id)}
+                      >
+                        {t("gameProject.ragFocusCitationButton", { defaultValue: "Focus citation" })}
+                      </Button>
+                    </Space>
+                  </div>
+                  <div className={styles.ragCitationMeta}>
+                    <span>
+                      {t("gameProject.ragCitationSourcePathLabel", { defaultValue: "source path" })}: {formatCitationValue(citation.source_path)}
+                    </span>
+                    <span>
+                      {t("gameProject.ragCitationArtifactPathLabel", { defaultValue: "artifact path" })}: {formatCitationValue(citation.artifact_path)}
+                    </span>
+                    <span>{t("gameProject.ragCitationRowLabel", { defaultValue: "row" })}: {formatCitationValue(citation.row)}</span>
+                    <span>
+                      {t("gameProject.ragCitationWorkbenchTargetLabel", { defaultValue: "workbench target" })}: {formatCitationValue(workbenchTarget.table)}
+                    </span>
+                    <span>
+                      {t("gameProject.ragCitationReleaseIdLabel", { defaultValue: "release id" })}: {formatCitationValue(citation.release_id)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()
           ))}
         </div>
       </div>

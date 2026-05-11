@@ -1244,6 +1244,11 @@ export default function NumericWorkbench() {
                 defaultValue: "会话会恢复你上次打开的表、修改条目与 AI 对话上下文。",
               })}
             </Text>
+            <Text type="secondary">
+              {t("gameWorkbench.sessionListBoundary", {
+                defaultValue: "仅用于 draft 和 dry-run，不会自动发布，也不会写入 formal knowledge release。",
+              })}
+            </Text>
           </Space>
         </Card>
 
@@ -1371,7 +1376,7 @@ export default function NumericWorkbench() {
         subRow={
           <Text type="secondary" style={{ fontSize: 12 }}>
             {t("gameWorkbench.subtitleV2", {
-              defaultValue: "下方 Chat 描述意图 → 上方表内直接改 → 右栏看依赖与影响 → 保存当前会话",
+              defaultValue: "下方 Chat 描述意图 → 上方表内直接改 → 右栏看依赖与影响 → 仅生成 draft，不会自动发布",
             })}
           </Text>
         }
@@ -1380,6 +1385,18 @@ export default function NumericWorkbench() {
       {workbenchReadReason ? (
         <Card>
           <Alert type="info" showIcon message={workbenchReadReason} />
+        </Card>
+      ) : null}
+
+      {!workbenchReadReason ? (
+        <Card>
+          <Alert
+            type="info"
+            showIcon
+            message={t("gameWorkbench.boundaryNotice", {
+              defaultValue: "Draft-only dry-run workspace. It does not publish automatically or write formal knowledge release.",
+            })}
+          />
         </Card>
       ) : null}
 
@@ -1649,6 +1666,11 @@ export default function NumericWorkbench() {
       >
         {workbenchWriteReason ? <Alert type="info" showIcon message={workbenchWriteReason} style={{ marginBottom: 16 }} /> : null}
         <Space direction="vertical" style={{ width: "100%" }}>
+          <Text type="secondary">
+            {t("gameWorkbench.draftModalBoundary", {
+              defaultValue: "This exports a draft proposal only. It does not publish automatically or write formal knowledge release.",
+            })}
+          </Text>
           <Text>{t("gameWorkbench.draftTitleLabel", { defaultValue: "标题" })}</Text>
           <Input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} />
           <Text>{t("gameWorkbench.draftDescLabel", { defaultValue: "说明" })}</Text>
