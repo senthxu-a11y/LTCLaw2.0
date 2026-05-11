@@ -7,13 +7,20 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ...game.knowledge_rag_answer import build_rag_answer_with_service_config
+from ...game.knowledge_rag_answer import (
+    RagAnswerConfigGenerationChangedError,
+    build_rag_answer_with_service_config,
+)
 from ...game.knowledge_rag_context import build_current_release_context
 from ..capabilities import require_capability
 from ..agent_context import get_agent_for_request
 
 
 router = APIRouter(prefix='/game/knowledge/rag', tags=['game-knowledge-rag'])
+
+_CONFIG_RELOAD_SETTLING_WARNING = (
+    'RAG answer config changed repeatedly during request. External transport was skipped until reload settles.'
+)
 
 
 class RagRequest(BaseModel):
@@ -66,6 +73,47 @@ def _project_root_or_400(game_service) -> Path:
     raise HTTPException(status_code=400, detail='Local project directory not configured')
 
 
+def _config_generation(game_service) -> int:
+    try:
+        return int(getattr(game_service, 'config_generation', 0) or 0)
+    except Exception:
+        return 0
+
+
+def _build_answer_context(game_service, body: RagRequest) -> dict[str, Any]:
+    return build_current_release_context(
+        _project_root_or_400(game_service),
+        body.query,
+        max_chunks=body.max_chunks,
+        max_chars=body.max_chars,
+    )
+
+
+def _settle_answer_context(game_service, body: RagRequest) -> tuple[dict[str, Any], int | None]:
+    generation_before = _config_generation(game_service)
+    context = _build_answer_context(game_service, body)
+    generation_after = _config_generation(game_service)
+    if generation_after == generation_before:
+        return context, generation_after
+
+    context = _build_answer_context(game_service, body)
+    generation_after_reread = _config_generation(game_service)
+    if generation_after_reread != generation_after:
+        return context, None
+
+    return context, generation_after_reread
+
+
+def _fail_closed_answer(context: dict[str, Any]) -> RagAnswerResponse:
+    return RagAnswerResponse(
+        mode='insufficient_context',
+        answer='',
+        release_id=context.get('release_id'),
+        citations=[],
+        warnings=[_CONFIG_RELOAD_SETTLING_WARNING],
+    )
+
+
 @router.post('/context', response_model=RagContextResponse)
 async def rag_context(request: Request, body: RagRequest) -> RagContextResponse:
     require_capability(request, 'knowledge.read')
@@ -84,12 +132,30 @@ async def rag_answer(request: Request, body: RagRequest) -> RagAnswerResponse:
     require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
     game_service = _game_service_or_404(workspace)
-    context = build_current_release_context(
-        _project_root_or_400(game_service),
-        body.query,
-        max_chunks=body.max_chunks,
-        max_chars=body.max_chars,
-    )
-    return RagAnswerResponse.model_validate(
-        build_rag_answer_with_service_config(body.query, context, game_service)
-    )
+
+    context, expected_generation = _settle_answer_context(game_service, body)
+    if expected_generation is None:
+        return _fail_closed_answer(context)
+
+    try:
+        payload = build_rag_answer_with_service_config(
+            body.query,
+            context,
+            game_service,
+            expected_generation=expected_generation,
+        )
+    except RagAnswerConfigGenerationChangedError:
+        context, expected_generation = _settle_answer_context(game_service, body)
+        if expected_generation is None:
+            return _fail_closed_answer(context)
+        try:
+            payload = build_rag_answer_with_service_config(
+                body.query,
+                context,
+                game_service,
+                expected_generation=expected_generation,
+            )
+        except RagAnswerConfigGenerationChangedError:
+            return _fail_closed_answer(context)
+
+    return RagAnswerResponse.model_validate(payload)

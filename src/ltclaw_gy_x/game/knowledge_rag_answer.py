@@ -34,6 +34,10 @@ _STRUCTURED_FACT_NUMBER_CONTEXT_PATTERN = re.compile(
 )
 
 
+class RagAnswerConfigGenerationChangedError(RuntimeError):
+    pass
+
+
 def build_rag_answer(
     query: str,
     context: Mapping[str, Any],
@@ -97,6 +101,7 @@ def build_rag_answer_with_provider(
     provider_name: str | None = None,
     config_or_service: Any = None,
     factories: Mapping[str, Any] | None = None,
+    expected_generation: int | None = None,
 ) -> dict[str, Any]:
     if _normalize_text(context.get('mode')) == 'no_current_release':
         return build_rag_answer(query, context)
@@ -110,6 +115,11 @@ def build_rag_answer_with_provider(
             'citations': [],
             'warnings': _dedupe_strings([*warnings, _NO_GROUNDED_CONTEXT_WARNING]),
         }
+
+    _assert_expected_config_generation(
+        config_or_service,
+        expected_generation=expected_generation,
+    )
 
     selected_provider_name = resolve_rag_model_provider_name(
         config_or_service,
@@ -132,13 +142,35 @@ def build_rag_answer_with_service_config(
     service_config: Any = None,
     *,
     factories: Mapping[str, Any] | None = None,
+    expected_generation: int | None = None,
 ) -> dict[str, Any]:
     return build_rag_answer_with_provider(
         query,
         context,
         config_or_service=service_config,
         factories=factories,
+        expected_generation=expected_generation,
     )
+
+
+def _assert_expected_config_generation(
+    config_or_service: Any,
+    *,
+    expected_generation: int | None,
+) -> None:
+    if expected_generation is None:
+        return
+    if _resolve_config_generation(config_or_service) != expected_generation:
+        raise RagAnswerConfigGenerationChangedError(
+            'RAG answer config generation changed before provider selection.'
+        )
+
+
+def _resolve_config_generation(config_or_service: Any) -> int:
+    try:
+        return int(getattr(config_or_service, 'config_generation', 0) or 0)
+    except Exception:
+        return 0
 
 
 def _resolve_rag_model_client(

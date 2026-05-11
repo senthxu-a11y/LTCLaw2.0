@@ -14,6 +14,7 @@ from ltclaw_gy_x.game.knowledge_rag_external_model_client import (
     ExternalRagModelClientSkeleton,
 )
 from ltclaw_gy_x.game.knowledge_rag_answer import (
+    RagAnswerConfigGenerationChangedError,
     build_rag_answer,
     build_rag_answer_with_provider,
     build_rag_answer_with_service_config,
@@ -923,6 +924,30 @@ def test_build_rag_answer_with_service_config_reads_game_service_config_bridge(t
     assert payload['mode'] == 'answer'
     assert payload['answer'] == 'Grounded answer from service config bridge.'
     assert [citation['citation_id'] for citation in payload['citations']] == ['citation-001']
+
+
+def test_build_rag_answer_with_service_config_raises_when_generation_changes_before_provider_selection(monkeypatch, tmp_path):
+    service = _game_service_with_external_provider_config(
+        tmp_path,
+        enabled=True,
+        transport_enabled=True,
+        allowed_models=['backend-model'],
+        base_url='https://provider.example/v1/chat/completions',
+    )
+    service._config_generation = 2
+
+    def _unexpected_resolver(*args, **kwargs):
+        raise AssertionError('provider selection must not start after generation mismatch')
+
+    monkeypatch.setattr(answer_module, 'resolve_rag_model_provider_name', _unexpected_resolver)
+
+    with pytest.raises(RagAnswerConfigGenerationChangedError):
+        build_rag_answer_with_service_config(
+            'How does combat damage work?',
+            _grounded_context(),
+            service,
+            expected_generation=1,
+        )
 
 
 def test_build_rag_answer_with_service_config_game_service_backend_owned_config_reaches_fake_http_boundary(monkeypatch, tmp_path):

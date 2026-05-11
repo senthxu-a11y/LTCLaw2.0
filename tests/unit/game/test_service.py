@@ -34,6 +34,7 @@ def service(tmp_path, isolated_home):
 def test_initial_state_unconfigured(service):
     assert service.configured is False
     assert service.config is service.project_config
+    assert service.config_generation == 0
     assert service.project_config is None
     assert service.svn is None
     assert service.table_indexer is None
@@ -157,9 +158,11 @@ async def test_reload_config_loads_file_backed_external_provider_config(tmp_path
         'ltclaw_gy_x.game.service.load_user_config',
         return_value=UserGameConfig(my_role='consumer', svn_local_root=str(svn_root)),
     ):
+        generation_before = service.config_generation
         await service.reload_config()
 
     assert service.project_config is not None
+    assert service.config_generation == generation_before + 1
     assert service.project_config.external_provider_config is not None
     assert service.project_config.external_provider_config.enabled is True
     assert service.project_config.external_provider_config.transport_enabled is True

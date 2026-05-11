@@ -108,6 +108,7 @@ class GameService:
         self.workspace_dir = workspace_dir
         self.runner = runner
         self.channel_manager = channel_manager
+        self._config_generation = 0
         self._project_config: Union[ProjectConfig, None] = None
         self._user_config: UserGameConfig = UserGameConfig()
         self._svn_client: Union[SvnClient, None] = None
@@ -136,6 +137,10 @@ class GameService:
     @property
     def config(self):
         return self.project_config
+
+    @property
+    def config_generation(self) -> int:
+        return self._config_generation
 
     @property
     def user_config(self):
@@ -362,6 +367,7 @@ class GameService:
                         self._svn_client = None
             self._rebuild_runtime_components()
             await self._maybe_start_watcher()
+            self._config_generation += 1
         except Exception as e:
             logger.error(f"GameService 配置重新加载失败: {e}")
             raise
