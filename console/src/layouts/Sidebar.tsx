@@ -213,38 +213,32 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
     {
       key: "game-project",
       icon: <SparkGameLine size={18} />,
-      path: "/game-project",
+      path: "/game/project",
       label: t("nav.gameProject"),
     },
     {
-      key: "svn-sync",
-      icon: <SparkDataLine size={18} />,
-      path: "/svn-sync",
-      label: t("nav.svnSync"),
-    },
-    {
-      key: "index-map",
-      icon: <SparkModePlazaLine size={18} />,
-      path: "/index-map",
-      label: t("nav.indexMap"),
-    },
-    {
-      key: "doc-library",
-      icon: <SparkLocalFileLine size={18} />,
-      path: "/doc-library",
-      label: t("nav.docLibrary"),
-    },
-    {
-      key: "knowledge-base",
+      key: "game-knowledge",
       icon: <SparkSearchUserLine size={18} />,
-      path: "/knowledge-base",
-      label: t("nav.knowledgeBase"),
+      path: "/game/knowledge",
+      label: t("nav.gameKnowledge", "Knowledge"),
+    },
+    {
+      key: "game-map",
+      icon: <SparkModePlazaLine size={18} />,
+      path: "/game/map",
+      label: t("nav.gameMapEditor", "Map Editor"),
     },
     {
       key: "numeric-workbench",
       icon: <SparkModifyLine size={18} />,
       path: "/numeric-workbench",
       label: t("nav.gameWorkbench"),
+    },
+    {
+      key: "game-advanced",
+      icon: <SparkDataLine size={18} />,
+      path: "/game/advanced",
+      label: t("nav.gameAdvanced", "Advanced"),
     },
     {
       key: "agents",
@@ -385,29 +379,24 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
           icon: <SparkGameLine size={16} />,
         },
         {
-          key: "svn-sync",
-          label: collapsed ? null : t("nav.svnSync"),
-          icon: <SparkDataLine size={16} />,
-        },
-        {
-          key: "index-map",
-          label: collapsed ? null : t("nav.indexMap"),
-          icon: <SparkModePlazaLine size={16} />,
-        },
-        {
-          key: "doc-library",
-          label: collapsed ? null : t("nav.docLibrary"),
-          icon: <SparkLocalFileLine size={16} />,
-        },
-        {
-          key: "knowledge-base",
-          label: collapsed ? null : t("nav.knowledgeBase"),
+          key: "game-knowledge",
+          label: collapsed ? null : t("nav.gameKnowledge", "Knowledge"),
           icon: <SparkSearchUserLine size={16} />,
+        },
+        {
+          key: "game-map",
+          label: collapsed ? null : t("nav.gameMapEditor", "Map Editor"),
+          icon: <SparkModePlazaLine size={16} />,
         },
         {
           key: "numeric-workbench",
           label: collapsed ? null : t("nav.gameWorkbench"),
           icon: <SparkModifyLine size={16} />,
+        },
+        {
+          key: "game-advanced",
+          label: collapsed ? null : t("nav.gameAdvanced", "Advanced"),
+          icon: <SparkDataLine size={16} />,
         },
       ],
     },
@@ -485,7 +474,7 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
         label: collapsed ? null : route.label,
         icon: <span style={{ fontSize: 16 }}>{route.icon}</span>,
       })),
-    } as any);
+    });
   }
 
   // ── Render ────────────────────────────────────────────────────────────────

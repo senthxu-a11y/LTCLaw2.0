@@ -18,8 +18,11 @@ const SessionsPage = lazyImportWithRetry("../../pages/Control/Sessions");
 const CronJobsPage = lazyImportWithRetry("../../pages/Control/CronJobs");
 const HeartbeatPage = lazyImportWithRetry("../../pages/Control/Heartbeat");
 const AgentConfigPage = lazyImportWithRetry("../../pages/Agent/Config");
-const GameProjectPage = lazyImportWithRetry("../../pages/Game/GameProject");
-const SvnSyncPage = lazyImportWithRetry("../../pages/Game/SvnSync");
+const ProjectPage = lazyImportWithRetry("../../pages/Game/Project");
+const KnowledgePage = lazyImportWithRetry("../../pages/Game/Knowledge");
+const MapEditorPage = lazyImportWithRetry("../../pages/Game/MapEditor");
+const AdvancedPage = lazyImportWithRetry("../../pages/Game/Advanced");
+const AdvancedSvnPage = lazyImportWithRetry("../../pages/Game/AdvancedSvn");
 const IndexMapPage = lazyImportWithRetry("../../pages/Game/IndexMap");
 const DocLibraryPage = lazyImportWithRetry("../../pages/Game/DocLibrary");
 const KnowledgeBasePage = lazyImportWithRetry("../../pages/Game/KnowledgeBase");
@@ -69,7 +72,12 @@ const pathToKey: Record<string, string> = {
   "/backups": "backups",
   "/game": "game-project",
   "/game-project": "game-project",
-  "/svn-sync": "svn-sync",
+  "/game/project": "game-project",
+  "/game/knowledge": "game-knowledge",
+  "/game/map": "game-map",
+  "/game/advanced": "game-advanced",
+  "/game/advanced/svn": "game-advanced",
+  "/svn-sync": "game-advanced",
   "/index-map": "index-map",
   "/doc-library": "doc-library",
   "/knowledge-base": "knowledge-base",
@@ -140,9 +148,14 @@ export default function MainLayout() {
                   />
                   <Route path="/debug" element={<DebugPage />} />
                   <Route path="/backups" element={<BackupsPage />} />
-                  <Route path="/game" element={<Navigate to="/game-project" replace />} />
-                  <Route path="/game-project" element={<GameProjectPage />} />
-                  <Route path="/svn-sync" element={<SvnSyncPage />} />
+                  <Route path="/game" element={<Navigate to="/game/project" replace />} />
+                  <Route path="/game-project" element={<Navigate to="/game/project" replace />} />
+                  <Route path="/game/project" element={<ProjectPage />} />
+                  <Route path="/game/knowledge" element={<KnowledgePage />} />
+                  <Route path="/game/map" element={<MapEditorPage />} />
+                  <Route path="/game/advanced" element={<AdvancedPage />} />
+                  <Route path="/game/advanced/svn" element={<AdvancedSvnPage />} />
+                  <Route path="/svn-sync" element={<Navigate to="/game/advanced/svn" replace />} />
                   <Route path="/index-map" element={<IndexMapPage />} />
                   <Route path="/doc-library" element={<DocLibraryPage />} />
                   <Route path="/knowledge-base" element={<KnowledgeBasePage />} />

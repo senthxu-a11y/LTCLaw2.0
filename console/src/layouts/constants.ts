@@ -35,7 +35,10 @@ export const KEY_TO_PATH: Record<string, string> = {
   models: "/models",
   environments: "/environments",
   "agent-config": "/agent-config",
-  "game-project": "/game-project",
+  "game-project": "/game/project",
+  "game-knowledge": "/game/knowledge",
+  "game-map": "/game/map",
+  "game-advanced": "/game/advanced",
   "svn-sync": "/svn-sync",
   "index-map": "/index-map",
   "doc-library": "/doc-library",
@@ -62,6 +65,9 @@ export const KEY_TO_LABEL: Record<string, string> = {
   acp: "nav.acp",
   "agent-config": "nav.agentConfig",
   "game-project": "nav.gameProject",
+  "game-knowledge": "nav.gameKnowledge",
+  "game-map": "nav.gameMapEditor",
+  "game-advanced": "nav.gameAdvanced",
   "svn-sync": "nav.svnSync",
   "index-map": "nav.indexMap",
   "doc-library": "nav.docLibrary",
@@ -82,14 +88,20 @@ export const KEY_TO_LABEL: Record<string, string> = {
 export const getWebsiteLang = (lang: string): string =>
   lang.startsWith("zh") ? "zh" : "en";
 
-export const getDocsUrl = (_lang: string): string =>
-  `#`;  // Disabled - LTClaw local deployment
+export const getDocsUrl = (_lang: string): string => {
+  void _lang;
+  return `#`;  // Disabled - LTClaw local deployment
+};
 
-export const getFaqUrl = (_lang: string): string =>
-  `#`;  // Disabled - LTClaw local deployment
+export const getFaqUrl = (_lang: string): string => {
+  void _lang;
+  return `#`;  // Disabled - LTClaw local deployment
+};
 
-export const getReleaseNotesUrl = (_lang: string): string =>
-  `#`;  // Disabled - LTClaw local deployment
+export const getReleaseNotesUrl = (_lang: string): string => {
+  void _lang;
+  return `#`;  // Disabled - LTClaw local deployment
+};
 
 // ── Version helpers ────────────────────────────────────────────────────────
 
@@ -125,7 +137,7 @@ export const compareVersions = (a: string, b: string): number => {
       preNum = preMatch[3] ? Number(preMatch[3]) : 0;
     }
 
-    const parts = coreVersion.split(/[.\-]/).map((seg) => Number(seg) || 0);
+    const parts = coreVersion.split(/[.-]/).map((seg) => Number(seg) || 0);
     // Append: preType (0 for stable, negative for pre-release), preNum, postNum
     return [...parts, preType, preNum, postNum];
   };

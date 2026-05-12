@@ -1,4 +1,9 @@
 export { default as GameProject } from './GameProject';
+export { default as ProjectPage } from './Project';
+export { default as KnowledgePage } from './Knowledge';
+export { default as MapEditorPage } from './MapEditor';
+export { default as AdvancedPage } from './Advanced';
+export { default as AdvancedSvnPage } from './AdvancedSvn';
 export { default as SvnSync } from './SvnSync';
 export { default as IndexMap } from './IndexMap';
 export { default as DocLibrary } from './DocLibrary';
