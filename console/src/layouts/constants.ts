@@ -39,7 +39,7 @@ export const KEY_TO_PATH: Record<string, string> = {
   "game-knowledge": "/game/knowledge",
   "game-map": "/game/map",
   "game-advanced": "/game/advanced",
-  "svn-sync": "/svn-sync",
+  "svn-sync": "/game/advanced/svn",
   "index-map": "/index-map",
   "doc-library": "/doc-library",
   "knowledge-base": "/knowledge-base",

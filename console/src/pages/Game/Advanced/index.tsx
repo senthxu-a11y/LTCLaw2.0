@@ -24,7 +24,7 @@ export default function AdvancedPage() {
             <Paragraph type="secondary" style={{ marginBottom: 0, maxWidth: 640 }}>
               {t(
                 "gameWorkspaceSkeleton.advanced",
-                "This is the G.1 route skeleton. Low-frequency tools move here first, while daily workflow remains unchanged.",
+                "Advanced groups low-frequency tools under a separate route so daily project workflow stays unchanged.",
               )}
             </Paragraph>
           </div>
@@ -34,7 +34,7 @@ export default function AdvancedPage() {
               <Paragraph type="secondary" style={{ marginBottom: 0 }}>
                 {t(
                   "gameWorkspaceSkeleton.advancedSvn",
-                  "SVN keeps its existing behavior. This page only adds the new Advanced route entry.",
+                  "SVN stays a low-frequency Advanced tool entry. Existing sync, update, and commit behavior is unchanged.",
                 )}
               </Paragraph>
               <Space>
