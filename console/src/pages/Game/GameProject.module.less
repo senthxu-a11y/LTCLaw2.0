@@ -79,6 +79,80 @@
           line-height: 1.6;
         }
 
+        .projectIntro {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-bottom: 20px;
+        }
+
+        .projectIntroHint {
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+          line-height: 1.7;
+        }
+
+        .workspaceEntryHeader {
+          margin-bottom: 12px;
+        }
+
+        .workspaceEntryHint {
+          margin-top: 4px;
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+          line-height: 1.6;
+        }
+
+        .workspaceEntryGrid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(220px, 1fr));
+          gap: 12px;
+        }
+
+        .workspaceEntryCard {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          min-width: 0;
+          padding: 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--ant-color-fill-quaternary) 65%, var(--ant-color-bg-container));
+        }
+
+        .workspaceEntryCardHeader {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 8px;
+        }
+
+        .workspaceEntryCardTitle {
+          display: block;
+          max-width: 100%;
+          color: var(--ant-color-text);
+          font-size: 15px;
+          line-height: 1.4;
+          white-space: normal;
+          word-break: keep-all;
+          overflow-wrap: normal;
+          text-wrap: balance;
+        }
+
+        .workspaceEntryCardTone {
+          margin-inline-end: 0;
+          max-width: 100%;
+          white-space: normal;
+          word-break: keep-all;
+        }
+
+        .workspaceEntryCardBody {
+          flex: 1;
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+          line-height: 1.7;
+        }
+
         .releaseHint {
           margin-bottom: 16px;
           color: var(--ant-color-text-secondary);
@@ -626,6 +700,44 @@
           border-top: 1px solid var(--ant-color-border-secondary);
         }
 
+        .mapReviewTransitionLead {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-bottom: 16px;
+        }
+
+        .mapReviewCompactSummary {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+
+        .mapReviewCompactItem {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 12px 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+          background: var(--ant-color-fill-quaternary);
+        }
+
+        .mapReviewCompactValue {
+          color: var(--ant-color-text);
+          font-size: 13px;
+          line-height: 1.6;
+          word-break: break-word;
+        }
+
+        .mapReviewTransitionActions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 4px;
+        }
+
         .mapReviewHeader {
           display: flex;
           justify-content: space-between;
@@ -864,19 +976,22 @@
         gap: 4px;
       }
 
+      .workspaceEntryGrid,
+      .mapReviewCompactSummary,
+      .ragGuardrailHints,
+      .mapReviewGrid {
+        grid-template-columns: 1fr;
+      }
+
       .releaseListHeader,
       .releaseRow,
       .releaseCandidateHeader,
       .releaseCandidateRow,
       .mapReviewHeader,
-      .ragHeader {
+      .ragHeader,
+      .workspaceEntryCardHeader {
         flex-direction: column;
         align-items: stretch;
-      }
-
-      .ragGuardrailHints,
-      .mapReviewGrid {
-        grid-template-columns: 1fr;
       }
 
       .ragCitationsHeader {

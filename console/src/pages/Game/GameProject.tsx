@@ -358,6 +358,39 @@ export default function GameProject() {
       ]
     : [];
 
+  const workspaceEntries = [
+    {
+      key: "knowledge",
+      title: t("nav.gameKnowledge", { defaultValue: "Knowledge" }),
+      description: t("gameProject.workspaceEntryKnowledgeDescription", {
+        defaultValue: "Release status, RAG, citations, and readonly knowledge summaries live on the dedicated Knowledge page.",
+      }),
+      actionLabel: t("gameProject.openKnowledgeWorkspaceButton", { defaultValue: "Open Knowledge page" }),
+      path: "/game/knowledge",
+      tone: t("gameProject.workspaceEntryKnowledgeTone", { defaultValue: "Daily knowledge runtime" }),
+    },
+    {
+      key: "map",
+      title: t("nav.gameMapEditor", { defaultValue: "Map Editor" }),
+      description: t("gameProject.workspaceEntryMapDescription", {
+        defaultValue: "Formal map review is still temporarily shown below, but the dedicated Map Editor route is the future ownership target.",
+      }),
+      actionLabel: t("gameProject.openMapEditorWorkspaceButton", { defaultValue: "Open Map Editor" }),
+      path: "/game/map",
+      tone: t("gameProject.workspaceEntryMapTone", { defaultValue: "Formal map workspace" }),
+    },
+    {
+      key: "numeric-workbench",
+      title: t("gameProject.workspaceEntryNumericWorkbenchTitle", { defaultValue: "Numeric Workbench" }),
+      description: t("gameProject.workspaceEntryWorkbenchDescription", {
+        defaultValue: "Use NumericWorkbench for draft-only table edits and citation-targeted numeric changes.",
+      }),
+      actionLabel: t("gameProject.openNumericWorkbenchButton", { defaultValue: "Open NumericWorkbench" }),
+      path: "/numeric-workbench",
+      tone: t("gameProject.workspaceEntryWorkbenchTone", { defaultValue: "Draft editing workspace" }),
+    },
+  ];
+
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
@@ -798,6 +831,8 @@ export default function GameProject() {
     [formalMap],
   );
   const formalSummary = summarizeMap(formalMapDraft);
+  const hasCandidateMapSummary = !!candidateMap && !candidateMapError;
+  const hasFormalMapSummary = !!savedFormalMap && !formalMapError;
   const formalMapDraftDirty = !!savedFormalMap && !!formalMapDraft && JSON.stringify(formalMapDraft) !== JSON.stringify(savedFormalMap);
   const formalMapRelationshipWarnings = buildRelationshipWarningMessages(formalMapDraft);
   const saveFormalMapFirstReason = !savedFormalMap
@@ -849,25 +884,258 @@ export default function GameProject() {
       <div className={styles.content}>
         <Form form={form} layout="vertical" className={styles.form}>
           <Card
-            title={t("nav.gameKnowledge", { defaultValue: "Knowledge" })}
+            title={t("gameProject.projectSetupTitle", { defaultValue: "Project setup" })}
             className={styles.section}
           >
-            <div className={styles.releaseHint}>
-              {t("gameProject.knowledgeWorkspaceProjectHint", {
-                defaultValue:
-                  "Knowledge release status, RAG, citations, and readonly map summaries have moved to the dedicated Knowledge page. Formal map review and editing remain below on this Project page.",
-              })}
+            <div className={styles.projectIntro}>
+              <Text strong>{t("gameProject.projectSetupLead", { defaultValue: "Use this page for project access, local configuration, storage inspection, validation, and save flows." })}</Text>
+              <div className={styles.projectIntroHint}>
+                {t("gameProject.projectSetupHint", {
+                  defaultValue:
+                    "Project keeps onboarding and configuration ownership. Daily knowledge runtime has moved out, and formal map editing remains here only as a transitional section until Map Editor takes over.",
+                })}
+              </div>
             </div>
 
-            <div className={styles.releaseActions}>
-              <Button size="small" type="primary" onClick={() => navigate("/game/knowledge")}>
-                {t("gameProject.openKnowledgeWorkspaceButton", { defaultValue: "Open Knowledge page" })}
-              </Button>
-              <Text type="secondary">
-                {t("gameProject.openKnowledgeWorkspaceHint", {
-                  defaultValue: "Use the dedicated route for release build/publish status, knowledge Q&A, citations, and readonly summaries.",
+            <div className={styles.workspaceEntryHeader}>
+              <div>
+                <Text strong>{t("gameProject.workspaceEntriesTitle", { defaultValue: "Workspace entries" })}</Text>
+                <div className={styles.workspaceEntryHint}>
+                  {t("gameProject.knowledgeWorkspaceProjectHint", {
+                    defaultValue:
+                      "Knowledge runtime now lives on its own page. Use the entry cards below to jump into the right workspace without changing Project-owned config and save semantics.",
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.workspaceEntryGrid}>
+              {workspaceEntries.map((entry) => (
+                <div key={entry.key} className={styles.workspaceEntryCard}>
+                  <div className={styles.workspaceEntryCardHeader}>
+                    <Text strong className={styles.workspaceEntryCardTitle}>{entry.title}</Text>
+                    <Tag className={styles.workspaceEntryCardTone}>{entry.tone}</Tag>
+                  </div>
+                  <div className={styles.workspaceEntryCardBody}>{entry.description}</div>
+                  <Button size="small" type="primary" onClick={() => navigate(entry.path)}>
+                    {entry.actionLabel}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card
+            title={t("gameProject.storageTitle", { defaultValue: "当前实际数据落盘目录" })}
+            className={styles.section}
+          >
+            <div className={styles.storageHint}>
+              {t("gameProject.storageHint", {
+                defaultValue:
+                  "这里显示后端当前实际使用的目录，不是推测值。项目级、Agent 级、对话级以及缓存/数据库都会按这个结果落盘。",
+              })}
+            </div>
+            {storageGroups.map((group) => (
+              <div key={group.title} className={styles.storageGroup}>
+                <div className={styles.storageGroupTitle}>{group.title}</div>
+                {group.items.map(([label, value]) => (
+                  <div key={`${group.title}-${label}`} className={styles.storageRow}>
+                    <div className={styles.storageLabel}>{label}</div>
+                    <div className={styles.storageValue}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </Card>
+
+          {/* Basic Info Section */}
+          <Card title={t("gameProject.basicInfo")} className={styles.section}>
+            <Form.Item
+              label={t("gameProject.projectName")}
+              name="name"
+              rules={[{ required: true, message: t("gameProject.projectNameRequired") }]}
+            >
+              <Input placeholder={t("gameProject.projectNamePlaceholder")} />
+            </Form.Item>
+
+            <Form.Item
+              label={t("gameProject.projectDescription")}
+              name="description"
+            >
+              <TextArea
+                rows={3}
+                placeholder={t("gameProject.projectDescriptionPlaceholder")}
+              />
+            </Form.Item>
+          </Card>
+
+          {/* SVN Configuration Section */}
+          <Card title={t("gameProject.svnConfig")} className={styles.section}>
+            <Form.Item
+              label="我是维护者（允许维护项目索引）"
+              name="is_maintainer"
+              valuePropName="checked"
+              tooltip="开启=维护者 maintainer；关闭=使用者 consumer。此开关不改变现有接口行为。"
+            >
+              <Switch />
+            </Form.Item>
+            <Form.Item
+              label={t("gameProject.svnUrl")}
+              name="svn_url"
+              rules={[{ required: true, message: t("gameProject.svnUrlRequired") }]}
+            >
+              <Input placeholder="svn://server/path/to/project" />
+            </Form.Item>
+
+            <Form.Item label={t("gameProject.svnUsername")} name="svn_username">
+              <Input placeholder={t("gameProject.svnUsernamePlaceholder")} />
+            </Form.Item>
+
+            <Form.Item label={t("gameProject.svnPassword")} name="svn_password">
+              <Input.Password placeholder={t("gameProject.svnPasswordPlaceholder")} />
+            </Form.Item>
+
+            <Form.Item label={t("gameProject.svnWorkingCopyPath")} name="svn_working_copy_path">
+              <Input placeholder={t("gameProject.svnWorkingCopyPathPlaceholder", { defaultValue: LOCAL_PROJECT_DIRECTORY_LABEL })} />
+            </Form.Item>
+
+            <Form.Item name="svn_trust_cert" valuePropName="checked">
+              <Switch /> {t("gameProject.svnTrustCert")}
+            </Form.Item>
+          </Card>
+
+          {/* Watch Configuration Section */}
+          <Card title={t("gameProject.watchConfig")} className={styles.section}>
+            <Form.Item label={t("gameProject.watchPaths")} name="watch_paths">
+              <TextArea
+                rows={4}
+                placeholder={t("gameProject.watchPathsPlaceholder")}
+              />
+            </Form.Item>
+
+            <Form.Item label={t("gameProject.watchPatterns")} name="watch_patterns">
+              <TextArea
+                rows={4}
+                placeholder={t("gameProject.watchPatternsPlaceholder")}
+              />
+            </Form.Item>
+
+            <Form.Item label={t("gameProject.watchExcludePatterns")} name="watch_exclude_patterns">
+              <TextArea
+                rows={4}
+                placeholder={t("gameProject.watchExcludePatternsPlaceholder")}
+              />
+            </Form.Item>
+          </Card>
+
+          {/* Workflow Configuration Section */}
+          <Card title={t("gameProject.workflowConfig")} className={styles.section}>
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Form.Item name="auto_sync" valuePropName="checked">
+                <Switch /> {t("gameProject.autoSync")}
+              </Form.Item>
+
+              <Form.Item name="auto_index" valuePropName="checked">
+                <Switch /> {t("gameProject.autoIndex")}
+              </Form.Item>
+
+              <Form.Item name="auto_resolve_dependencies" valuePropName="checked">
+                <Switch /> {t("gameProject.autoResolveDependencies")}
+              </Form.Item>
+
+              <Form.Item
+                label={t("gameProject.indexCommitMessageTemplate")}
+                name="index_commit_message_template"
+              >
+                <Input placeholder={t("gameProject.indexCommitMessageTemplatePlaceholder")} />
+              </Form.Item>
+            </Space>
+          </Card>
+
+          <Card title={t("gameProject.formalMapTransitionTitle", { defaultValue: "Formal map transition" })} className={styles.section}>
+            <div className={styles.mapReviewTransitionLead}>
+              <Text strong>{t("gameProject.formalMapTransitionLead", { defaultValue: "Formal map editing still runs here in G.3, but this is now a transitional area instead of the Project page's main task." })}</Text>
+              <div className={styles.mapReviewHint}>
+                {t("gameProject.formalMapTransitionHint", {
+                  defaultValue:
+                    "Map Editor migration is pending. Keep using the current save and status-edit flows here until G.4 moves the full editor to the dedicated page.",
                 })}
-              </Text>
+              </div>
+            </div>
+
+            <Alert
+              type="info"
+              showIcon
+              message={t("gameProject.formalMapTransitionAlertTitle", { defaultValue: "Map Editor migration pending" })}
+              description={t("gameProject.formalMapTransitionAlertDescription", {
+                defaultValue:
+                  "The formal map implementation remains on Project for now. Use Map Editor as the future entry route; current save-as-formal-map and status edit semantics are unchanged in this lane.",
+              })}
+              className={styles.mapReviewAlert}
+            />
+
+            <div className={styles.mapReviewCompactSummary}>
+              <div className={styles.mapReviewCompactItem}>
+                <Text type="secondary">{t("gameProject.mapCandidateTitle", { defaultValue: "Candidate map" })}</Text>
+                <div className={styles.mapReviewCompactValue}>
+                  {hasCandidateMapSummary
+                    ? t("gameProject.formalMapCompactCounts", {
+                        defaultValue: "{{systems}} systems / {{tables}} tables / {{docs}} docs / {{scripts}} scripts / {{relationships}} relationships",
+                        systems: candidateSummary.systems.length,
+                        tables: candidateSummary.tables.length,
+                        docs: candidateSummary.docs.length,
+                        scripts: candidateSummary.scripts.length,
+                        relationships: candidateSummary.relationships.length,
+                      })
+                    : candidateMapLoading
+                      ? t("common.loading")
+                      : candidateMapError || t("gameProject.mapCandidateEmpty", { defaultValue: "No candidate map available" })}
+                </div>
+              </div>
+              <div className={styles.mapReviewCompactItem}>
+                <Text type="secondary">{t("gameProject.formalMapTitle", { defaultValue: "Saved formal map" })}</Text>
+                <div className={styles.mapReviewCompactValue}>
+                  {hasFormalMapSummary
+                    ? t("gameProject.formalMapCompactCounts", {
+                        defaultValue: "{{systems}} systems / {{tables}} tables / {{docs}} docs / {{scripts}} scripts / {{relationships}} relationships",
+                        systems: formalSummary.systems.length,
+                        tables: formalSummary.tables.length,
+                        docs: formalSummary.docs.length,
+                        scripts: formalSummary.scripts.length,
+                        relationships: formalSummary.relationships.length,
+                      })
+                    : formalMapLoading
+                      ? t("common.loading")
+                      : formalMapError || t("gameProject.noSavedFormalMapTitle", { defaultValue: "no saved formal map" })}
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.mapReviewTransitionActions}>
+              <Button size="small" onClick={() => navigate("/game/map")}>
+                {t("gameProject.openMapEditorWorkspaceButton", { defaultValue: "Open Map Editor" })}
+              </Button>
+              <Button
+                size="small"
+                onClick={() => selectedAgent && fetchMapReviewData(selectedAgent)}
+                loading={candidateMapLoading || formalMapLoading}
+                disabled={!selectedAgent || !!mapReadReason}
+              >
+                {t("common.refresh")}
+              </Button>
+              <Tooltip title={saveFormalMapDisabledReason || undefined}>
+                <span>
+                  <Button
+                    size="small"
+                    type="primary"
+                    onClick={handleSaveFormalMap}
+                    loading={savingFormalMap}
+                    disabled={!canSaveFormalMap}
+                  >
+                    {t("gameProject.saveFormalMapButton", { defaultValue: "Save as formal map" })}
+                  </Button>
+                </span>
+              </Tooltip>
             </div>
 
             <div className={styles.mapReviewSection}>
@@ -881,29 +1149,6 @@ export default function GameProject() {
                     })}
                   </div>
                 </div>
-                <Space size={8}>
-                  <Button
-                    size="small"
-                    onClick={() => selectedAgent && fetchMapReviewData(selectedAgent)}
-                    loading={candidateMapLoading || formalMapLoading}
-                    disabled={!selectedAgent || !!mapReadReason}
-                  >
-                    {t("common.refresh")}
-                  </Button>
-                  <Tooltip title={saveFormalMapDisabledReason || undefined}>
-                    <span>
-                      <Button
-                        size="small"
-                        type="primary"
-                        onClick={handleSaveFormalMap}
-                        loading={savingFormalMap}
-                        disabled={!canSaveFormalMap}
-                      >
-                        {t("gameProject.saveFormalMapButton", { defaultValue: "Save as formal map" })}
-                      </Button>
-                    </span>
-                  </Tooltip>
-                </Space>
               </div>
 
               {mapReadReason ? (
@@ -1110,133 +1355,6 @@ export default function GameProject() {
                 </div>
               </div>
             </div>
-          </Card>
-
-          <Card
-            title={t("gameProject.storageTitle", { defaultValue: "当前实际数据落盘目录" })}
-            className={styles.section}
-          >
-            <div className={styles.storageHint}>
-              {t("gameProject.storageHint", {
-                defaultValue:
-                  "这里显示后端当前实际使用的目录，不是推测值。项目级、Agent 级、对话级以及缓存/数据库都会按这个结果落盘。",
-              })}
-            </div>
-            {storageGroups.map((group) => (
-              <div key={group.title} className={styles.storageGroup}>
-                <div className={styles.storageGroupTitle}>{group.title}</div>
-                {group.items.map(([label, value]) => (
-                  <div key={`${group.title}-${label}`} className={styles.storageRow}>
-                    <div className={styles.storageLabel}>{label}</div>
-                    <div className={styles.storageValue}>{value}</div>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </Card>
-          
-          {/* Basic Info Section */}
-          <Card title={t("gameProject.basicInfo")} className={styles.section}>
-            <Form.Item
-              label={t("gameProject.projectName")}
-              name="name"
-              rules={[{ required: true, message: t("gameProject.projectNameRequired") }]}
-            >
-              <Input placeholder={t("gameProject.projectNamePlaceholder")} />
-            </Form.Item>
-            
-            <Form.Item
-              label={t("gameProject.projectDescription")}
-              name="description"
-            >
-              <TextArea 
-                rows={3} 
-                placeholder={t("gameProject.projectDescriptionPlaceholder")} 
-              />
-            </Form.Item>
-          </Card>
-
-          {/* SVN Configuration Section */}
-          <Card title={t("gameProject.svnConfig")} className={styles.section}>
-            <Form.Item
-              label="我是维护者（允许维护项目索引）"
-              name="is_maintainer"
-              valuePropName="checked"
-              tooltip="开启=维护者 maintainer；关闭=使用者 consumer。此开关不改变现有接口行为。"
-            >
-              <Switch />
-            </Form.Item>
-            <Form.Item
-              label={t("gameProject.svnUrl")}
-              name="svn_url"
-              rules={[{ required: true, message: t("gameProject.svnUrlRequired") }]}
-            >
-              <Input placeholder="svn://server/path/to/project" />
-            </Form.Item>
-            
-            <Form.Item label={t("gameProject.svnUsername")} name="svn_username">
-              <Input placeholder={t("gameProject.svnUsernamePlaceholder")} />
-            </Form.Item>
-            
-            <Form.Item label={t("gameProject.svnPassword")} name="svn_password">
-              <Input.Password placeholder={t("gameProject.svnPasswordPlaceholder")} />
-            </Form.Item>
-            
-            <Form.Item label={t("gameProject.svnWorkingCopyPath")} name="svn_working_copy_path">
-              <Input placeholder={t("gameProject.svnWorkingCopyPathPlaceholder", { defaultValue: LOCAL_PROJECT_DIRECTORY_LABEL })} />
-            </Form.Item>
-            
-            <Form.Item name="svn_trust_cert" valuePropName="checked">
-              <Switch /> {t("gameProject.svnTrustCert")}
-            </Form.Item>
-          </Card>
-
-          {/* Watch Configuration Section */}
-          <Card title={t("gameProject.watchConfig")} className={styles.section}>
-            <Form.Item label={t("gameProject.watchPaths")} name="watch_paths">
-              <TextArea 
-                rows={4} 
-                placeholder={t("gameProject.watchPathsPlaceholder")} 
-              />
-            </Form.Item>
-            
-            <Form.Item label={t("gameProject.watchPatterns")} name="watch_patterns">
-              <TextArea 
-                rows={4} 
-                placeholder={t("gameProject.watchPatternsPlaceholder")} 
-              />
-            </Form.Item>
-            
-            <Form.Item label={t("gameProject.watchExcludePatterns")} name="watch_exclude_patterns">
-              <TextArea 
-                rows={4} 
-                placeholder={t("gameProject.watchExcludePatternsPlaceholder")} 
-              />
-            </Form.Item>
-          </Card>
-
-          {/* Workflow Configuration Section */}
-          <Card title={t("gameProject.workflowConfig")} className={styles.section}>
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              <Form.Item name="auto_sync" valuePropName="checked">
-                <Switch /> {t("gameProject.autoSync")}
-              </Form.Item>
-              
-              <Form.Item name="auto_index" valuePropName="checked">
-                <Switch /> {t("gameProject.autoIndex")}
-              </Form.Item>
-              
-              <Form.Item name="auto_resolve_dependencies" valuePropName="checked">
-                <Switch /> {t("gameProject.autoResolveDependencies")}
-              </Form.Item>
-              
-              <Form.Item 
-                label={t("gameProject.indexCommitMessageTemplate")} 
-                name="index_commit_message_template"
-              >
-                <Input placeholder={t("gameProject.indexCommitMessageTemplatePlaceholder")} />
-              </Form.Item>
-            </Space>
           </Card>
 
         </Form>
