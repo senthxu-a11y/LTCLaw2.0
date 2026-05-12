@@ -51,6 +51,74 @@
     flex-wrap: wrap;
   }
 
+  .statusStack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .compactStatusBar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--ant-color-border-secondary, var(--ant-color-border));
+    background: var(--ant-color-bg-container);
+  }
+
+  .workbenchStatusBar {
+    background: var(--ant-color-fill-quaternary);
+  }
+
+  .citationStatusBar {
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+  }
+
+  .statusInfo {
+    border-color: rgba(22, 119, 255, 0.2);
+    background: rgba(22, 119, 255, 0.05);
+  }
+
+  .statusSuccess {
+    border-color: rgba(82, 196, 26, 0.28);
+    background: rgba(82, 196, 26, 0.08);
+  }
+
+  .statusWarning {
+    border-color: rgba(250, 173, 20, 0.3);
+    background: rgba(250, 173, 20, 0.09);
+  }
+
+  .statusDanger {
+    border-color: rgba(255, 77, 79, 0.28);
+    background: rgba(255, 77, 79, 0.07);
+  }
+
+  .statusPrimaryRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .statusSecondaryRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    min-width: 0;
+  }
+
+  .statusSummary,
+  .statusSummaryStrong {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .statusSummaryStrong {
+    color: var(--ant-color-text);
+  }
+
   // 主体：上下分割（上=多表编辑，下=工作台 Chat）
   .split {
     display: flex;

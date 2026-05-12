@@ -72,6 +72,34 @@ interface CellEditState {
   origin: unknown;    // 原始值（取消时还原）
 }
 
+type CitationTargetState =
+  | {
+      kind: "loading";
+      table: string;
+      row?: string;
+      field?: string;
+    }
+  | {
+      kind: "table-not-found";
+      table: string;
+      row?: string;
+      field?: string;
+    }
+  | {
+      kind: "table-opened-target-found";
+      table: string;
+      row?: string;
+      field?: string;
+    }
+  | {
+      kind: "table-opened-target-not-found";
+      table: string;
+      row?: string;
+      field?: string;
+      rowMatched: boolean;
+      fieldMatched: boolean;
+    };
+
 const formatVal = (v: unknown): string => {
   if (v === null || v === undefined || v === "") return "—";
   if (typeof v === "object") return JSON.stringify(v);
@@ -160,6 +188,7 @@ export default function NumericWorkbench() {
 
   const [tableNames, setTableNames] = useState<string[]>([]);
   const [tablesLoading, setTablesLoading] = useState(false);
+  const [tablesLoaded, setTablesLoaded] = useState(false);
   const openTables = sessionStore.openTables;
   const setOpenTables = sessionStore.setOpenTables;
   const activeTab = sessionStore.activeTab;
@@ -240,6 +269,10 @@ export default function NumericWorkbench() {
   const draggingRef = useRef(false);
 
   const debounceRef = useRef<number | null>(null);
+
+  const workbenchPendingLabel = sessionStore.isCurrentDirtySinceSave
+    ? t("gameWorkbench.currentSessionPendingSave", { defaultValue: "本地变更待保存" })
+    : t("gameWorkbench.currentSessionSaved", { defaultValue: "本地会话已保存" });
 
   const updateQuery = useCallback(
     (patch: Record<string, string | null>, replace = false) => {
@@ -384,12 +417,17 @@ export default function NumericWorkbench() {
 
   // ── 加载表 ─────────────────────────────────────────────
   const loadTables = useCallback(async () => {
+    setTablesLoaded(false);
     if (!selectedAgent) {
       setTableNames([]);
+      setTablesLoading(false);
+      setTablesLoaded(true);
       return;
     }
     if (hasExplicitCapabilityContext && !canReadWorkbench) {
       setTableNames([]);
+      setTablesLoading(false);
+      setTablesLoaded(true);
       return;
     }
     setTablesLoading(true);
@@ -400,6 +438,7 @@ export default function NumericWorkbench() {
       message.error(t("gameWorkbench.loadTablesFailed", { defaultValue: "加载表列表失败" }));
     } finally {
       setTablesLoading(false);
+      setTablesLoaded(true);
     }
   }, [selectedAgent, message, t, hasExplicitCapabilityContext, canReadWorkbench]);
 
@@ -475,6 +514,152 @@ export default function NumericWorkbench() {
     const tid = window.setTimeout(() => setHighlight((h) => ({ ...h, ts: 0 })), 1800);
     return () => window.clearTimeout(tid);
   }, [dlTable, dlRow, dlField, tableNames]);
+
+  const citationTargetState = useMemo<CitationTargetState | null>(() => {
+    if (!citationContext || !citationContext.table) {
+      return null;
+    }
+
+    const table = citationContext.table;
+    const row = citationContext.row || undefined;
+    const field = citationContext.field || undefined;
+    const hasTableNameEvidence = tablesLoaded || tableNames.length > 0;
+
+    if (tablesLoading && !hasTableNameEvidence) {
+      return { kind: "loading", table, row, field };
+    }
+
+    if (!tablesLoading && hasTableNameEvidence && !tableNames.includes(table)) {
+      return { kind: "table-not-found", table, row, field };
+    }
+
+    const tableOpened = openTables.includes(table);
+    const rowData = rowsByTable[table];
+    const detail = detailsByTable[table];
+    const headers = rowData?.headers ?? detail?.fields.map((item) => item.name) ?? [];
+    const rowsResolved = !row || !!rowData;
+    const fieldResolved = !field || !!rowData || !!detail;
+
+    if (!tableOpened || !rowsResolved || !fieldResolved) {
+      return { kind: "loading", table, row, field };
+    }
+
+    const rowMatched =
+      !row ||
+      !!rowData?.rows.some((record) => String(record[0] ?? "") === row);
+    const fieldMatched =
+      !field ||
+      headers.includes(field) ||
+      !!detail?.fields.some((item) => item.name === field);
+
+    if (rowMatched && fieldMatched) {
+      return { kind: "table-opened-target-found", table, row, field };
+    }
+
+    return {
+      kind: "table-opened-target-not-found",
+      table,
+      row,
+      field,
+      rowMatched,
+      fieldMatched,
+    };
+  }, [citationContext, detailsByTable, openTables, rowsByTable, tableNames, tablesLoaded, tablesLoading]);
+
+  const citationSourceLabel = useMemo(() => {
+    if (!citationContext) {
+      return null;
+    }
+    if (citationContext.title || citationContext.source) {
+      return t("gameWorkbench.citationContextSource", {
+        title: citationContext.title || citationContext.source,
+        source: citationContext.source,
+        defaultValue: `Citation: ${citationContext.title || citationContext.source}${citationContext.source ? ` (${citationContext.source})` : ""}`,
+      });
+    }
+    return t("gameWorkbench.citationContextSourceUnknown", {
+      defaultValue: "Citation source details were not provided.",
+    });
+  }, [citationContext, t]);
+
+  const citationTargetSummary = useMemo(() => {
+    if (!citationTargetState) {
+      return null;
+    }
+
+    if (citationTargetState.kind === "loading") {
+      return {
+        tone: "info",
+        title: t("gameWorkbench.citationTargetLoading", {
+          defaultValue: "Locating citation target in workbench",
+        }),
+        detail: t("gameWorkbench.citationTargetLoadingDetail", {
+          table: citationTargetState.table,
+          defaultValue: `Opening table ${citationTargetState.table} and checking the requested target.`,
+        }),
+      };
+    }
+
+    if (citationTargetState.kind === "table-not-found") {
+      return {
+        tone: "danger",
+        title: t("gameWorkbench.citationTargetTableMissing", {
+          defaultValue: "Citation table could not be opened",
+        }),
+        detail: t("gameWorkbench.citationTargetTableMissingDetail", {
+          table: citationTargetState.table,
+          defaultValue: `Requested table ${citationTargetState.table} is not available in this workbench.`,
+        }),
+      };
+    }
+
+    if (citationTargetState.kind === "table-opened-target-found") {
+      const parts = [
+        `Table: ${citationTargetState.table}`,
+        citationTargetState.row ? `row: ${citationTargetState.row}` : null,
+        citationTargetState.field ? `field: ${citationTargetState.field}` : null,
+      ].filter(Boolean);
+      return {
+        tone: "success",
+        title: t("gameWorkbench.citationTargetFound", {
+          defaultValue: "Focused citation target in current table",
+        }),
+        detail: parts.join(", "),
+      };
+    }
+
+    const missingRow = citationTargetState.row && !citationTargetState.rowMatched;
+    const missingField = citationTargetState.field && !citationTargetState.fieldMatched;
+    let detail: string;
+    if (missingRow && missingField) {
+      detail = t("gameWorkbench.citationTargetMissingRowField", {
+        table: citationTargetState.table,
+        row: citationTargetState.row,
+        field: citationTargetState.field,
+        defaultValue: `Opened table ${citationTargetState.table}, but row ${citationTargetState.row} or field ${citationTargetState.field} could not be matched.`,
+      });
+    } else if (missingRow) {
+      detail = t("gameWorkbench.citationTargetMissingRow", {
+        table: citationTargetState.table,
+        row: citationTargetState.row,
+        defaultValue: `Opened table ${citationTargetState.table}, but row ${citationTargetState.row} could not be matched.`,
+      });
+    } else {
+      detail = t("gameWorkbench.citationTargetMissingField", {
+        table: citationTargetState.table,
+        field: citationTargetState.field,
+        defaultValue: `Opened table ${citationTargetState.table}, but field ${citationTargetState.field} could not be matched.`,
+      });
+    }
+
+    return {
+      tone: "warning",
+      title: t("gameWorkbench.citationTargetNotFound", {
+        defaultValue: "Citation target not found in current table",
+      }),
+      detail,
+    };
+  }, [citationTargetState, t]);
 
   // 切换 activeTab → 拉一次结构化面板（用于范围校验）
   useEffect(() => {
@@ -1367,11 +1552,6 @@ export default function NumericWorkbench() {
         current={sessionStore.current?.name || t("nav.gameWorkbench", { defaultValue: "数值工作台" })}
         extra={
           <Space>
-            <Tag color={sessionStore.isCurrentDirtySinceSave ? "volcano" : "green"}>
-              {sessionStore.isCurrentDirtySinceSave
-                ? t("gameWorkbench.currentSessionPendingSave", { defaultValue: "本地变更待保存" })
-                : t("gameWorkbench.currentSessionSaved", { defaultValue: "本地会话已保存" })}
-            </Tag>
             <Button onClick={backToSessionList}>
               {t("gameWorkbench.backToSessions", { defaultValue: "返回会话列表" })}
             </Button>
@@ -1406,77 +1586,6 @@ export default function NumericWorkbench() {
       {workbenchReadReason ? (
         <Card>
           <Alert type="info" showIcon message={workbenchReadReason} />
-        </Card>
-      ) : null}
-
-      {!workbenchReadReason ? (
-        <Card>
-          <Alert
-            type="info"
-            showIcon
-            message={t("gameWorkbench.boundaryNotice", {
-              defaultValue: "Draft-only dry-run workspace. It does not publish automatically or write formal knowledge release.",
-            })}
-          />
-        </Card>
-      ) : null}
-
-      {citationContext ? (
-        <Card>
-          <Alert
-            type="info"
-            showIcon
-            message={t("gameWorkbench.citationContextTitle", {
-              defaultValue: "Opened from a RAG citation",
-            })}
-            description={
-              <Space direction="vertical" size={6}>
-                <Space size={[6, 6]} wrap>
-                  {citationContext.table ? (
-                    <Tag color="blue">
-                      {t("gameWorkbench.citationContextTable", {
-                        table: citationContext.table,
-                        defaultValue: `table: ${citationContext.table}`,
-                      })}
-                    </Tag>
-                  ) : null}
-                  {citationContext.row ? (
-                    <Tag>
-                      {t("gameWorkbench.citationContextRow", {
-                        row: citationContext.row,
-                        defaultValue: `row: ${citationContext.row}`,
-                      })}
-                    </Tag>
-                  ) : null}
-                  {citationContext.field ? (
-                    <Tag>
-                      {t("gameWorkbench.citationContextField", {
-                        field: citationContext.field,
-                        defaultValue: `field: ${citationContext.field}`,
-                      })}
-                    </Tag>
-                  ) : null}
-                  {citationContext.citationId ? <Tag>{citationContext.citationId}</Tag> : null}
-                </Space>
-                <Text type="secondary">
-                  {citationContext.title || citationContext.source
-                    ? t("gameWorkbench.citationContextSource", {
-                        title: citationContext.title || citationContext.source,
-                        source: citationContext.source,
-                        defaultValue: `Citation: ${citationContext.title || citationContext.source}${citationContext.source ? ` (${citationContext.source})` : ""}`,
-                      })
-                    : t("gameWorkbench.citationContextSourceUnknown", {
-                        defaultValue: "Citation source details were not provided.",
-                      })}
-                </Text>
-                <Text type="secondary">
-                  {t("gameWorkbench.citationContextBoundary", {
-                    defaultValue: "Use this as inspection context only. Any changes remain draft-only dry-run work and do not publish automatically.",
-                  })}
-                </Text>
-              </Space>
-            }
-          />
         </Card>
       ) : null}
 
@@ -1516,14 +1625,103 @@ export default function NumericWorkbench() {
             <Button icon={<ReloadOutlined />} onClick={loadTables} loading={tablesLoading} disabled={!canReadWorkbench}>
               {t("gameWorkbench.refresh", { defaultValue: "刷新" })}
             </Button>
-            <Tag color="blue">
-              {t("gameWorkbench.dirtyTotalTag", {
-                count: dirty.dirtyList.length,
-                defaultValue: `当前 ${dirty.dirtyList.length} 项待保存`,
-              })}
-            </Tag>
             {rowsLoading && <Spin size="small" />}
           </div>
+
+          {!workbenchReadReason ? (
+            <div className={styles.statusStack}>
+              <div className={`${styles.compactStatusBar} ${styles.workbenchStatusBar}`}>
+                <div className={styles.statusPrimaryRow}>
+                  <Space size={[6, 6]} wrap>
+                    <Tag color="gold">
+                      {t("gameWorkbench.boundaryDraftOnlyTag", { defaultValue: "Draft-only" })}
+                    </Tag>
+                    <Tag>
+                      {t("gameWorkbench.boundaryDryRunTag", { defaultValue: "Dry-run" })}
+                    </Tag>
+                    <Tag color={sessionStore.isCurrentDirtySinceSave ? "volcano" : "green"}>
+                      {workbenchPendingLabel}
+                    </Tag>
+                    <Tag color="blue">
+                      {t("gameWorkbench.dirtyTotalTag", {
+                        count: dirty.dirtyList.length,
+                        defaultValue: `当前 ${dirty.dirtyList.length} 项待保存`,
+                      })}
+                    </Tag>
+                  </Space>
+                </div>
+                <div className={styles.statusSecondaryRow}>
+                  <Text type="secondary">
+                    {t("gameWorkbench.boundaryNoticeCompact", {
+                      defaultValue: "No auto-publish. No formal knowledge release write. Save and export behavior stays manual.",
+                    })}
+                  </Text>
+                </div>
+              </div>
+
+              {citationContext ? (
+                <div
+                  className={`${styles.compactStatusBar} ${styles.citationStatusBar} ${
+                    citationTargetSummary?.tone === "success"
+                      ? styles.statusSuccess
+                      : citationTargetSummary?.tone === "warning"
+                        ? styles.statusWarning
+                        : citationTargetSummary?.tone === "danger"
+                          ? styles.statusDanger
+                          : styles.statusInfo
+                  }`}
+                >
+                  <div className={styles.statusPrimaryRow}>
+                    <Space size={[6, 6]} wrap>
+                      <Tag color="blue">
+                        {t("gameWorkbench.citationContextTitle", {
+                          defaultValue: "Opened from a RAG citation",
+                        })}
+                      </Tag>
+                      {citationContext.table ? (
+                        <Tag>
+                          {t("gameWorkbench.citationContextTable", {
+                            table: citationContext.table,
+                            defaultValue: `table: ${citationContext.table}`,
+                          })}
+                        </Tag>
+                      ) : null}
+                      {citationContext.row ? (
+                        <Tag>
+                          {t("gameWorkbench.citationContextRow", {
+                            row: citationContext.row,
+                            defaultValue: `row: ${citationContext.row}`,
+                          })}
+                        </Tag>
+                      ) : null}
+                      {citationContext.field ? (
+                        <Tag>
+                          {t("gameWorkbench.citationContextField", {
+                            field: citationContext.field,
+                            defaultValue: `field: ${citationContext.field}`,
+                          })}
+                        </Tag>
+                      ) : null}
+                      {citationContext.citationId ? <Tag>{citationContext.citationId}</Tag> : null}
+                    </Space>
+                  </div>
+                  <div className={styles.statusSecondaryRow}>
+                    {citationSourceLabel ? (
+                      <Text type="secondary" className={styles.statusSummary}>
+                        {citationSourceLabel}
+                      </Text>
+                    ) : null}
+                    {citationTargetSummary ? (
+                      <Text className={styles.statusSummaryStrong}>
+                        {citationTargetSummary.title}
+                        {citationTargetSummary.detail ? ` ${citationTargetSummary.detail}` : ""}
+                      </Text>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className={styles.split} ref={splitContainerRef}>
             <Card

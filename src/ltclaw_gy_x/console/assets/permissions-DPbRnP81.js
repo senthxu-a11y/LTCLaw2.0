@@ -1,0 +1,1 @@
+function r(n,e){return n==null?!0:n.includes("*")||n.includes(e)}function i(n,e){return r(n,e)}function t(n){return n!=null}function s(n){return n instanceof Error?n.message.includes("Missing capability:"):!1}export{i as c,t as h,s as i};
