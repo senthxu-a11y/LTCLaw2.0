@@ -1184,6 +1184,10 @@ export default function GameProject() {
   };
 
   const ragDisplayState = useMemo(() => (ragAnswer ? getRagDisplayState(ragAnswer) : null), [ragAnswer]);
+  const shouldShowEmptyDocContextHint = useMemo(
+    () => ragDisplayState === "insufficient_context" && getIndexCount(currentRelease, "doc_knowledge") === 0,
+    [currentRelease, ragDisplayState],
+  );
   const ragNextStepHints = useMemo(
     () =>
       ragAnswer
@@ -2069,6 +2073,14 @@ export default function GameProject() {
                           defaultValue: "The current release did not provide enough grounded evidence for a safe answer.",
                         })}
                       </div>
+                      {shouldShowEmptyDocContextHint ? (
+                        <div className={styles.ragStateDescription}>
+                          {t("gameProject.ragEmptyDocContextDescription", {
+                            defaultValue:
+                              "No document-library context is available in the current release. Document-style questions cannot produce a grounded answer until doc_knowledge is built.",
+                          })}
+                        </div>
+                      ) : null}
                       {ragNextStepHints.length > 0 ? (
                         <div className={styles.ragNextStepsBlock}>
                           <Text strong>{t("gameProject.ragNextStepsTitle", { defaultValue: "Next-step hints" })}</Text>
