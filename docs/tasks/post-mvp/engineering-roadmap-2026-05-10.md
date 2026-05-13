@@ -41,6 +41,7 @@ local project directory
 21. `P24.3` runbook and script alignment closeout is recorded at `docs/tasks/post-mvp/lane-b-p24-3-runbook-script-alignment-closeout-2026-05-13.md`.
 22. `P24.4` closeout, index sync, and environment cleanup are recorded at `docs/tasks/post-mvp/lane-b-p24-4-closeout-index-sync-environment-cleanup-2026-05-13.md`.
 23. Lane C Windows pilot startup doctor runbook and closeout are recorded at `docs/tasks/post-mvp/lane-c-windows-pilot-startup-doctor-runbook-2026-05-13.md` and `docs/tasks/post-mvp/lane-c-windows-pilot-startup-doctor-closeout-2026-05-13.md`.
+24. Lane A.4 Knowledge cold-start UX closure planning is recorded at `docs/tasks/post-mvp/lane-a-4-knowledge-cold-start-ux-closure-plan-2026-05-13.md` as a post-MVP pilot blocker hardening slice, not a production rollout change.
 
 ## Global Rules
 
@@ -63,6 +64,7 @@ local project directory
 4. Lane D: `docs/tasks/post-mvp/lane-d-svn-legacy-boundary-cut-2026-05-10.md`
 5. Lane E: `docs/tasks/post-mvp/lane-e-numeric-workbench-ux-hardening-2026-05-10.md`
 6. Lane F: `docs/tasks/post-mvp/lane-f-production-hardening-scope-decision-2026-05-10.md`
+7. Lane A.4 focused plan: `docs/tasks/post-mvp/lane-a-4-knowledge-cold-start-ux-closure-plan-2026-05-13.md`
 
 ## Parallelization Rules
 
