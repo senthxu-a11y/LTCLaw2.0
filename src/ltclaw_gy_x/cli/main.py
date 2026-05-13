@@ -148,6 +148,11 @@ class LazyGroup(click.Group):
             ".mission_cmd",
         ),
         "doctor": ("ltclaw_gy_x.cli.doctor_cmd", "doctor_cmd", ".doctor_cmd"),
+        "operator": (
+            "ltclaw_gy_x.cli.operator_cmd",
+            "operator_cmd",
+            ".operator_cmd",
+        ),
     },
 )
 @click.version_option(version=__version__, prog_name="LTCLAW-GY.X")
