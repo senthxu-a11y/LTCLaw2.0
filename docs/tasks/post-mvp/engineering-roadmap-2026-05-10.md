@@ -37,6 +37,9 @@ local project directory
 17. `P23.3` UX and operations review recommends `P24 Operator Startup And Secret-Management Hardening`.
 18. `P24` planning is recorded at `docs/tasks/post-mvp/lane-b-p24-operator-startup-secret-management-checklist-2026-05-11.md`.
 19. `P24.1` docs-only executable runbook and closeout are recorded at `docs/tasks/post-mvp/lane-b-p24-1-windows-operator-startup-secret-runbook-2026-05-13.md` and `docs/tasks/post-mvp/lane-b-p24-1-closeout-2026-05-13.md`.
+20. `P24.2` Windows operator dry-run pass receipt is recorded at `docs/tasks/post-mvp/lane-b-p24-2-windows-operator-dry-run-receipt-2026-05-13.md`.
+21. `P24.3` runbook and script alignment closeout is recorded at `docs/tasks/post-mvp/lane-b-p24-3-runbook-script-alignment-closeout-2026-05-13.md`.
+22. `P24.4` closeout, index sync, and environment cleanup are recorded at `docs/tasks/post-mvp/lane-b-p24-4-closeout-index-sync-environment-cleanup-2026-05-13.md`.
 
 ## Global Rules
 

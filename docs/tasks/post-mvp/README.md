@@ -14,7 +14,11 @@ This directory is the active post-MVP planning area after the accepted Knowledge
 8. `lane-b-p23-controlled-pilot-deepseek-backend-config-plan-2026-05-11.md` is the P23 controlled planner pilot plan and checklist for DeepSeek backend config.
 9. `lane-b-p23-3-ux-ops-gap-review-2026-05-11.md` records the P23 UX and operations gap review based on the reported Windows controlled pilot pass.
 10. `lane-b-p24-operator-startup-secret-management-checklist-2026-05-11.md` is the P24 operator startup and secret-management hardening checklist.
-11. `task-folder-archive-plan-2026-05-10.md` records the folder-organization and archive guidance for the task docs.
+11. `lane-b-p24-1-windows-operator-startup-secret-runbook-2026-05-13.md` records the executable Windows operator startup and secret-handling runbook for P24.1.
+12. `lane-b-p24-2-windows-operator-dry-run-receipt-2026-05-13.md` records the Windows operator dry-run pass and the verified full-config PUT requirement.
+13. `lane-b-p24-3-runbook-script-alignment-closeout-2026-05-13.md` records the runbook and helper alignment that removed partial-body PUT guidance.
+14. `lane-b-p24-4-closeout-index-sync-environment-cleanup-2026-05-13.md` records P24 closeout indexing and the local environment cleanup result.
+15. `task-folder-archive-plan-2026-05-10.md` records the folder-organization and archive guidance for the task docs.
 
 ## Scope Rules
 
@@ -28,4 +32,5 @@ This directory is the active post-MVP planning area after the accepted Knowledge
 8. P23 Windows controlled planner pilot passed and the corresponding receipt is synchronized in-repo.
 9. The next recommended Lane B gate is P24 Operator Startup And Secret-Management Hardening.
 10. P23 is not production rollout and not production ready.
-11. P24 is planned only; it is not production rollout and not production ready.
+11. P24 operator-only line is now passed through P24.3 for startup, dry-run, and alignment evidence, while the product state remains pilot usable and not production ready.
+12. P24 does not mean production rollout and does not mean production ready.
