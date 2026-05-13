@@ -36,6 +36,7 @@ local project directory
 16. `P23.2` Windows controlled planner pilot passed and its receipt is synchronized in-repo.
 17. `P23.3` UX and operations review recommends `P24 Operator Startup And Secret-Management Hardening`.
 18. `P24` planning is recorded at `docs/tasks/post-mvp/lane-b-p24-operator-startup-secret-management-checklist-2026-05-11.md`.
+19. `P24.1` docs-only executable runbook and closeout are recorded at `docs/tasks/post-mvp/lane-b-p24-1-windows-operator-startup-secret-runbook-2026-05-13.md` and `docs/tasks/post-mvp/lane-b-p24-1-closeout-2026-05-13.md`.
 
 ## Global Rules
 
