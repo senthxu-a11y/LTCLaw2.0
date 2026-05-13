@@ -40,6 +40,7 @@ local project directory
 20. `P24.2` Windows operator dry-run pass receipt is recorded at `docs/tasks/post-mvp/lane-b-p24-2-windows-operator-dry-run-receipt-2026-05-13.md`.
 21. `P24.3` runbook and script alignment closeout is recorded at `docs/tasks/post-mvp/lane-b-p24-3-runbook-script-alignment-closeout-2026-05-13.md`.
 22. `P24.4` closeout, index sync, and environment cleanup are recorded at `docs/tasks/post-mvp/lane-b-p24-4-closeout-index-sync-environment-cleanup-2026-05-13.md`.
+23. Lane C Windows pilot startup doctor runbook and closeout are recorded at `docs/tasks/post-mvp/lane-c-windows-pilot-startup-doctor-runbook-2026-05-13.md` and `docs/tasks/post-mvp/lane-c-windows-pilot-startup-doctor-closeout-2026-05-13.md`.
 
 ## Global Rules
 

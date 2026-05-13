@@ -18,7 +18,9 @@ This directory is the active post-MVP planning area after the accepted Knowledge
 12. `lane-b-p24-2-windows-operator-dry-run-receipt-2026-05-13.md` records the Windows operator dry-run pass and the verified full-config PUT requirement.
 13. `lane-b-p24-3-runbook-script-alignment-closeout-2026-05-13.md` records the runbook and helper alignment that removed partial-body PUT guidance.
 14. `lane-b-p24-4-closeout-index-sync-environment-cleanup-2026-05-13.md` records P24 closeout indexing and the local environment cleanup result.
-15. `task-folder-archive-plan-2026-05-10.md` records the folder-organization and archive guidance for the task docs.
+15. `lane-c-windows-pilot-startup-doctor-runbook-2026-05-13.md` records the operator-facing Windows startup doctor runbook for the focused Lane C pilot startup preflight slice.
+16. `lane-c-windows-pilot-startup-doctor-closeout-2026-05-13.md` records the Lane C closeout for the Windows pilot startup doctor slice.
+17. `task-folder-archive-plan-2026-05-10.md` records the folder-organization and archive guidance for the task docs.
 
 ## Scope Rules
 

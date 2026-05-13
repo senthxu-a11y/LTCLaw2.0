@@ -9,8 +9,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 import sys
 from pathlib import Path
+from typing import Any
 
 import click
 import httpx
@@ -20,10 +22,13 @@ from ..app.auth import has_registered_users, is_auth_enabled
 from ..config import load_config
 from ..config.utils import strict_validate_config_file
 from ..constant import PROJECT_NAME, WORKING_DIR
+from ..game.config import load_user_config
+from ..game.paths import get_table_indexes_path
 from ..providers.provider import Provider
 from ..providers.provider_manager import ProviderManager
 from ..utils.console_static import (
     CONSOLE_STATIC_ENV,
+    find_ltclaw_gy_x_source_repo_root,
     resolve_console_static_dir,
 )
 from ..utils.system_info import summarize_python_environment
@@ -199,6 +204,333 @@ def _check_console_static_files() -> tuple[bool, str]:
         f"or set {CONSOLE_STATIC_ENV} to a directory that contains "
         "index.html.",
     )
+
+
+def _explicit_env_dir_status(env_name: str) -> dict[str, Any]:
+    raw_value = str(os.getenv(env_name) or '').strip()
+    if not raw_value:
+        return {
+            'env_name': env_name,
+            'set': False,
+            'path': None,
+            'exists': False,
+            'is_dir': False,
+        }
+    candidate = Path(raw_value).expanduser()
+    return {
+        'env_name': env_name,
+        'set': True,
+        'path': str(candidate),
+        'exists': candidate.exists(),
+        'is_dir': candidate.is_dir(),
+    }
+
+
+def _target_port_status(host: str, port: int, timeout: float) -> dict[str, Any]:
+    detail = 'available'
+    occupied = False
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            occupied = sock.connect_ex((host, port)) == 0
+    except OSError as exc:
+        detail = f'could not probe {host}:{port} ({exc})'
+    else:
+        if occupied:
+            detail = f'listener detected on {host}:{port}'
+    return {
+        'host': host,
+        'port': port,
+        'occupied': occupied,
+        'detail': detail,
+    }
+
+
+def _local_project_dir_status() -> dict[str, Any]:
+    user_config = load_user_config()
+    raw_root = str(user_config.svn_local_root or '').strip()
+    if not raw_root:
+        return {
+            'configured': False,
+            'path': None,
+            'exists': False,
+            'readable': False,
+            'detail': 'svn_local_root is not configured in game user config',
+        }
+    project_root = Path(raw_root).expanduser()
+    exists = project_root.exists()
+    readable = exists and os.access(project_root, os.R_OK)
+    detail = str(project_root)
+    if not exists:
+        detail = f'configured path does not exist: {project_root}'
+    elif not readable:
+        detail = f'configured path is not readable: {project_root}'
+    return {
+        'configured': True,
+        'path': str(project_root),
+        'exists': exists,
+        'readable': readable,
+        'detail': detail,
+    }
+
+
+def _repo_console_dist_status() -> dict[str, Any]:
+    repo_root = find_ltclaw_gy_x_source_repo_root()
+    if repo_root is None:
+        return {
+            'source_checkout_detected': False,
+            'path': None,
+            'exists': False,
+            'index_html': False,
+        }
+    console_dist = repo_root / 'console' / 'dist'
+    return {
+        'source_checkout_detected': True,
+        'path': str(console_dist),
+        'exists': console_dist.is_dir(),
+        'index_html': (console_dist / 'index.html').is_file(),
+    }
+
+
+def _knowledge_bootstrap_table_index_status(project_root_status: dict[str, Any]) -> dict[str, Any]:
+    if not project_root_status.get('configured'):
+        return {
+            'ready': False,
+            'path': None,
+            'count': 0,
+            'detail': 'local project directory is not configured',
+        }
+    if not project_root_status.get('exists') or not project_root_status.get('readable'):
+        return {
+            'ready': False,
+            'path': None,
+            'count': 0,
+            'detail': 'local project directory is not readable',
+        }
+
+    table_index_path = get_table_indexes_path(Path(project_root_status['path']))
+    if not table_index_path.is_file():
+        return {
+            'ready': False,
+            'path': str(table_index_path),
+            'count': 0,
+            'detail': 'Current table indexes are required to build the first knowledge release',
+        }
+    try:
+        payload = json.loads(table_index_path.read_text(encoding='utf-8'))
+    except Exception as exc:  # noqa: BLE001
+        return {
+            'ready': False,
+            'path': str(table_index_path),
+            'count': 0,
+            'detail': f'current table indexes could not be read ({exc})',
+        }
+    tables = payload.get('tables', [])
+    count = len(tables) if isinstance(tables, list) else 0
+    if count <= 0:
+        return {
+            'ready': False,
+            'path': str(table_index_path),
+            'count': 0,
+            'detail': 'Current table indexes are required to build the first knowledge release',
+        }
+    return {
+        'ready': True,
+        'path': str(table_index_path),
+        'count': count,
+        'detail': f'{count} current table index entries available',
+    }
+
+
+def _http_diagnostic_status(url: str, timeout: float) -> dict[str, Any]:
+    try:
+        response = httpx.get(url, timeout=timeout)
+    except httpx.RequestError as exc:
+        return {
+            'url': url,
+            'reachable': False,
+            'status_code': None,
+            'detail': str(exc),
+        }
+
+    detail = f'HTTP {response.status_code}'
+    try:
+        body = response.json()
+    except json.JSONDecodeError:
+        body = None
+    if isinstance(body, dict) and body.get('detail'):
+        detail = str(body['detail'])
+    return {
+        'url': url,
+        'reachable': True,
+        'status_code': response.status_code,
+        'detail': detail,
+    }
+
+
+def build_windows_startup_doctor_report(
+    *,
+    host: str,
+    port: int,
+    agent_id: str,
+    timeout: float,
+) -> dict[str, Any]:
+    base = f'http://{host}:{port}'.rstrip('/')
+    working_dir_env = _explicit_env_dir_status('QWENPAW_WORKING_DIR')
+    console_static_env = _explicit_env_dir_status('QWENPAW_CONSOLE_STATIC_DIR')
+    project_root = _local_project_dir_status()
+    port_status = _target_port_status(host, port, timeout)
+    api_checks: dict[str, dict[str, Any]] = {}
+    if port_status['occupied']:
+        api_checks = {
+            'health': _http_diagnostic_status(f'{base}/api/agent/health', timeout),
+            'project_config': _http_diagnostic_status(
+                f'{base}/api/agents/{agent_id}/game/project/config',
+                timeout,
+            ),
+            'release_status': _http_diagnostic_status(
+                f'{base}/api/agents/{agent_id}/game/knowledge/releases/status',
+                timeout,
+            ),
+        }
+    else:
+        api_checks = {
+            'health': {
+                'url': f'{base}/api/agent/health',
+                'reachable': False,
+                'status_code': None,
+                'detail': 'target port is free; start `ltclaw_gy_x app` before HTTP diagnostics',
+            },
+            'project_config': {
+                'url': f'{base}/api/agents/{agent_id}/game/project/config',
+                'reachable': False,
+                'status_code': None,
+                'detail': 'target port is free; start `ltclaw_gy_x app` before HTTP diagnostics',
+            },
+            'release_status': {
+                'url': f'{base}/api/agents/{agent_id}/game/knowledge/releases/status',
+                'reachable': False,
+                'status_code': None,
+                'detail': 'target port is free; start `ltclaw_gy_x app` before HTTP diagnostics',
+            },
+        }
+    return {
+        'target': {
+            'host': host,
+            'port': port,
+            'base_url': base,
+            'agent_id': agent_id,
+        },
+        'env_paths': {
+            'QWENPAW_WORKING_DIR': working_dir_env,
+            'QWENPAW_CONSOLE_STATIC_DIR': console_static_env,
+        },
+        'console_static': {
+            'resolved_dir': resolve_console_static_dir(),
+            'index_html_exists': (Path(resolve_console_static_dir()) / 'index.html').is_file(),
+            'repo_console_dist': _repo_console_dist_status(),
+        },
+        'port': port_status,
+        'local_project_dir': project_root,
+        'knowledge_first_release': {
+            'current_table_indexes': _knowledge_bootstrap_table_index_status(project_root),
+        },
+        'http_diagnostics': api_checks,
+    }
+
+
+def _emit_windows_startup_doctor_report(report: dict[str, Any]) -> bool:
+    failed = False
+
+    click.echo('=== Windows pilot startup doctor ===')
+    click.echo(
+        f"Target: {report['target']['base_url']} (agent {report['target']['agent_id']})"
+    )
+
+    click.echo('\n=== Required env paths ===')
+    for env_name, status in report['env_paths'].items():
+        ok = bool(status['set'] and status['exists'] and status['is_dir'])
+        if ok:
+            click.echo(click.style('OK', fg='green') + f" — {env_name}: {status['path']}")
+        else:
+            failed = True
+            if not status['set']:
+                detail = 'not set'
+            elif not status['exists']:
+                detail = f"missing: {status['path']}"
+            else:
+                detail = f"not a directory: {status['path']}"
+            click.echo(click.style('FAIL', fg='red') + f" — {env_name}: {detail}", err=True)
+
+    click.echo('\n=== Console static ===')
+    static_ok = bool(report['console_static']['index_html_exists'])
+    if static_ok:
+        click.echo(
+            click.style('OK', fg='green')
+            + f" — resolved static dir: {report['console_static']['resolved_dir']}"
+        )
+    else:
+        failed = True
+        click.echo(
+            click.style('FAIL', fg='red')
+            + f" — resolved static dir missing index.html: {report['console_static']['resolved_dir']}",
+            err=True,
+        )
+    repo_console_dist = report['console_static']['repo_console_dist']
+    if repo_console_dist['source_checkout_detected']:
+        repo_ok = bool(repo_console_dist['exists'] and repo_console_dist['index_html'])
+        if repo_ok:
+            click.echo(click.style('OK', fg='green') + f" — repo console/dist: {repo_console_dist['path']}")
+        else:
+            failed = True
+            click.echo(
+                click.style('FAIL', fg='red')
+                + f" — repo console/dist incomplete: {repo_console_dist['path']}",
+                err=True,
+            )
+    else:
+        click.echo(click.style('Note:', fg='yellow') + ' source checkout not detected; repo console/dist check skipped')
+
+    click.echo('\n=== Target port ===')
+    port_status = report['port']
+    if port_status['occupied']:
+        failed = True
+        click.echo(click.style('FAIL', fg='red') + f" — {port_status['detail']}", err=True)
+    else:
+        click.echo(click.style('OK', fg='green') + f" — {port_status['detail']}")
+
+    click.echo('\n=== Local project directory ===')
+    project_status = report['local_project_dir']
+    project_ok = bool(project_status['configured'] and project_status['exists'] and project_status['readable'])
+    if project_ok:
+        click.echo(click.style('OK', fg='green') + f" — {project_status['detail']}")
+    else:
+        failed = True
+        click.echo(click.style('FAIL', fg='red') + f" — {project_status['detail']}", err=True)
+
+    click.echo('\n=== Knowledge first-release bootstrap ===')
+    table_index_status = report['knowledge_first_release']['current_table_indexes']
+    if table_index_status['ready']:
+        click.echo(click.style('OK', fg='green') + f" — {table_index_status['detail']}")
+    else:
+        failed = True
+        click.echo(click.style('FAIL', fg='red') + f" — {table_index_status['detail']}", err=True)
+
+    click.echo('\n=== Post-start HTTP diagnostics ===')
+    for label in ('health', 'project_config', 'release_status'):
+        status = report['http_diagnostics'][label]
+        if status['status_code'] == 200:
+            click.echo(click.style('OK', fg='green') + f" — {label}: {status['detail']} ({status['url']})")
+        elif status['status_code'] in (400, 401, 403, 404, 500):
+            click.echo(click.style('Note:', fg='yellow') + f" {label}: {status['detail']} ({status['url']})")
+        else:
+            click.echo(click.style('Note:', fg='yellow') + f" {label}: {status['detail']} ({status['url']})")
+
+    click.echo('\nNext steps:')
+    click.echo('  1. Start `ltclaw_gy_x app` only after the required env paths, console static files, target port, and local project directory all pass.')
+    click.echo('  2. After startup, verify `/api/agent/health`, project config, and knowledge release status from the URLs above.')
+    click.echo('  3. If there is no saved formal map and no current release yet, the first knowledge release still requires current table indexes.')
+    return failed
 
 
 def _check_web_auth(base: str) -> tuple[bool, str]:
@@ -981,6 +1313,47 @@ def doctor_cmd(
     """
     if ctx.invoked_subcommand is None:
         run_doctor_checks(ctx, timeout, llm_timeout, deep)
+
+
+@doctor_cmd.command(
+    'windows-startup',
+    context_settings={'help_option_names': ['-h', '--help']},
+)
+@click.option(
+    '--host',
+    default=None,
+    help='API host override for this startup doctor run.',
+)
+@click.option(
+    '--port',
+    default=None,
+    type=int,
+    help='API port override for this startup doctor run.',
+)
+@click.option(
+    '--agent-id',
+    default='default',
+    show_default=True,
+    help='Agent id for post-start project-config and release-status HTTP checks.',
+)
+@click.pass_context
+def doctor_windows_startup_cli(
+    ctx: click.Context,
+    host: str | None,
+    port: int | None,
+    agent_id: str,
+) -> None:
+    """Focused Windows pilot startup preflight for operators."""
+    inherited_host, inherited_port = _cli_api_host_port_from_ctx(ctx)
+    report = build_windows_startup_doctor_report(
+        host=host or inherited_host or '127.0.0.1',
+        port=port or inherited_port or 8088,
+        agent_id=str(agent_id or 'default').strip() or 'default',
+        timeout=float(ctx.parent.params.get('timeout', 5.0)) if ctx.parent is not None else 5.0,
+    )
+    failed = _emit_windows_startup_doctor_report(report)
+    if failed:
+        sys.exit(1)
 
 
 @doctor_cmd.command(
