@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+import json
 
 import pytest
+from agentscope.tool import ToolResponse
 
 from ltclaw_gy_x.agents.tools import gamedev_tools
 from ltclaw_gy_x.game.change_proposal import ChangeOp, ChangeProposal
@@ -107,6 +109,45 @@ async def test_game_commit_proposal_updates_store(monkeypatch):
 
 async def _async_result(value):
     return value
+
+
+def _tool_payload(response: ToolResponse):
+    assert isinstance(response, ToolResponse)
+    assert response.content
+    first = response.content[0]
+    text = first.get("text") if isinstance(first, dict) else first.text
+    return json.loads(text)
+
+
+@pytest.mark.asyncio
+async def test_game_query_tables_returns_tool_response(monkeypatch):
+    router = SimpleNamespace(query=lambda query, mode: _async_result({"query": query, "mode": mode, "count": 1}))
+    service = SimpleNamespace(query_router=router, configured=True)
+    monkeypatch.setattr(gamedev_tools, "_get_game_service", lambda: _async_result((service, None)))
+
+    result = await gamedev_tools.game_query_tables("Hero", mode="auto")
+
+    assert isinstance(result, ToolResponse)
+    assert _tool_payload(result) == {"query": "Hero", "mode": "auto", "count": 1}
+
+
+@pytest.mark.asyncio
+async def test_game_describe_field_returns_tool_response(monkeypatch):
+    field = SimpleNamespace(model_dump=lambda mode="json": {"name": "HP", "type": "int"}, name="HP")
+    table_index = SimpleNamespace(fields=[field], ai_summary="hero table", row_count=10)
+    router = SimpleNamespace(get_table=lambda table: _async_result(table_index))
+    service = SimpleNamespace(query_router=router, configured=True)
+    monkeypatch.setattr(gamedev_tools, "_get_game_service", lambda: _async_result((service, None)))
+
+    result = await gamedev_tools.game_describe_field("Hero", "HP")
+
+    assert isinstance(result, ToolResponse)
+    assert _tool_payload(result) == {
+        "table": "Hero",
+        "field": {"name": "HP", "type": "int"},
+        "table_summary": "hero table",
+        "row_count": 10,
+    }
 
 
 @pytest.mark.asyncio

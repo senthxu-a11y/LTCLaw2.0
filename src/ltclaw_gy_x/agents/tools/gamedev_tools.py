@@ -7,7 +7,11 @@ the active workspace via the agent context ContextVar plus the module-level
 MultiAgentManager singleton accessor.
 """
 
+import json
 from typing import Any, Dict, List
+
+from agentscope.message import TextBlock
+from agentscope.tool import ToolResponse
 
 from ...app.agent_context import get_current_agent_id
 from ...app.multi_agent_manager import get_active_manager
@@ -37,48 +41,61 @@ async def _get_game_service():
     return service, None
 
 
-async def game_query_tables(query: str, mode: str = "auto") -> Dict[str, Any]:
+def _tool_response(payload: Any) -> ToolResponse:
+    return ToolResponse(
+        content=[
+            TextBlock(
+                type="text",
+                text=json.dumps(payload, ensure_ascii=False, indent=2),
+            )
+        ]
+    )
+
+
+async def game_query_tables(query: str, mode: str = "auto") -> ToolResponse:
     """Search tables/fields/systems by keyword. Query can be table name,
     field name, or natural-language description."""
     service, err = await _get_game_service()
     if err:
-        return err
+        return _tool_response(err)
     router = getattr(service, "query_router", None)
     if router is None:
-        return {"error": "Query router not available"}
+        return _tool_response({"error": "Query router not available"})
     try:
-        return await router.query(query, mode)
+        return _tool_response(await router.query(query, mode))
     except Exception as e:  # noqa: BLE001
-        return {"error": f"Query failed: {e}"}
+        return _tool_response({"error": f"Query failed: {e}"})
 
 
-async def game_describe_field(table: str, field: str) -> Dict[str, Any]:
+async def game_describe_field(table: str, field: str) -> ToolResponse:
     """Describe a single field within a table (AI summary, references)."""
     service, err = await _get_game_service()
     if err:
-        return err
+        return _tool_response(err)
     router = getattr(service, "query_router", None)
     if router is None:
-        return {"error": "Query router not available"}
+        return _tool_response({"error": "Query router not available"})
     try:
         table_index = await router.get_table(table)
     except Exception as e:  # noqa: BLE001
-        return {"error": f"Failed to load table: {e}"}
+        return _tool_response({"error": f"Failed to load table: {e}"})
     if not table_index:
-        return {"error": f"Table '{table}' not found"}
+        return _tool_response({"error": f"Table '{table}' not found"})
     target = None
     for f in getattr(table_index, "fields", []) or []:
         if getattr(f, "name", None) == field:
             target = f
             break
     if target is None:
-        return {"error": f"Field '{field}' not found in table '{table}'"}
-    return {
-        "table": table,
-        "field": target.model_dump(mode="json"),
-        "table_summary": getattr(table_index, "ai_summary", None),
-        "row_count": getattr(table_index, "row_count", None),
-    }
+        return _tool_response({"error": f"Field '{field}' not found in table '{table}'"})
+    return _tool_response(
+        {
+            "table": table,
+            "field": target.model_dump(mode="json"),
+            "table_summary": getattr(table_index, "ai_summary", None),
+            "row_count": getattr(table_index, "row_count", None),
+        }
+    )
 
 
 async def game_table_dependencies(table: str) -> Dict[str, Any]:
