@@ -140,6 +140,10 @@ export const gameApi = {
     });
   },
 
+  async getIndexStatus(agentId: string): Promise<{ configured: boolean; table_count?: number }> {
+    return request(`/agents/${agentId}/game/index/status`);
+  },
+
   async rebuildIndex(agentId: string): Promise<{ revision: number; scanned_files: string[]; indexed: number }> {
     return request(`/agents/${agentId}/game/index/rebuild`, {
       method: "POST",

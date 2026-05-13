@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
 import type { FrontendCapabilityToken } from "@/api/types/permissions";
+import { gameApi } from "../../../api/modules/game";
 import { canUseGovernanceAction, hasCapabilityContext, isPermissionDeniedError } from "@/utils/permissions";
 import { gameStructuredQueryApi } from "../../../api/modules/gameStructuredQuery";
 import { gameKnowledgeReleaseApi } from "../../../api/modules/gameKnowledgeRelease";
@@ -143,6 +144,11 @@ export default function KnowledgePage() {
   const [formalMapLoading, setFormalMapLoading] = useState(false);
   const [formalMapError, setFormalMapError] = useState<string | null>(null);
   const [formalMap, setFormalMap] = useState<FormalKnowledgeMapResponse | null>(null);
+  const [indexStatusLoading, setIndexStatusLoading] = useState(false);
+  const [indexStatus, setIndexStatus] = useState<{ configured: boolean; table_count?: number } | null>(null);
+  const [isRebuildingIndexes, setIsRebuildingIndexes] = useState(false);
+  const [rebuildIndexesError, setRebuildIndexesError] = useState<string | null>(null);
+  const [rebuildIndexesSuccess, setRebuildIndexesSuccess] = useState<string | null>(null);
   const [ragQuery, setRagQuery] = useState("");
   const [ragLoading, setRagLoading] = useState(false);
   const [ragError, setRagError] = useState<string | null>(null);
@@ -560,6 +566,18 @@ export default function KnowledgePage() {
     await Promise.all([fetchCandidateMap(agentId), fetchFormalMap(agentId)]);
   }, [fetchCandidateMap, fetchFormalMap]);
 
+  const fetchIndexStatus = useCallback(async (agentId: string) => {
+    setIndexStatusLoading(true);
+    try {
+      const status = await gameApi.getIndexStatus(agentId);
+      setIndexStatus(status);
+    } catch {
+      setIndexStatus(null);
+    } finally {
+      setIndexStatusLoading(false);
+    }
+  }, []);
+
   const fetchBuildCandidates = useCallback(async (agentId: string) => {
     if (hasExplicitCapabilityContext && !canReadReleaseCandidates) {
       setBuildCandidates([]);
@@ -671,6 +689,51 @@ export default function KnowledgePage() {
     await fetchBuildCandidates(selectedAgent);
   };
 
+  const refreshKnowledgeColdStartState = useCallback(async (agentId: string) => {
+    const mapRefresh = hasExplicitCapabilityContext && !canReadMap
+      ? Promise.resolve()
+      : fetchMapSummaryData(agentId);
+    const candidateRefresh = buildModalOpen && canReadReleaseCandidates
+      ? fetchBuildCandidates(agentId)
+      : Promise.resolve();
+
+    await Promise.all([
+      fetchKnowledgeReleases(agentId),
+      mapRefresh,
+      candidateRefresh,
+      fetchIndexStatus(agentId),
+    ]);
+  }, [buildModalOpen, canReadMap, canReadReleaseCandidates, fetchBuildCandidates, fetchIndexStatus, fetchKnowledgeReleases, fetchMapSummaryData, hasExplicitCapabilityContext]);
+
+  const handleRebuildCurrentIndexes = useCallback(async () => {
+    if (!selectedAgent) {
+      return;
+    }
+
+    try {
+      setIsRebuildingIndexes(true);
+      setRebuildIndexesError(null);
+      setRebuildIndexesSuccess(null);
+      const result = await gameApi.rebuildIndex(selectedAgent);
+      setBuildCandidatesError(null);
+      await refreshKnowledgeColdStartState(selectedAgent);
+      const successMessage = t("gameProject.rebuildIndexesSuccess", {
+        defaultValue: `Current table indexes rebuilt. Indexed ${result.indexed} table files.`,
+      });
+      setRebuildIndexesSuccess(successMessage);
+      message.success(successMessage);
+    } catch (err) {
+      const errorMessage = formatGovernanceError(
+        err,
+        t("gameProject.rebuildIndexesFailed", { defaultValue: "Failed to rebuild current table indexes" }),
+      );
+      setRebuildIndexesError(errorMessage);
+      message.warning(errorMessage);
+    } finally {
+      setIsRebuildingIndexes(false);
+    }
+  }, [formatGovernanceError, message, refreshKnowledgeColdStartState, selectedAgent, t]);
+
   const handleBuildRelease = async () => {
     if (!selectedAgent) {
       return;
@@ -683,7 +746,9 @@ export default function KnowledgePage() {
         release_notes: values.release_notes?.trim() || "",
         candidate_ids: selectedCandidateIds,
       });
-      await fetchKnowledgeReleases(selectedAgent);
+      setRebuildIndexesError(null);
+      setRebuildIndexesSuccess(null);
+      await refreshKnowledgeColdStartState(selectedAgent);
       setBuildModalOpen(false);
       buildForm.resetFields();
       setBuildCandidatesError(null);
@@ -772,6 +837,38 @@ export default function KnowledgePage() {
   );
   const savedFormalSummary = useMemo(() => summarizeMap(savedFormalMap), [savedFormalMap]);
   const isBootstrapBuildState = !currentRelease && formalMap?.mode === NO_FORMAL_MAP_MODE;
+  const hasCurrentTableIndexes = useMemo(() => {
+    if (!indexStatus?.configured) {
+      return false;
+    }
+    return (indexStatus.table_count ?? 0) > 0;
+  }, [indexStatus]);
+  const isColdStartIndexesMissing = isBootstrapBuildState && !indexStatusLoading && indexStatus !== null && !hasCurrentTableIndexes;
+  const isColdStartIndexesReady = isBootstrapBuildState && !indexStatusLoading && indexStatus !== null && hasCurrentTableIndexes;
+
+  const renderRebuildIndexesAction = useCallback((context: "page" | "modal") => {
+    const hint = context === "page"
+      ? t("gameProject.rebuildIndexesPageHint", {
+          defaultValue: "Rebuild current table indexes here, then return to Build release when the prerequisite is ready.",
+        })
+      : t("gameProject.rebuildIndexesModalHint", {
+          defaultValue: "Rebuild current table indexes first. Release build remains a separate explicit action after refresh.",
+        });
+
+    return (
+      <Space direction="vertical" size={8}>
+        <Text type="secondary">{hint}</Text>
+        <Button
+          size="small"
+          onClick={() => void handleRebuildCurrentIndexes()}
+          loading={isRebuildingIndexes}
+          disabled={!selectedAgent}
+        >
+          {t("gameProject.rebuildIndexesButton", { defaultValue: "Rebuild current indexes" })}
+        </Button>
+      </Space>
+    );
+  }, [handleRebuildCurrentIndexes, isRebuildingIndexes, selectedAgent, t]);
 
   useEffect(() => {
     if (!selectedAgent) {
@@ -787,10 +884,16 @@ export default function KnowledgePage() {
       setFormalMap(null);
       setFormalMapError(null);
       setFormalMapLoading(false);
+      setIndexStatus(null);
+      setIndexStatusLoading(false);
+      setRebuildIndexesError(null);
+      setRebuildIndexesSuccess(null);
+      setIsRebuildingIndexes(false);
       return;
     }
 
     void fetchKnowledgeReleases(selectedAgent);
+    void fetchIndexStatus(selectedAgent);
     if (hasExplicitCapabilityContext && !canReadMap) {
       setCandidateMap(null);
       setCandidateMapReleaseId(null);
@@ -802,13 +905,15 @@ export default function KnowledgePage() {
     } else {
       void fetchMapSummaryData(selectedAgent);
     }
-  }, [canReadMap, fetchKnowledgeReleases, fetchMapSummaryData, hasExplicitCapabilityContext, selectedAgent]);
+  }, [canReadMap, fetchIndexStatus, fetchKnowledgeReleases, fetchMapSummaryData, hasExplicitCapabilityContext, selectedAgent]);
 
   useEffect(() => {
     setStructuredQueryPanelOpen(false);
     setStructuredQueryDraft("");
     setStructuredQueryLoading(false);
     setStructuredQueryResponse(null);
+    setRebuildIndexesError(null);
+    setRebuildIndexesSuccess(null);
   }, [selectedAgent]);
 
   useEffect(() => () => {
@@ -1042,6 +1147,54 @@ export default function KnowledgePage() {
               </Text>
               {buildDisabledReason ? <Text type="secondary">{buildDisabledReason}</Text> : null}
             </div>
+
+            {isColdStartIndexesMissing ? (
+              <Alert
+                type="warning"
+                showIcon
+                message={t("gameProject.coldStartIndexesMissingTitle", {
+                  defaultValue: "Current table indexes are required before the first release build",
+                })}
+                description={renderRebuildIndexesAction("page")}
+                className={styles.releaseAlert}
+              />
+            ) : isColdStartIndexesReady ? (
+              <Alert
+                type="info"
+                showIcon
+                message={t("gameProject.coldStartIndexesReadyTitle", {
+                  defaultValue: "Current table indexes are ready for first-release bootstrap",
+                })}
+                description={t("gameProject.coldStartIndexesReadyDescription", {
+                  defaultValue: "Current table indexes are available. Click Build release to initialize release history and candidate map when you are ready.",
+                })}
+                className={styles.releaseAlert}
+              />
+            ) : null}
+
+            {rebuildIndexesError ? (
+              <Alert
+                type="warning"
+                showIcon
+                message={t("gameProject.rebuildIndexesWarningTitle", {
+                  defaultValue: "Current table index rebuild is temporarily unavailable",
+                })}
+                description={rebuildIndexesError}
+                className={styles.releaseAlert}
+              />
+            ) : null}
+
+            {rebuildIndexesSuccess ? (
+              <Alert
+                type="success"
+                showIcon
+                message={t("gameProject.rebuildIndexesSuccessTitle", {
+                  defaultValue: "Current table indexes rebuilt",
+                })}
+                description={rebuildIndexesSuccess}
+                className={styles.releaseAlert}
+              />
+            ) : null}
 
             <div className={styles.releaseActions}>
               <Tooltip
@@ -1546,10 +1699,17 @@ export default function KnowledgePage() {
                   }
                   description={
                     candidateMapError === NO_CURRENT_RELEASE_DETAIL
-                      ? t("gameProject.mapCandidateNoCurrentDescription", {
-                          defaultValue:
-                            "No current release is set yet. Build the first knowledge release from current server-side indexes to initialize release history and candidate map.",
-                        })
+                      ? isColdStartIndexesMissing
+                        ? renderRebuildIndexesAction("page")
+                        : isColdStartIndexesReady
+                          ? t("gameProject.mapCandidateNoCurrentIndexesReadyDescription", {
+                              defaultValue:
+                                "No current release is set yet. Current table indexes are ready. Build the first knowledge release to initialize release history and candidate map.",
+                            })
+                          : t("gameProject.mapCandidateNoCurrentDescription", {
+                              defaultValue:
+                                "No current release is set yet. Build the first knowledge release from current server-side indexes to initialize release history and candidate map.",
+                            })
                       : candidateMapError
                   }
                   className={styles.releaseAlert}
@@ -1645,13 +1805,24 @@ export default function KnowledgePage() {
         <Form form={buildForm} layout="vertical" autoComplete="off">
           {isBootstrapBuildState ? (
             <Alert
-              type="info"
+              type={isColdStartIndexesMissing ? "warning" : "info"}
               showIcon
-              message={t("gameProject.releaseBuildBootstrapTitle", { defaultValue: "Initialize the first knowledge release" })}
-              description={t("gameProject.releaseBuildBootstrapDescription", {
-                defaultValue:
-                  "This project has no saved formal map and no current release yet. Build will bootstrap the first release from current server-side indexes only; it does not require an existing current release.",
-              })}
+              message={isColdStartIndexesMissing
+                ? t("gameProject.releaseBuildBootstrapIndexesRequiredTitle", {
+                    defaultValue: "Current table indexes are required before first-release bootstrap",
+                  })
+                : t("gameProject.releaseBuildBootstrapTitle", { defaultValue: "Initialize the first knowledge release" })}
+              description={isColdStartIndexesMissing
+                ? renderRebuildIndexesAction("modal")
+                : isColdStartIndexesReady
+                  ? t("gameProject.releaseBuildBootstrapReadyDescription", {
+                      defaultValue:
+                        "This project has no saved formal map and no current release yet. Current table indexes are ready, so Build can bootstrap the first release from current server-side indexes without an existing current release.",
+                    })
+                  : t("gameProject.releaseBuildBootstrapDescription", {
+                      defaultValue:
+                        "This project has no saved formal map and no current release yet. Build will bootstrap the first release from current server-side indexes only; it does not require an existing current release.",
+                    })}
               className={styles.releaseCandidateAlert}
             />
           ) : null}
@@ -1718,6 +1889,10 @@ export default function KnowledgePage() {
                 message={
                   buildCandidatesError === NO_CURRENT_RELEASE_DETAIL
                     ? t("gameProject.releaseBuildNoCurrentTitle", { defaultValue: "No current release is set yet" })
+                    : buildCandidatesError === NO_FIRST_RELEASE_INDEXES_DETAIL
+                      ? t("gameProject.releaseBuildBootstrapIndexesRequiredTitle", {
+                          defaultValue: "Current table indexes are required before first-release bootstrap",
+                        })
                     : t("gameProject.releaseCandidateWarning", { defaultValue: "Release candidate list is temporarily unavailable" })
                 }
                 description={
@@ -1727,10 +1902,7 @@ export default function KnowledgePage() {
                           "First-release bootstrap does not require an existing current release. Refresh indexes and build again if initialization prerequisites are met.",
                       })
                     : buildCandidatesError === NO_FIRST_RELEASE_INDEXES_DETAIL
-                      ? t("gameProject.releaseBuildBootstrapIndexesMissing", {
-                          defaultValue:
-                            "Current table indexes are missing. Rebuild current table indexes before creating the first knowledge release.",
-                        })
+                      ? renderRebuildIndexesAction("modal")
                       : buildCandidatesError
                 }
                 className={styles.releaseCandidateAlert}
