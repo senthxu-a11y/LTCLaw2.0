@@ -605,12 +605,81 @@ def test_build_knowledge_release_from_current_indexes_requires_approved_docs(mon
         build_knowledge_release_from_current_indexes(project_root, workspace_dir, 'release-safe-002')
 
 
-def test_build_knowledge_release_from_current_indexes_requires_current_release(monkeypatch, tmp_path):
+def test_build_knowledge_release_from_current_indexes_bootstraps_first_release_from_current_indexes(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    workspace_dir = tmp_path / 'workspace'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+    project_root.mkdir(parents=True, exist_ok=True)
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'value=1\n')
+    _write_source(project_root, 'KB/CombatApproved.md', 'approved doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'class CombatResolver {}\n')
+    _write_table_indexes(project_root, [_table_index()])
+    _write_code_indexes(workspace_dir, project_root, [_code_index()])
+    _add_approved_doc(workspace_dir, 'KB/CombatApproved.md')
+
+    result = build_knowledge_release_from_current_indexes(project_root, workspace_dir, 'release-safe-003')
+
+    assert result.manifest.release_id == 'release-safe-003'
+    assert result.knowledge_map.release_id == 'release-safe-003'
+    assert [table.table_id for table in result.knowledge_map.tables] == ['SkillTable']
+    assert [doc.source_path for doc in result.knowledge_map.docs] == ['KB/CombatApproved.md']
+    assert [script.source_path for script in result.knowledge_map.scripts] == ['Scripts/CombatResolver.cs']
+    assert result.artifacts['table_schema'].count == 1
+    assert result.artifacts['script_evidence'].count == 1
+    assert result.artifacts['doc_knowledge'].count == 2
+
+
+def test_build_knowledge_release_from_current_indexes_requires_current_indexes_for_first_release(monkeypatch, tmp_path):
     working_root = tmp_path / 'ltclaw-data'
     workspace_dir = tmp_path / 'workspace'
     project_root = tmp_path / 'project-root'
     monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
     project_root.mkdir(parents=True, exist_ok=True)
 
-    with pytest.raises(KnowledgeReleasePrerequisiteError, match='No current knowledge release is set'):
-        build_knowledge_release_from_current_indexes(project_root, workspace_dir, 'release-safe-003')
+    with pytest.raises(
+        KnowledgeReleasePrerequisiteError,
+        match='Current table indexes are required to build the first knowledge release',
+    ):
+        build_knowledge_release_from_current_indexes(project_root, workspace_dir, 'release-safe-004')
+
+
+def test_build_knowledge_release_from_current_indexes_requires_table_indexes_for_code_only_bootstrap(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    workspace_dir = tmp_path / 'workspace'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+    project_root.mkdir(parents=True, exist_ok=True)
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'class CombatResolver {}\n')
+    _write_code_indexes(workspace_dir, project_root, [_code_index()])
+
+    with pytest.raises(
+        KnowledgeReleasePrerequisiteError,
+        match='Current table indexes are required to build the first knowledge release',
+    ):
+        build_knowledge_release_from_current_indexes(project_root, workspace_dir, 'release-safe-code-only')
+
+
+def test_build_knowledge_release_from_current_indexes_rejects_approved_doc_path_escape(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    workspace_dir = tmp_path / 'workspace'
+    project_root = tmp_path / 'project-root'
+    outside_secret = tmp_path / 'Secrets.txt'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+    project_root.mkdir(parents=True, exist_ok=True)
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'value=1\n')
+    _write_table_indexes(project_root, [_table_index()])
+    outside_secret.write_text('top-secret\n', encoding='utf-8')
+    _add_approved_doc(workspace_dir, '../Secrets.txt')
+
+    original_read_bytes = Path.read_bytes
+
+    def _guard_read_bytes(self: Path, *args, **kwargs):
+        if self.resolve(strict=False) == outside_secret.resolve(strict=False):
+            raise AssertionError('safe build must not read approved docs outside the project root')
+        return original_read_bytes(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_bytes', _guard_read_bytes)
+
+    with pytest.raises(KnowledgeReleasePrerequisiteError, match=r"Invalid approved doc path: '\.\./Secrets\.txt'"):
+        build_knowledge_release_from_current_indexes(project_root, workspace_dir, 'release-safe-escaped-doc')
