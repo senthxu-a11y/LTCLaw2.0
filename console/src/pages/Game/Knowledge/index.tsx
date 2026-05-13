@@ -54,6 +54,7 @@ interface CitationWorkbenchTarget {
 
 const NO_CURRENT_RELEASE_DETAIL = "No current knowledge release is set";
 const LOCAL_PROJECT_DIRECTORY_ERROR = "Local project directory not configured";
+const NO_FIRST_RELEASE_INDEXES_DETAIL = "Current table indexes are required to build the first knowledge release";
 const NO_FORMAL_MAP_MODE = "no_formal_map";
 const MAX_RECENT_RAG_QUESTIONS = 5;
 const RAG_EXAMPLE_QUESTION_KEYS = [
@@ -635,7 +636,9 @@ export default function KnowledgePage() {
     }
     buildForm.setFieldsValue({
       release_id: createDefaultReleaseId(),
-      release_notes: currentRelease ? `Build from current indexes based on ${currentRelease.release_id}` : "",
+      release_notes: currentRelease
+        ? `Build from current indexes based on ${currentRelease.release_id}`
+        : "Bootstrap first knowledge release from current server-side indexes",
     });
     setSelectedCandidateIds([]);
     setBuildCandidates([]);
@@ -768,6 +771,7 @@ export default function KnowledgePage() {
     [formalMap],
   );
   const savedFormalSummary = useMemo(() => summarizeMap(savedFormalMap), [savedFormalMap]);
+  const isBootstrapBuildState = !currentRelease && formalMap?.mode === NO_FORMAL_MAP_MODE;
 
   useEffect(() => {
     if (!selectedAgent) {
@@ -1032,7 +1036,8 @@ export default function KnowledgePage() {
               </Tooltip>
               <Text type="secondary">
                 {t("gameProject.releaseBuildHint", {
-                  defaultValue: "Build uses the safe server-side endpoint and does not auto-set current.",
+                  defaultValue:
+                    "Build uses the safe server-side endpoint and does not auto-set current. If there is no saved formal map and no current release yet, the first build bootstraps from current server-side indexes.",
                 })}
               </Text>
               {buildDisabledReason ? <Text type="secondary">{buildDisabledReason}</Text> : null}
@@ -1542,7 +1547,8 @@ export default function KnowledgePage() {
                   description={
                     candidateMapError === NO_CURRENT_RELEASE_DETAIL
                       ? t("gameProject.mapCandidateNoCurrentDescription", {
-                          defaultValue: "Build a knowledge release first to generate a candidate map.",
+                          defaultValue:
+                            "No current release is set yet. Build the first knowledge release from current server-side indexes to initialize release history and candidate map.",
                         })
                       : candidateMapError
                   }
@@ -1637,6 +1643,18 @@ export default function KnowledgePage() {
         destroyOnHidden
       >
         <Form form={buildForm} layout="vertical" autoComplete="off">
+          {isBootstrapBuildState ? (
+            <Alert
+              type="info"
+              showIcon
+              message={t("gameProject.releaseBuildBootstrapTitle", { defaultValue: "Initialize the first knowledge release" })}
+              description={t("gameProject.releaseBuildBootstrapDescription", {
+                defaultValue:
+                  "This project has no saved formal map and no current release yet. Build will bootstrap the first release from current server-side indexes only; it does not require an existing current release.",
+              })}
+              className={styles.releaseCandidateAlert}
+            />
+          ) : null}
           <Form.Item
             name="release_id"
             label={t("gameProject.releaseIdLabel", { defaultValue: "release id" })}
@@ -1695,10 +1713,26 @@ export default function KnowledgePage() {
 
             {buildCandidatesError ? (
               <Alert
-                type="warning"
+                type={buildCandidatesError === NO_CURRENT_RELEASE_DETAIL ? "info" : "warning"}
                 showIcon
-                message={t("gameProject.releaseCandidateWarning", { defaultValue: "Release candidate list is temporarily unavailable" })}
-                description={buildCandidatesError}
+                message={
+                  buildCandidatesError === NO_CURRENT_RELEASE_DETAIL
+                    ? t("gameProject.releaseBuildNoCurrentTitle", { defaultValue: "No current release is set yet" })
+                    : t("gameProject.releaseCandidateWarning", { defaultValue: "Release candidate list is temporarily unavailable" })
+                }
+                description={
+                  buildCandidatesError === NO_CURRENT_RELEASE_DETAIL
+                    ? t("gameProject.releaseBuildNoCurrentDescription", {
+                        defaultValue:
+                          "First-release bootstrap does not require an existing current release. Refresh indexes and build again if initialization prerequisites are met.",
+                      })
+                    : buildCandidatesError === NO_FIRST_RELEASE_INDEXES_DETAIL
+                      ? t("gameProject.releaseBuildBootstrapIndexesMissing", {
+                          defaultValue:
+                            "Current table indexes are missing. Rebuild current table indexes before creating the first knowledge release.",
+                        })
+                      : buildCandidatesError
+                }
                 className={styles.releaseCandidateAlert}
               />
             ) : null}

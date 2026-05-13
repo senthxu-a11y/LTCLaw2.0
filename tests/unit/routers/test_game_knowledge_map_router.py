@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from ltclaw_gy_x.app.routers import game_knowledge_map as map_router_module
 from ltclaw_gy_x.app.routers.game_knowledge_map import router
+from ltclaw_gy_x.game.knowledge_release_store import CurrentKnowledgeReleaseNotSetError
 from ltclaw_gy_x.game.models import KnowledgeMap, KnowledgeRelationship, KnowledgeTableRef
 
 
@@ -76,6 +77,25 @@ def test_candidate_map_router_forwards_project_root(monkeypatch, tmp_path):
     assert response.json()['mode'] == 'candidate_map'
     assert response.json()['map']['release_id'] == 'release-001'
     assert captured == {'project_root': tmp_path / 'project-root', 'release_id': None}
+
+
+def test_candidate_map_router_returns_no_current_release_detail(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _build_candidate(_project_root, release_id=None):
+        raise CurrentKnowledgeReleaseNotSetError('No current knowledge release is set')
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(map_router_module, 'build_map_candidate_from_release', _build_candidate)
+
+    with TestClient(_build_app(), raise_server_exceptions=False) as client:
+        response = client.get('/api/game/knowledge/map/candidate')
+
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'No current knowledge release is set'
 
 
 def test_formal_map_router_returns_empty_state_when_missing(monkeypatch, tmp_path):

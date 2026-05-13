@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from ltclaw_gy_x.app.agent_context import get_agent_for_request
 from ltclaw_gy_x.app.routers import game_knowledge_release as release_router_module
 from ltclaw_gy_x.app.routers.game_knowledge_release import router
-from ltclaw_gy_x.game.knowledge_release_service import KnowledgeReleaseBuildResult
+from ltclaw_gy_x.game.knowledge_release_service import KnowledgeReleaseBuildResult, KnowledgeReleasePrerequisiteError
 from ltclaw_gy_x.game.models import (
     KnowledgeDocRef,
     KnowledgeIndexArtifact,
@@ -261,6 +261,30 @@ def test_build_release_from_current_indexes_forwards_project_root_and_workspace(
     assert captured['release_id'] == 'release-safe-001'
     assert captured['kwargs']['candidate_ids'] == ['combat-doc']
     assert captured['kwargs']['release_notes'] == '# safe build\n'
+
+
+def test_build_release_from_current_indexes_returns_prerequisite_detail(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _build(*_args, **_kwargs):
+        raise KnowledgeReleasePrerequisiteError(
+            'No current indexes are available to build the first knowledge release'
+        )
+
+    monkeypatch.setattr(release_router_module, 'build_knowledge_release_from_current_indexes', _build)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace)) as client:
+        response = client.post(
+            '/api/game/knowledge/releases/build-from-current-indexes',
+            json={'release_id': 'release-bootstrap-001'},
+        )
+
+    assert response.status_code == 400
+    assert response.json()['detail'] == 'No current indexes are available to build the first knowledge release'
 
 
 def test_build_release_requires_knowledge_build_when_capabilities_present(monkeypatch, tmp_path):

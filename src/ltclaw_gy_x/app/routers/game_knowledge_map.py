@@ -13,6 +13,7 @@ from ...game.knowledge_formal_map_store import (
     save_formal_knowledge_map,
 )
 from ...game.knowledge_map_candidate import build_map_candidate_from_release
+from ...game.knowledge_release_store import CurrentKnowledgeReleaseNotSetError
 from ...game.models import KnowledgeMap
 from ..capabilities import require_capability
 from ..agent_context import get_agent_for_request
@@ -74,7 +75,10 @@ async def get_map_candidate(request: Request, release_id: str | None = None) -> 
     require_capability(request, 'knowledge.map.read')
     workspace = await get_agent_for_request(request)
     project_root = _project_root_or_400(_game_service_or_404(workspace))
-    candidate = build_map_candidate_from_release(project_root, release_id=release_id)
+    try:
+        candidate = build_map_candidate_from_release(project_root, release_id=release_id)
+    except CurrentKnowledgeReleaseNotSetError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return KnowledgeMapCandidateResponse(mode='candidate_map', map=candidate, release_id=candidate.release_id)
 
 
