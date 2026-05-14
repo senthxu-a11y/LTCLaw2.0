@@ -78,6 +78,8 @@ def create_agent_scoped_router() -> APIRouter:
     from .game_doc_library import router as game_doc_library_router
     from .game_knowledge_base import router as game_knowledge_base_router
     from .game_knowledge_release import router as game_knowledge_release_router
+    from .game_knowledge_canonical import router as game_knowledge_canonical_router
+    from .game_knowledge_raw_index import router as game_knowledge_raw_index_router
     from .game_knowledge_release_candidates import router as game_knowledge_release_candidates_router
     from .game_knowledge_test_plans import router as game_knowledge_test_plans_router
     from .game_knowledge_map import router as game_knowledge_map_router
@@ -105,6 +107,8 @@ def create_agent_scoped_router() -> APIRouter:
     router.include_router(game_doc_library_router)
     router.include_router(game_knowledge_base_router)
     router.include_router(game_knowledge_release_router)
+    router.include_router(game_knowledge_canonical_router)
+    router.include_router(game_knowledge_raw_index_router)
     router.include_router(game_knowledge_release_candidates_router)
     router.include_router(game_knowledge_test_plans_router)
     router.include_router(game_knowledge_map_router)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Form, Input, Switch, Button, Card } from "@agentscope-ai/design";
-import { Modal, Space, Tag, Typography } from "antd";
+import { CopyOutlined } from "@ant-design/icons";
+import { Alert, Descriptions, Empty, InputNumber, Modal, Progress, Space, Tag, Typography } from "antd";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
@@ -8,13 +9,29 @@ import { useAppMessage } from "@/hooks/useAppMessage";
 import { gameApi } from "../../api/modules/game";
 import { agentsApi } from "../../api/modules/agents";
 import type {
+  ColdStartJobState,
   GameStorageSummary,
+  ProjectSetupStatusResponse,
+  ProjectTableSourceDiscoveryResponse,
   ProjectConfig,
   UserGameConfig,
   ValidationIssue,
 } from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
+import { copyText } from "../Chat/utils";
 import FormalMapWorkspace from "./components/FormalMapWorkspace";
+import {
+  buildProjectSetupDiagnosticsText,
+  canStartRuleOnlyColdStartBuild,
+  clearColdStartActiveJobId,
+  loadColdStartActiveJobId,
+  saveColdStartActiveJobId,
+  getProjectSetupDiscoverySummary,
+  isProjectSetupBuildBlocked,
+  joinProjectSetupLines,
+  splitProjectSetupLines,
+  toColdStartProgressView,
+} from "./components/projectSetupHelpers";
 import styles from "./GameProject.module.less";
 
 const { TextArea } = Input;
@@ -53,21 +70,61 @@ export default function GameProject() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSaving, setWizardSaving] = useState(false);
   const [wizardForm] = Form.useForm<{ id?: string; name: string }>();
+  const [setupStatus, setSetupStatus] = useState<ProjectSetupStatusResponse | null>(null);
+  const [discoveryResult, setDiscoveryResult] = useState<ProjectTableSourceDiscoveryResponse | null>(null);
+  const [projectRootInput, setProjectRootInput] = useState("");
+  const [tablesRootsInput, setTablesRootsInput] = useState("");
+  const [tablesIncludeInput, setTablesIncludeInput] = useState("");
+  const [tablesExcludeInput, setTablesExcludeInput] = useState("");
+  const [tablesHeaderRow, setTablesHeaderRow] = useState(1);
+  const [tablesPrimaryKeysInput, setTablesPrimaryKeysInput] = useState("");
+  const [savingProjectSetupRoot, setSavingProjectSetupRoot] = useState(false);
+  const [savingProjectSetupTables, setSavingProjectSetupTables] = useState(false);
+  const [discoveringSources, setDiscoveringSources] = useState(false);
+  const [activeColdStartJobId, setActiveColdStartJobId] = useState("");
+  const [coldStartJob, setColdStartJob] = useState<ColdStartJobState | null>(null);
+  const [creatingColdStartJob, setCreatingColdStartJob] = useState(false);
+  const [cancellingColdStartJob, setCancellingColdStartJob] = useState(false);
+  const [restoringColdStartJob, setRestoringColdStartJob] = useState(false);
+
+  const applySetupStatus = useCallback((status: ProjectSetupStatusResponse | null) => {
+    setSetupStatus(status);
+    if (!status) {
+      setProjectRootInput("");
+      setTablesRootsInput("");
+      setTablesIncludeInput("");
+      setTablesExcludeInput("");
+      setTablesHeaderRow(1);
+      setTablesPrimaryKeysInput("");
+      return;
+    }
+    setProjectRootInput(status.project_root ?? "");
+    setTablesRootsInput(joinProjectSetupLines(status.tables_config.roots));
+    setTablesIncludeInput(joinProjectSetupLines(status.tables_config.include));
+    setTablesExcludeInput(joinProjectSetupLines(status.tables_config.exclude));
+    setTablesHeaderRow(status.tables_config.header_row || 1);
+    setTablesPrimaryKeysInput(joinProjectSetupLines(status.tables_config.primary_key_candidates));
+  }, []);
 
   const fetchConfig = useCallback(async () => {
     if (!selectedAgent) {
+      applySetupStatus(null);
+      setDiscoveryResult(null);
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const [projectConfig, userConfig, storage] = await Promise.all([
+      const [projectConfig, userConfig, storage, projectSetupStatus] = await Promise.all([
         gameApi.getProjectConfig(selectedAgent),
         gameApi.getUserConfig(selectedAgent).catch(() => null),
         gameApi.getStorageSummary(selectedAgent).catch(() => null),
+        gameApi.getProjectSetupStatus(selectedAgent).catch(() => null),
       ]);
       setStorageSummary(storage);
+      applySetupStatus(projectSetupStatus);
+      setDiscoveryResult(null);
       if (projectConfig) {
         const uc: UserGameConfig = userConfig ?? { my_role: "consumer" };
         form.setFieldsValue({
@@ -113,7 +170,132 @@ export default function GameProject() {
     } finally {
       setLoading(false);
     }
-  }, [form, selectedAgent, t]);
+  }, [applySetupStatus, form, selectedAgent, t]);
+
+  const handleSaveProjectRoot = async () => {
+    if (!selectedAgent) {
+      return;
+    }
+    try {
+      setSavingProjectSetupRoot(true);
+      const response = await gameApi.saveProjectRoot(selectedAgent, projectRootInput.trim());
+      applySetupStatus(response.setup_status);
+      setDiscoveryResult(null);
+      message.success(t("gameProject.projectRootSaved", { defaultValue: "Local Project Root 已保存。" }));
+      await fetchConfig();
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : t("gameProject.saveFailed");
+      message.error(errMsg);
+    } finally {
+      setSavingProjectSetupRoot(false);
+    }
+  };
+
+  const handleSaveTablesSource = async () => {
+    if (!selectedAgent) {
+      return;
+    }
+    try {
+      setSavingProjectSetupTables(true);
+      const response = await gameApi.saveProjectTablesSource(selectedAgent, {
+        roots: splitProjectSetupLines(tablesRootsInput),
+        include: splitProjectSetupLines(tablesIncludeInput),
+        exclude: splitProjectSetupLines(tablesExcludeInput),
+        header_row: tablesHeaderRow,
+        primary_key_candidates: splitProjectSetupLines(tablesPrimaryKeysInput),
+      });
+      applySetupStatus(response.setup_status);
+      setDiscoveryResult(null);
+      message.success(t("gameProject.tablesSourceSaved", { defaultValue: "Tables Source 已保存。" }));
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : t("gameProject.saveFailed");
+      message.error(errMsg);
+    } finally {
+      setSavingProjectSetupTables(false);
+    }
+  };
+
+  const handleDiscoverSources = async () => {
+    if (!selectedAgent) {
+      return;
+    }
+    try {
+      setDiscoveringSources(true);
+      const response = await gameApi.discoverProjectTableSources(selectedAgent);
+      setDiscoveryResult(response);
+      message.success(t("gameProject.discoveryCompleted", { defaultValue: "Source Discovery 已完成。" }));
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : t("gameProject.loadFailed");
+      message.error(errMsg);
+    } finally {
+      setDiscoveringSources(false);
+    }
+  };
+
+  const handleCopyDiagnostics = async () => {
+    try {
+      await copyText(buildProjectSetupDiagnosticsText({ setupStatus, discovery: discoveryResult, coldStartJob }));
+      message.success(t("gameProject.copyDiagnosticsSuccess", { defaultValue: "诊断信息已复制。" }));
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : t("gameProject.copyDiagnosticsFailed", { defaultValue: "复制诊断信息失败。" });
+      message.error(errMsg);
+    }
+  };
+
+  const fetchColdStartJob = useCallback(async (jobId: string) => {
+    if (!selectedAgent || !jobId) {
+      return null;
+    }
+    const job = await gameApi.getColdStartJob(selectedAgent, jobId);
+    setColdStartJob(job);
+    setActiveColdStartJobId(job.job_id);
+    saveColdStartActiveJobId(selectedAgent, job.job_id);
+    return job;
+  }, [selectedAgent]);
+
+  const handleStartColdStartJob = async () => {
+    if (!selectedAgent) {
+      return;
+    }
+    try {
+      setCreatingColdStartJob(true);
+      const response = await gameApi.createColdStartJob(selectedAgent, { timeout_seconds: 300 });
+      setColdStartJob(response.job);
+      setActiveColdStartJobId(response.job.job_id);
+      saveColdStartActiveJobId(selectedAgent, response.job.job_id);
+      message.success(
+        response.reused_existing
+          ? t("gameProject.projectSetupColdStartReused", { defaultValue: "检测到同项目已有运行中的冷启动任务，已恢复该任务状态。" })
+          : t("gameProject.projectSetupColdStartStarted", { defaultValue: "Rule-only 冷启动构建已开始。" }),
+      );
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : t("gameProject.loadFailed");
+      message.error(errMsg);
+    } finally {
+      setCreatingColdStartJob(false);
+    }
+  };
+
+  const handleCancelColdStartJob = async () => {
+    if (!selectedAgent || !activeColdStartJobId) {
+      return;
+    }
+    try {
+      setCancellingColdStartJob(true);
+      const job = await gameApi.cancelColdStartJob(selectedAgent, activeColdStartJobId);
+      setColdStartJob(job);
+      message.success(t("gameProject.projectSetupColdStartCancelled", { defaultValue: "冷启动任务已取消。" }));
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : t("gameProject.loadFailed");
+      message.error(errMsg);
+    } finally {
+      setCancellingColdStartJob(false);
+    }
+  };
+
+  const handleRetryColdStartJob = async () => {
+    await handleStartColdStartJob();
+  };
 
   const storageGroups = storageSummary
     ? [
@@ -200,6 +382,15 @@ export default function GameProject() {
       tone: t("gameProject.workspaceEntryWorkbenchTone", { defaultValue: "Draft editing workspace" }),
     },
   ];
+
+  const discoverySummary = getProjectSetupDiscoverySummary(setupStatus, discoveryResult);
+  const buildBlocked = isProjectSetupBuildBlocked(setupStatus, discoveryResult);
+  const canStartColdStartBuild = canStartRuleOnlyColdStartBuild(setupStatus, discoveryResult);
+  const coldStartProgress = toColdStartProgressView(coldStartJob);
+  const availableTableFiles = discoveryResult?.table_files.filter((item) => item.status === "available") ?? [];
+  const unsupportedFiles = discoveryResult?.unsupported_files ?? [];
+  const excludedFiles = discoveryResult?.excluded_files ?? [];
+  const discoveryErrors = discoveryResult?.errors ?? [];
 
   const handleSave = async () => {
     try {
@@ -355,6 +546,44 @@ export default function GameProject() {
     fetchConfig();
   }, [fetchConfig]);
 
+  useEffect(() => {
+    if (!selectedAgent) {
+      setActiveColdStartJobId("");
+      setColdStartJob(null);
+      return;
+    }
+    const savedJobId = loadColdStartActiveJobId(selectedAgent);
+    if (!savedJobId) {
+      setActiveColdStartJobId("");
+      setColdStartJob(null);
+      return;
+    }
+    setActiveColdStartJobId(savedJobId);
+    setRestoringColdStartJob(true);
+    fetchColdStartJob(savedJobId)
+      .catch(() => {
+        clearColdStartActiveJobId(selectedAgent);
+        setActiveColdStartJobId("");
+        setColdStartJob(null);
+      })
+      .finally(() => setRestoringColdStartJob(false));
+  }, [fetchColdStartJob, selectedAgent]);
+
+  useEffect(() => {
+    if (!selectedAgent || !activeColdStartJobId) {
+      return;
+    }
+    if (!coldStartJob || !["pending", "running"].includes(coldStartJob.status)) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      void fetchColdStartJob(activeColdStartJobId).catch(() => undefined);
+    }, 1500);
+
+    return () => window.clearInterval(timer);
+  }, [activeColdStartJobId, coldStartJob, fetchColdStartJob, selectedAgent]);
+
   if (loading) {
     return (
       <div className={styles.gamePage}>
@@ -423,6 +652,292 @@ export default function GameProject() {
                   </Button>
                 </div>
               ))}
+            </div>
+
+            <div className={styles.projectSetupBlocks}>
+              <div className={styles.projectSetupBlock}>
+                <div className={styles.projectSetupBlockHeader}>
+                  <Text strong>{t("gameProject.projectSetupLocalRootTitle", { defaultValue: "Local Project Root" })}</Text>
+                  <Button size="small" type="primary" onClick={handleSaveProjectRoot} loading={savingProjectSetupRoot}>
+                    {t("common.save")}
+                  </Button>
+                </div>
+                <div className={styles.projectSetupHint}>
+                  {t("gameProject.projectSetupLocalRootHint", {
+                    defaultValue: "Project Setup 以本地项目目录为主入口，不把 SVN Root 作为主要配置入口。",
+                  })}
+                </div>
+                <Input
+                  value={projectRootInput}
+                  onChange={(event) => setProjectRootInput(event.target.value)}
+                  placeholder={t("gameProject.svnWorkingCopyPathPlaceholder", {
+                    defaultValue: LOCAL_PROJECT_DIRECTORY_LABEL,
+                  })}
+                />
+                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+                  <Descriptions.Item label={t("gameProject.projectKey", { defaultValue: "Project Key" })}>
+                    {setupStatus?.project_key || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectBundleRoot", { defaultValue: "Project Bundle Root" })}>
+                    {setupStatus?.project_bundle_root || "-"}
+                  </Descriptions.Item>
+                </Descriptions>
+              </div>
+
+              <div className={styles.projectSetupBlock}>
+                <div className={styles.projectSetupBlockHeader}>
+                  <Text strong>{t("gameProject.projectSetupTablesTitle", { defaultValue: "Tables Source" })}</Text>
+                  <Button size="small" type="primary" onClick={handleSaveTablesSource} loading={savingProjectSetupTables}>
+                    {t("common.save")}
+                  </Button>
+                </div>
+                <Form.Item label={t("gameProject.projectSetupTablesRoots", { defaultValue: "Roots" })}>
+                  <TextArea rows={2} value={tablesRootsInput} onChange={(event) => setTablesRootsInput(event.target.value)} />
+                </Form.Item>
+                <Form.Item label={t("gameProject.projectSetupTablesInclude", { defaultValue: "Include" })}>
+                  <TextArea rows={3} value={tablesIncludeInput} onChange={(event) => setTablesIncludeInput(event.target.value)} />
+                </Form.Item>
+                <Form.Item label={t("gameProject.projectSetupTablesExclude", { defaultValue: "Exclude" })}>
+                  <TextArea rows={3} value={tablesExcludeInput} onChange={(event) => setTablesExcludeInput(event.target.value)} />
+                </Form.Item>
+                <Form.Item label={t("gameProject.projectSetupHeaderRow", { defaultValue: "Header Row" })}>
+                  <InputNumber min={1} value={tablesHeaderRow} onChange={(value) => setTablesHeaderRow(Number(value || 1))} />
+                </Form.Item>
+                <Form.Item label={t("gameProject.projectSetupPrimaryKeys", { defaultValue: "Primary Key Candidates" })}>
+                  <TextArea rows={2} value={tablesPrimaryKeysInput} onChange={(event) => setTablesPrimaryKeysInput(event.target.value)} />
+                </Form.Item>
+              </div>
+
+              <div className={styles.projectSetupBlock}>
+                <div className={styles.projectSetupBlockHeader}>
+                  <Text strong>{t("gameProject.projectSetupDiscoveryTitle", { defaultValue: "Source Discovery" })}</Text>
+                  <Button size="small" onClick={handleDiscoverSources} loading={discoveringSources}>
+                    {t("gameProject.projectSetupDiscoverButton", { defaultValue: "检查数据源" })}
+                  </Button>
+                </div>
+                <div className={styles.projectSetupSummaryGrid}>
+                  <div className={styles.projectSetupSummaryItem}><span>discovered</span><strong>{discoverySummary.discovered_table_count}</strong></div>
+                  <div className={styles.projectSetupSummaryItem}><span>available</span><strong>{discoverySummary.available_table_count ?? 0}</strong></div>
+                  <div className={styles.projectSetupSummaryItem}><span>excluded</span><strong>{discoverySummary.excluded_table_count}</strong></div>
+                  <div className={styles.projectSetupSummaryItem}><span>unsupported</span><strong>{discoverySummary.unsupported_table_count}</strong></div>
+                  <div className={styles.projectSetupSummaryItem}><span>errors</span><strong>{discoverySummary.error_count}</strong></div>
+                </div>
+                {(discoverySummary.discovered_table_count <= 0 || (discoverySummary.available_table_count ?? 0) <= 0) ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    message={t("gameProject.projectSetupNoTablesMessage", {
+                      defaultValue: "没有发现表文件，当前不能继续后续构建阶段。",
+                    })}
+                  />
+                ) : null}
+                <div className={styles.projectSetupListGroup}>
+                  <div className={styles.projectSetupListSection}>
+                    <Text strong>{t("gameProject.projectSetupAvailableList", { defaultValue: "Available" })}</Text>
+                    {availableTableFiles.length > 0 ? (
+                      availableTableFiles.map((item) => (
+                        <div key={`available-${item.source_path}`} className={styles.projectSetupListItem}>
+                          <span>{item.source_path}</span>
+                          <Tag color="green">{item.reason}</Tag>
+                        </div>
+                      ))
+                    ) : (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("gameProject.projectSetupNoAvailableTables", { defaultValue: "没有发现表文件" })} />
+                    )}
+                  </div>
+                  <div className={styles.projectSetupListSection}>
+                    <Text strong>{t("gameProject.projectSetupExcludedList", { defaultValue: "Excluded" })}</Text>
+                    {excludedFiles.length > 0 ? (
+                      excludedFiles.map((item) => (
+                        <div key={`excluded-${item.source_path}`} className={styles.projectSetupListItem}>
+                          <span>{item.source_path}</span>
+                          <Tag>{item.reason}</Tag>
+                        </div>
+                      ))
+                    ) : (
+                      <div className={styles.projectSetupListEmpty}>-</div>
+                    )}
+                  </div>
+                  <div className={styles.projectSetupListSection}>
+                    <Text strong>{t("gameProject.projectSetupUnsupportedList", { defaultValue: "Unsupported" })}</Text>
+                    {unsupportedFiles.length > 0 ? (
+                      unsupportedFiles.map((item) => (
+                        <div key={`unsupported-${item.source_path}`} className={styles.projectSetupListItem}>
+                          <span>{item.source_path}</span>
+                          <Tag color="orange">{item.reason}</Tag>
+                        </div>
+                      ))
+                    ) : (
+                      <div className={styles.projectSetupListEmpty}>-</div>
+                    )}
+                  </div>
+                  <div className={styles.projectSetupListSection}>
+                    <Text strong>{t("gameProject.projectSetupErrorsList", { defaultValue: "Errors" })}</Text>
+                    {discoveryErrors.length > 0 ? (
+                      discoveryErrors.map((item, index) => (
+                        <div key={`error-${item.source_path || index}`} className={styles.projectSetupListItem}>
+                          <span>{item.source_path || "-"}</span>
+                          <Tag color="red">{item.reason}</Tag>
+                        </div>
+                      ))
+                    ) : (
+                      <div className={styles.projectSetupListEmpty}>-</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className={styles.projectSetupBlock}>
+                <div className={styles.projectSetupBlockHeader}>
+                  <Text strong>{t("gameProject.projectSetupBuildPipelineTitle", { defaultValue: "Build Pipeline Status" })}</Text>
+                  <Space wrap>
+                    <Button
+                      size="small"
+                      type="primary"
+                      onClick={handleStartColdStartJob}
+                      disabled={!canStartColdStartBuild || coldStartProgress.isRunning}
+                      loading={creatingColdStartJob}
+                    >
+                      {t("gameProject.projectSetupRuleOnlyBuildButton", { defaultValue: "Rule-only 冷启动构建" })}
+                    </Button>
+                    <Button size="small" icon={<CopyOutlined />} onClick={handleCopyDiagnostics}>
+                      {t("gameProject.projectSetupCopyDiagnostics", { defaultValue: "复制诊断信息" })}
+                    </Button>
+                  </Space>
+                </div>
+                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+                  <Descriptions.Item label={t("gameProject.projectSetupBlockingReason", { defaultValue: "Blocking Reason" })}>
+                    {setupStatus?.build_readiness.blocking_reason || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupNextAction", { defaultValue: "Next Action" })}>
+                    {setupStatus?.build_readiness.next_action || "-"}
+                  </Descriptions.Item>
+                </Descriptions>
+                {buildBlocked ? (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message={t("gameProject.projectSetupBlockedMessage", {
+                      defaultValue: "尚未发现可用表文件，后续构建入口保持不可继续状态。",
+                    })}
+                  />
+                ) : (
+                  <Alert
+                    type="success"
+                    showIcon
+                    message={t("gameProject.projectSetupReadyMessage", {
+                      defaultValue: "Source Discovery 已发现可用表文件，可以继续后续 rule-only 构建链路。",
+                    })}
+                  />
+                )}
+                {!canStartColdStartBuild ? (
+                  <div className={styles.projectSetupHint}>
+                    {t("gameProject.projectSetupRuleOnlyBuildBlocked", {
+                      defaultValue: "未配置有效 Project Root / Tables Source，或当前 Source Discovery 没有 available 表，因此 Rule-only 冷启动构建按钮不可用。",
+                    })}
+                  </div>
+                ) : null}
+                {restoringColdStartJob ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    message={t("gameProject.projectSetupRestoringJob", { defaultValue: "正在恢复上次冷启动任务状态。" })}
+                  />
+                ) : null}
+                {coldStartJob ? (
+                  <div className={styles.projectSetupJobPanel}>
+                    <Progress percent={coldStartProgress.percent} status={coldStartProgress.statusTone} />
+                    <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+                      <Descriptions.Item label={t("gameProject.projectSetupJobId", { defaultValue: "Job ID" })}>
+                        {coldStartJob.job_id}
+                      </Descriptions.Item>
+                      <Descriptions.Item label={t("gameProject.projectSetupJobStatus", { defaultValue: "Status" })}>
+                        {coldStartJob.status}
+                      </Descriptions.Item>
+                      <Descriptions.Item label={t("gameProject.projectSetupJobStage", { defaultValue: "Stage" })}>
+                        {coldStartJob.stage}
+                      </Descriptions.Item>
+                      <Descriptions.Item label={t("gameProject.projectSetupJobMessage", { defaultValue: "Message" })}>
+                        {coldStartJob.message}
+                      </Descriptions.Item>
+                      <Descriptions.Item label={t("gameProject.projectSetupJobCurrentFile", { defaultValue: "Current File" })}>
+                        {coldStartJob.current_file || "-"}
+                      </Descriptions.Item>
+                      <Descriptions.Item label={t("gameProject.projectSetupJobNextAction", { defaultValue: "Next Action" })}>
+                        {coldStartJob.next_action || "-"}
+                      </Descriptions.Item>
+                    </Descriptions>
+                    <div className={styles.projectSetupSummaryGrid}>
+                      <div className={styles.projectSetupSummaryItem}><span>discovered</span><strong>{coldStartJob.counts.discovered_table_count}</strong></div>
+                      <div className={styles.projectSetupSummaryItem}><span>raw</span><strong>{coldStartJob.counts.raw_table_index_count}</strong></div>
+                      <div className={styles.projectSetupSummaryItem}><span>canonical</span><strong>{coldStartJob.counts.canonical_table_count}</strong></div>
+                      <div className={styles.projectSetupSummaryItem}><span>candidate</span><strong>{coldStartJob.counts.candidate_table_count}</strong></div>
+                      <div className={styles.projectSetupSummaryItem}><span>timeout</span><strong>{coldStartJob.timeout_seconds}s</strong></div>
+                    </div>
+                    <div className={styles.projectSetupJobActions}>
+                      <Button
+                        size="small"
+                        onClick={handleCancelColdStartJob}
+                        disabled={!coldStartProgress.canCancel}
+                        loading={cancellingColdStartJob}
+                      >
+                        {t("common.cancel")}
+                      </Button>
+                      <Button size="small" onClick={handleRetryColdStartJob} disabled={!coldStartProgress.canRetry}>
+                        {t("common.retry")}
+                      </Button>
+                      <Button size="small" onClick={() => navigate("/game/map")} disabled={coldStartJob.status !== "succeeded"}>
+                        {t("gameProject.projectSetupOpenCandidateMap", { defaultValue: "查看 Candidate Map" })}
+                      </Button>
+                      <Button size="small" onClick={() => navigate("/game/map")} disabled={coldStartJob.status !== "succeeded"}>
+                        {t("gameProject.projectSetupOpenDiffReview", { defaultValue: "查看 Diff Review" })}
+                      </Button>
+                      <Button size="small" onClick={() => navigate("/game/map")} disabled={coldStartJob.status !== "succeeded"}>
+                        {t("gameProject.projectSetupSaveFormalMapEntry", { defaultValue: "保存 Formal Map" })}
+                      </Button>
+                    </div>
+                    {coldStartJob.warnings.length > 0 ? (
+                      <div className={styles.projectSetupListSection}>
+                        <Text strong>{t("gameProject.projectSetupWarningsList", { defaultValue: "Warnings" })}</Text>
+                        {coldStartJob.warnings.map((item) => (
+                          <div key={item} className={styles.projectSetupListItem}>
+                            <span>{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {coldStartJob.errors.length > 0 ? (
+                      <div className={styles.projectSetupListSection}>
+                        <Text strong>{t("gameProject.projectSetupJobErrors", { defaultValue: "Job Errors" })}</Text>
+                        {coldStartJob.errors.map((item, index) => (
+                          <div key={`${item.error}-${index}`} className={styles.projectSetupListItem}>
+                            <span>{[item.stage, item.error, item.source_path].filter(Boolean).join(" / ")}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {coldStartJob.status === "succeeded" ? (
+                      <Alert
+                        type="success"
+                        showIcon
+                        message={t("gameProject.projectSetupColdStartSuccess", {
+                          defaultValue: "Rule-only 冷启动构建完成。可以查看 Candidate Map / Diff Review，并在 Map Editor 中显式执行 Save Formal Map。",
+                        })}
+                        description={
+                          <div className={styles.projectSetupSuccessMeta}>
+                            <div>{`candidate_table_count: ${coldStartProgress.candidateTableCount}`}</div>
+                            <div>{`candidate_refs: ${coldStartJob.candidate_refs.join(", ") || "-"}`}</div>
+                          </div>
+                        }
+                      />
+                    ) : null}
+                  </div>
+                ) : (
+                  <Button disabled={buildBlocked} className={styles.projectSetupDisabledBuildButton}>
+                    {t("gameProject.projectSetupSubsequentBuildEntry", { defaultValue: "后续构建入口状态" })}
+                  </Button>
+                )}
+              </div>
             </div>
           </Card>
 

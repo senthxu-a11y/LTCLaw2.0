@@ -176,11 +176,10 @@ class TableIndexer:
         wb = openpyxl.load_workbook(file_path, data_only=True)
         ws = wb.active
         data = [list(row) for row in ws.iter_rows(values_only=True)]
-        data = [row for row in data if any(c is not None and str(c).strip() for c in row)]
         return data, len(data)
 
     def _read_csv_file(self, file_path: Path) -> tuple:
-        encodings = ["utf-8", "gbk", "gb2312", "utf-8-sig"]
+        encodings = ["utf-8-sig", "utf-8", "gbk", "gb2312"]
         content = None
         for enc in encodings:
             try:
@@ -197,8 +196,20 @@ class TableIndexer:
             delimiter = ","
         reader = csv.reader(content.splitlines(), delimiter=delimiter)
         data = [row for row in reader]
-        data = [row for row in data if any((c or "").strip() for c in row)]
         return data, len(data)
+
+    def _build_rule_only_field_descriptions(self, fields_data: list, txt_docs: dict[str, str]) -> dict:
+        descriptions = {}
+        for field_data in fields_data:
+            name = field_data["name"]
+            descriptions[name] = {
+                "description": txt_docs.get(name, f"{name}字段"),
+                "confidence": 0.1,
+            }
+        return descriptions
+
+    def _build_rule_only_summary(self, table_name: str) -> tuple[str, float]:
+        return f"{table_name}数据配置表", 0.1
 
     def _analyze_id_ranges(self, primary_key_values: list) -> list:
         if not primary_key_values:
@@ -295,6 +306,7 @@ class TableIndexer:
         svn_root: Path,
         svn_revision: int,
         prev: Optional[TableIndex] = None,
+        rule_only: bool = False,
     ) -> TableIndex:
         logger.info(f"开始索引表格: {source}")
         file_hash = self._calculate_file_hash(source)
@@ -315,6 +327,8 @@ class TableIndexer:
             raise ValueError(f"文件为空: {source}")
         header_row_idx = self.project.table_convention.header_row - 1
         if len(raw_data) <= header_row_idx:
+            raise ValueError(f"文件行数不足: {source}")
+        if len(raw_data) <= header_row_idx + 1:
             raise ValueError(f"文件行数不足: {source}")
         headers = [
             str(c).strip() if c is not None else f"Column_{i}"
@@ -350,7 +364,9 @@ class TableIndexer:
                     samples.append(str(v).strip())
             fields_data.append({"name": header, "type": ftype, "sample_values": samples})
         table_name = source.stem
-        if txt_docs:
+        if rule_only:
+            descs = self._build_rule_only_field_descriptions(fields_data, txt_docs)
+        elif txt_docs:
             missing = [fd for fd in fields_data if fd["name"] not in txt_docs]
             llm_descs = (
                 await self._describe_fields_with_llm(table_name, missing) if missing else {}
@@ -401,7 +417,10 @@ class TableIndexer:
                 if i < len(headers):
                     d[headers[i]] = v
             sample_rows.append(d)
-        summary, summary_conf = await self._generate_table_summary(table_name, fields, sample_rows)
+        if rule_only:
+            summary, summary_conf = self._build_rule_only_summary(table_name)
+        else:
+            summary, summary_conf = await self._generate_table_summary(table_name, fields, sample_rows)
         return TableIndex(
             table_name=table_name,
             source_path=str(relative_path).replace("\\", "/"),
@@ -416,7 +435,7 @@ class TableIndexer:
             fields=fields,
             id_ranges=id_ranges,
             last_indexed_at=datetime.now(),
-            indexer_model=self._get_indexer_model_name(),
+            indexer_model='rule_only' if rule_only else self._get_indexer_model_name(),
         )
 
     def _get_indexer_model_name(self) -> str:
@@ -428,7 +447,7 @@ class TableIndexer:
         except Exception:
             return "unknown_model"
 
-    async def index_batch(self, sources: list, svn_root: Path, svn_revision: int) -> list:
+    async def index_batch(self, sources: list, svn_root: Path, svn_revision: int, rule_only: bool = False) -> list:
         if not sources:
             return []
         logger.info(f"开始批量索引: {len(sources)}个文件")
@@ -437,7 +456,7 @@ class TableIndexer:
         async def _one(src: Path):
             async with semaphore:
                 try:
-                    return await self.index_one(src, svn_root, svn_revision)
+                    return await self.index_one(src, svn_root, svn_revision, rule_only=rule_only)
                 except Exception as e:
                     logger.error(f"索引文件失败: {src}, {e}")
                     return None

@@ -13,9 +13,22 @@ from ltclaw_gy_x.app.agent_context import get_agent_for_request
 from ltclaw_gy_x.app.routers import game_knowledge_release as release_router_module
 from ltclaw_gy_x.app.routers.game_project import router
 from ltclaw_gy_x.app.routers.game_knowledge_release import router as release_router
-from ltclaw_gy_x.game.config import UserGameConfig, load_project_config
+from ltclaw_gy_x.game.config import (
+    DEFAULT_TABLES_EXCLUDE_PATTERNS,
+    DEFAULT_TABLES_INCLUDE_PATTERNS,
+    DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES,
+    ProjectTablesSourceConfig,
+    UserGameConfig,
+    load_project_config,
+    save_project_tables_source_config,
+)
 from ltclaw_gy_x.game.models import KnowledgeManifest, KnowledgeSystem
-from ltclaw_gy_x.game.paths import get_project_config_path
+from ltclaw_gy_x.game.paths import (
+    get_project_bundle_root,
+    get_project_config_path,
+    get_project_key,
+    get_project_tables_source_path,
+)
 
 
 class _Service:
@@ -33,6 +46,10 @@ class _Service:
 
 def _workspace(service):
     return SimpleNamespace(service_manager=SimpleNamespace(services={'game_service': service}))
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
 
 
 @pytest.fixture
@@ -120,6 +137,401 @@ async def test_project_config_api_persists_external_provider_config_and_omits_se
     saved_text = config_path.read_text(encoding='utf-8')
     assert 'REQUEST_SECRET_SHOULD_NOT_BE_SAVED' not in saved_text
     assert 'NESTED_REQUEST_SECRET_SHOULD_NOT_BE_SAVED' not in saved_text
+
+
+@pytest.mark.asyncio
+async def test_setup_status_returns_defaults_before_project_root_is_configured(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    service = _Service(tmp_path / 'missing-root')
+    service.user_config.svn_local_root = None
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.get('/api/game/project/setup-status')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['project_root'] is None
+    assert payload['project_root_exists'] is False
+    assert payload['project_bundle_root'] is None
+    assert payload['project_key'] is None
+    assert payload['tables_config'] == {
+        'roots': [],
+        'include': DEFAULT_TABLES_INCLUDE_PATTERNS,
+        'exclude': DEFAULT_TABLES_EXCLUDE_PATTERNS,
+        'header_row': 1,
+        'primary_key_candidates': DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES,
+    }
+    assert payload['discovery'] == {
+        'discovered_table_count': 0,
+        'unsupported_table_count': 0,
+        'excluded_table_count': 0,
+        'error_count': 0,
+    }
+    assert payload['build_readiness'] == {
+        'blocking_reason': 'project_root_not_configured',
+        'next_action': 'set_project_root',
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('project_root', 'detail_fragment'),
+    [
+        ('', 'must not be empty'),
+        ('svn://repo/path', 'local filesystem path'),
+        ('http://example.com/project', 'local filesystem path'),
+        ('https://example.com/project', 'local filesystem path'),
+        ('/definitely/not/there', 'does not exist'),
+    ],
+)
+async def test_put_project_root_rejects_invalid_values(app, client, monkeypatch, tmp_path, project_root, detail_fragment):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    service = _Service(tmp_path / 'unused-root')
+    service.user_config.svn_local_root = None
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.put('/api/game/project/root', json={'project_root': project_root})
+
+    assert response.status_code == 400
+    assert detail_fragment in response.json()['detail']
+
+
+@pytest.mark.asyncio
+async def test_put_project_root_saves_and_returns_setup_status(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    service = _Service(project_root)
+    service.user_config.svn_local_root = None
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.put('/api/game/project/root', json={'project_root': str(project_root)})
+        readback = await client.get('/api/game/project/setup-status')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['project_key'] == get_project_key(project_root)
+    assert payload['project_bundle_root'] == str(get_project_bundle_root(project_root))
+    assert payload['setup_status']['project_root'] == str(project_root)
+    assert payload['setup_status']['project_root_exists'] is True
+    assert payload['setup_status']['build_readiness'] == {
+        'blocking_reason': 'no_table_sources_found',
+        'next_action': 'configure_tables_source',
+    }
+    assert readback.status_code == 200
+    assert readback.json()['project_root'] == str(project_root)
+
+
+@pytest.mark.asyncio
+async def test_put_project_root_normalizes_backslashes_and_supports_spaces_and_chinese(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / '中文 项目' / 'Example Root'
+    project_root.mkdir(parents=True)
+    service = _Service(project_root)
+    service.user_config.svn_local_root = None
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    backslash_path = str(project_root).replace('/', '\\')
+
+    async with client:
+        response = await client.put('/api/game/project/root', json={'project_root': backslash_path})
+        readback = await client.get('/api/game/project/setup-status')
+
+    assert response.status_code == 200
+    assert response.json()['setup_status']['project_root'] == str(project_root)
+    assert readback.status_code == 200
+    assert readback.json()['project_root'] == str(project_root)
+
+
+def test_project_root_path_normalizes_windows_style_backslashes():
+    from ltclaw_gy_x.app.routers.game_project import _project_root_path
+
+    assert _project_root_path(r'E:\test_project') == Path('E:/test_project')
+
+
+@pytest.mark.asyncio
+async def test_put_tables_source_requires_project_root(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    service = _Service(tmp_path / 'unused-root')
+    service.user_config.svn_local_root = None
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.put(
+            '/api/game/project/sources/tables',
+            json={'roots': ['Tables'], 'header_row': 1},
+        )
+
+    assert response.status_code == 400
+    assert 'project_root must be configured' in response.json()['detail']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('payload', 'detail_fragment'),
+    [
+        ({'roots': [], 'header_row': 1}, 'roots must not be empty'),
+        ({'roots': ['Tables'], 'header_row': 0}, 'header_row must be greater than or equal to 1'),
+    ],
+)
+async def test_put_tables_source_rejects_invalid_config(app, client, monkeypatch, tmp_path, payload, detail_fragment):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    service = _Service(project_root)
+    service.user_config.svn_local_root = str(project_root)
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.put('/api/game/project/sources/tables', json=payload)
+
+    assert response.status_code == 400
+    assert detail_fragment in response.json()['detail']
+
+
+@pytest.mark.asyncio
+async def test_put_tables_source_persists_config_and_setup_status_reads_it_back(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    service = _Service(project_root)
+    service.user_config.svn_local_root = str(project_root)
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+    payload = {
+        'roots': ['Tables', 'Excel'],
+        'include': ['**/*.csv', '**/*.xlsx'],
+        'exclude': ['**/~$*', '**/.backup/**', '**/ignored/**'],
+        'header_row': 2,
+        'primary_key_candidates': ['ID', 'HeroID'],
+    }
+
+    async with client:
+        response = await client.put('/api/game/project/sources/tables', json=payload)
+        readback = await client.get('/api/game/project/setup-status')
+
+    assert response.status_code == 200
+    response_payload = response.json()
+    assert response_payload['effective_config'] == payload
+    assert response_payload['setup_status']['tables_config'] == payload
+    assert response_payload['setup_status']['build_readiness'] == {
+        'blocking_reason': None,
+        'next_action': 'ready_for_discovery',
+    }
+    tables_config_path = get_project_tables_source_path(project_root)
+    assert response_payload['config_path'] == str(tables_config_path)
+    assert tables_config_path.exists()
+    saved_text = tables_config_path.read_text(encoding='utf-8')
+    assert 'Tables' in saved_text
+    assert 'HeroID' in saved_text
+    assert readback.status_code == 200
+    assert readback.json()['tables_config'] == payload
+
+
+@pytest.mark.asyncio
+async def test_source_discovery_finds_minimal_project_sample(app, client):
+    project_root = _repo_root() / 'examples' / 'minimal_project'
+    service = _Service(project_root)
+    service.user_config.svn_local_root = str(project_root)
+    save_project_tables_source_config(
+        project_root,
+        ProjectTablesSourceConfig(roots=['Tables'], include=['**/*.csv']),
+    )
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.post('/api/game/project/sources/discover')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['success'] is True
+    assert payload['project_root'] == str(project_root)
+    assert payload['table_files'] == [
+        {
+            'source_path': 'Tables/HeroTable.csv',
+            'format': 'csv',
+            'status': 'available',
+            'reason': 'matched_supported_format',
+        }
+    ]
+    assert payload['excluded_files'] == []
+    assert payload['unsupported_files'] == []
+    assert payload['errors'] == []
+    assert payload['summary'] == {
+        'discovered_table_count': 1,
+        'available_table_count': 1,
+        'excluded_table_count': 0,
+        'unsupported_table_count': 0,
+        'error_count': 0,
+    }
+    assert payload['next_action'] == 'run_raw_index'
+
+
+@pytest.mark.asyncio
+async def test_source_discovery_marks_temp_excel_excluded_and_xls_unsupported(app, client, tmp_path):
+    project_root = tmp_path / 'demo-project'
+    tables_dir = project_root / 'Tables'
+    tables_dir.mkdir(parents=True)
+    (tables_dir / 'HeroTable.csv').write_text('ID,Name\n1,HeroA\n', encoding='utf-8')
+    (tables_dir / '~$Temp.xlsx').write_text('placeholder', encoding='utf-8')
+    (tables_dir / 'OldTable.xls').write_text('legacy', encoding='utf-8')
+    service = _Service(project_root)
+    service.user_config.svn_local_root = str(project_root)
+    save_project_tables_source_config(
+        project_root,
+        ProjectTablesSourceConfig(roots=['Tables'], include=['**/*']),
+    )
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.post('/api/game/project/sources/discover')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['success'] is True
+    assert payload['summary'] == {
+        'discovered_table_count': 2,
+        'available_table_count': 1,
+        'excluded_table_count': 1,
+        'unsupported_table_count': 1,
+        'error_count': 0,
+    }
+    assert payload['next_action'] == 'run_raw_index'
+    assert {
+        'source_path': 'Tables/~$Temp.xlsx',
+        'format': 'xlsx',
+        'status': 'excluded',
+        'reason': 'matched_exclude_pattern',
+    } in payload['excluded_files']
+    unsupported_entry = {
+        'source_path': 'Tables/OldTable.xls',
+        'format': 'xls',
+        'status': 'unsupported',
+        'reason': 'xls_format_not_supported',
+    }
+    assert unsupported_entry in payload['unsupported_files']
+    assert unsupported_entry in payload['table_files']
+
+
+@pytest.mark.asyncio
+async def test_source_discovery_returns_configure_action_when_include_misses(app, client, tmp_path):
+    project_root = tmp_path / 'demo-project'
+    tables_dir = project_root / 'Tables'
+    tables_dir.mkdir(parents=True)
+    (tables_dir / 'HeroTable.csv').write_text('ID,Name\n1,HeroA\n', encoding='utf-8')
+    service = _Service(project_root)
+    service.user_config.svn_local_root = str(project_root)
+    save_project_tables_source_config(
+        project_root,
+        ProjectTablesSourceConfig(roots=['Tables'], include=['**/*.json']),
+    )
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.post('/api/game/project/sources/discover')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['success'] is True
+    assert payload['table_files'] == []
+    assert payload['summary']['discovered_table_count'] == 0
+    assert payload['summary']['available_table_count'] == 0
+    assert payload['next_action'] == 'configure_tables_source'
+
+
+@pytest.mark.asyncio
+async def test_source_discovery_scans_chinese_paths(app, client, tmp_path):
+    project_root = tmp_path / '中文项目'
+    tables_dir = project_root / 'Tables'
+    tables_dir.mkdir(parents=True)
+    (tables_dir / '英雄表.csv').write_text('ID,Name\n1,英雄A\n', encoding='utf-8')
+    service = _Service(project_root)
+    service.user_config.svn_local_root = str(project_root)
+    save_project_tables_source_config(
+        project_root,
+        ProjectTablesSourceConfig(roots=['Tables'], include=['**/*.csv']),
+    )
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.post('/api/game/project/sources/discover')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['success'] is True
+    assert payload['table_files'][0]['source_path'] == 'Tables/英雄表.csv'
+    assert payload['next_action'] == 'run_raw_index'
+
+
+@pytest.mark.asyncio
+async def test_source_discovery_matches_uppercase_csv_extension_and_backslash_root(app, client, tmp_path):
+    project_root = tmp_path / 'demo project'
+    tables_dir = project_root / 'Tables'
+    tables_dir.mkdir(parents=True)
+    (tables_dir / 'HeroTable.CSV').write_text('ID,Name\n1,HeroA\n', encoding='utf-8')
+    service = _Service(project_root)
+    service.user_config.svn_local_root = str(project_root)
+    save_project_tables_source_config(
+        project_root,
+        ProjectTablesSourceConfig(roots=['Tables\\'], include=['**/*.csv']),
+    )
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.post('/api/game/project/sources/discover')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['success'] is True
+    assert payload['table_files'] == [
+        {
+            'source_path': 'Tables/HeroTable.CSV',
+            'format': 'csv',
+            'status': 'available',
+            'reason': 'matched_supported_format',
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_source_discovery_handles_missing_project_root_without_unhandled_exception(app, client, tmp_path):
+    service = _Service(tmp_path / 'missing-root')
+    service.user_config.svn_local_root = None
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.post('/api/game/project/sources/discover')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['success'] is False
+    assert payload['project_root'] is None
+    assert payload['table_files'] == []
+    assert payload['errors'] == [{'reason': 'project_root_not_configured'}]
+    assert payload['summary']['error_count'] == 1
+    assert payload['next_action'] == 'configure_tables_source'
+
+
+@pytest.mark.asyncio
+async def test_source_discovery_handles_missing_table_roots_without_unhandled_exception(app, client, tmp_path):
+    project_root = tmp_path / 'demo-project'
+    project_root.mkdir()
+    service = _Service(project_root)
+    service.user_config.svn_local_root = str(project_root)
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.post('/api/game/project/sources/discover')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['success'] is False
+    assert payload['project_root'] == str(project_root)
+    assert payload['errors'] == [{'reason': 'tables_roots_not_configured'}]
+    assert payload['summary']['error_count'] == 1
+    assert payload['next_action'] == 'configure_tables_source'
 
 
 def test_file_backed_external_provider_config_keeps_project_and_release_routes_healthy(monkeypatch, tmp_path):

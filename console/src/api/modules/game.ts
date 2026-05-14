@@ -1,6 +1,13 @@
 ﻿import { request } from '../request';
 import type { 
+  ColdStartJobCreateResponse,
+  ColdStartJobState,
   ProjectConfig, 
+  ProjectSetupStatusResponse,
+  ProjectTableSourceDiscoveryResponse,
+  ProjectTablesSourceConfig,
+  SaveProjectRootResponse,
+  SaveProjectTablesSourceResponse,
   UserGameConfig, 
   GameStorageSummary,
   ValidationIssue,
@@ -47,6 +54,53 @@ export const gameApi = {
   
   async getUserConfig(agentId: string): Promise<UserGameConfig> {
     return request<UserGameConfig>(`/agents/${agentId}/game/project/user_config`);
+  },
+
+  async getProjectSetupStatus(agentId: string): Promise<ProjectSetupStatusResponse> {
+    return request<ProjectSetupStatusResponse>(`/agents/${agentId}/game/project/setup-status`);
+  },
+
+  async saveProjectRoot(agentId: string, projectRoot: string): Promise<SaveProjectRootResponse> {
+    return request<SaveProjectRootResponse>(`/agents/${agentId}/game/project/root`, {
+      method: "PUT",
+      body: JSON.stringify({ project_root: projectRoot }),
+    });
+  },
+
+  async saveProjectTablesSource(
+    agentId: string,
+    config: ProjectTablesSourceConfig,
+  ): Promise<SaveProjectTablesSourceResponse> {
+    return request<SaveProjectTablesSourceResponse>(`/agents/${agentId}/game/project/sources/tables`, {
+      method: "PUT",
+      body: JSON.stringify(config),
+    });
+  },
+
+  async discoverProjectTableSources(agentId: string): Promise<ProjectTableSourceDiscoveryResponse> {
+    return request<ProjectTableSourceDiscoveryResponse>(`/agents/${agentId}/game/project/sources/discover`, {
+      method: "POST",
+    });
+  },
+
+  async createColdStartJob(
+    agentId: string,
+    body: { timeout_seconds?: number } = {},
+  ): Promise<ColdStartJobCreateResponse> {
+    return request<ColdStartJobCreateResponse>(`/agents/${agentId}/game/knowledge/map/cold-start-jobs`, {
+      method: "POST",
+      body: JSON.stringify({ timeout_seconds: body.timeout_seconds ?? 300 }),
+    });
+  },
+
+  async getColdStartJob(agentId: string, jobId: string): Promise<ColdStartJobState> {
+    return request<ColdStartJobState>(`/agents/${agentId}/game/knowledge/map/cold-start-jobs/${encodeURIComponent(jobId)}`);
+  },
+
+  async cancelColdStartJob(agentId: string, jobId: string): Promise<ColdStartJobState> {
+    return request<ColdStartJobState>(`/agents/${agentId}/game/knowledge/map/cold-start-jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST",
+    });
   },
   
   async saveUserConfig(agentId: string, config: UserGameConfig): Promise<{ message: string }> {

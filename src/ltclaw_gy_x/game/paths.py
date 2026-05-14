@@ -151,6 +151,14 @@ def get_project_raw_tables_dir(project_root: Path) -> Path:
     return get_project_raw_indexes_dir(project_root) / "tables"
 
 
+def get_project_raw_table_indexes_path(project_root: Path) -> Path:
+    return get_project_raw_indexes_dir(project_root) / "table_indexes.json"
+
+
+def get_project_raw_table_index_path(project_root: Path, table_id: str) -> Path:
+    return get_project_raw_tables_dir(project_root) / f"{_sanitize_path_component(table_id, 'table')}.json"
+
+
 def get_project_raw_scripts_dir(project_root: Path) -> Path:
     return get_project_raw_indexes_dir(project_root) / "scripts"
 
@@ -274,6 +282,11 @@ def get_project_runtime_llm_cache_dir(project_root: Path) -> Path:
 
 def get_project_runtime_build_jobs_dir(project_root: Path) -> Path:
     return get_project_runtime_dir(project_root) / "build_jobs"
+
+
+def get_project_runtime_build_job_path(project_root: Path, job_id: str) -> Path:
+    safe_job_id = _sanitize_path_component(str(job_id or ""), "job")
+    return get_project_runtime_build_jobs_dir(project_root) / f"{safe_job_id}.json"
 
 
 def get_project_runtime_temp_dir(project_root: Path) -> Path:

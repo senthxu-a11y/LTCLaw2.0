@@ -4,17 +4,31 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from ltclaw_gy_x.app.agent_context import get_agent_for_request
 from ltclaw_gy_x.game.config import (
+    DEFAULT_TABLES_EXCLUDE_PATTERNS,
+    DEFAULT_TABLES_INCLUDE_PATTERNS,
+    DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES,
     ProjectConfig,
+    ProjectTablesSourceConfig,
     UserGameConfig,
     ValidationIssue,
+    load_project_tables_source_config,
     save_project_config,
+    save_project_tables_source_config,
     save_user_config,
     validate_project_config,
 )
-from ltclaw_gy_x.game.paths import get_project_config_path, get_storage_summary
+from ltclaw_gy_x.game.paths import (
+    get_project_bundle_root,
+    get_project_config_path,
+    get_project_key,
+    get_project_tables_source_path,
+    get_storage_summary,
+)
+from ltclaw_gy_x.game.source_discovery import discover_table_sources
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +38,20 @@ PROJECT_CONFIG_COMMIT_FROZEN_REASON = (
     "Project config commit is frozen in P0-01. LTClaw keeps reading legacy local project path fields, but SVN add/commit must run outside LTClaw."
 )
 
+REMOTE_PATH_PREFIXES = ("svn://", "http://", "https://", "file://")
+
+
+class ProjectRootUpdateRequest(BaseModel):
+    project_root: str
+
+
+class ProjectTablesSourceConfigRequest(BaseModel):
+    roots: list[str]
+    include: list[str] | None = None
+    exclude: list[str] | None = None
+    header_row: int = 1
+    primary_key_candidates: list[str] | None = None
+
 
 def _game_service_or_404(workspace):
     svc = workspace.service_manager.services.get("game_service")
@@ -32,9 +60,176 @@ def _game_service_or_404(workspace):
     return svc
 
 
+def _configured_project_root(game_service) -> str | None:
+    project_root = str(getattr(game_service.user_config, "svn_local_root", "") or "").strip()
+    if project_root:
+        return project_root
+    project_config = getattr(game_service, "project_config", None)
+    if project_config is None:
+        return None
+    configured_root = str(project_config.svn.root or "").strip()
+    if configured_root and "://" not in configured_root:
+        return configured_root
+    return None
+
+
+def _project_root_path(project_root: str | None) -> Path | None:
+    if not project_root:
+        return None
+    return Path(str(project_root).replace("\\", "/")).expanduser()
+
+
+def _effective_tables_config(project_root: Path | None) -> ProjectTablesSourceConfig:
+    if project_root is None or not project_root.exists():
+        return ProjectTablesSourceConfig()
+    return load_project_tables_source_config(project_root) or ProjectTablesSourceConfig()
+
+
+def _build_readiness(project_root: str | None, project_root_exists: bool, tables_config: ProjectTablesSourceConfig) -> dict:
+    if not project_root:
+        return {
+            "blocking_reason": "project_root_not_configured",
+            "next_action": "set_project_root",
+        }
+    if not project_root_exists:
+        return {
+            "blocking_reason": "project_root_missing",
+            "next_action": "set_project_root",
+        }
+    if not tables_config.roots:
+        return {
+            "blocking_reason": "no_table_sources_found",
+            "next_action": "configure_tables_source",
+        }
+    return {
+        "blocking_reason": None,
+        "next_action": "ready_for_discovery",
+    }
+
+
+def _serialize_tables_config(tables_config: ProjectTablesSourceConfig) -> dict:
+    return {
+        "roots": list(tables_config.roots),
+        "include": list(tables_config.include),
+        "exclude": list(tables_config.exclude),
+        "header_row": tables_config.header_row,
+        "primary_key_candidates": list(tables_config.primary_key_candidates),
+    }
+
+
+def _build_setup_status(game_service) -> dict:
+    project_root = _configured_project_root(game_service)
+    project_root_path = _project_root_path(project_root)
+    project_root_exists = bool(project_root_path and project_root_path.exists())
+    tables_config = _effective_tables_config(project_root_path)
+    return {
+        "project_root": project_root,
+        "project_root_exists": project_root_exists,
+        "project_bundle_root": str(get_project_bundle_root(project_root_path)) if project_root_path is not None else None,
+        "project_key": get_project_key(project_root_path) if project_root_path is not None else None,
+        "tables_config": _serialize_tables_config(tables_config),
+        "discovery": {
+            "discovered_table_count": 0,
+            "unsupported_table_count": 0,
+            "excluded_table_count": 0,
+            "error_count": 0,
+        },
+        "build_readiness": _build_readiness(project_root, project_root_exists, tables_config),
+    }
+
+
+def _current_tables_config_or_default(game_service) -> ProjectTablesSourceConfig:
+    return _effective_tables_config(_project_root_path(_configured_project_root(game_service)))
+
+
+def _validate_local_project_root(project_root: str) -> Path:
+    candidate = str(project_root or "").strip()
+    if not candidate:
+        raise HTTPException(status_code=400, detail="project_root must not be empty")
+    lowered = candidate.lower()
+    if lowered.startswith(REMOTE_PATH_PREFIXES) or "://" in candidate:
+        raise HTTPException(status_code=400, detail="project_root must be a local filesystem path")
+    path = Path(candidate.replace("\\", "/")).expanduser()
+    if not path.exists():
+        raise HTTPException(status_code=400, detail=f"project_root does not exist: {path}")
+    return path
+
+
+def _sanitize_string_list(values: list[str] | None, default: list[str] | None = None) -> list[str]:
+    if values is None:
+        return list(default or [])
+    return [value.strip() for value in values if str(value).strip()]
+
+
 @router.get("/config", response_model=Optional[ProjectConfig])
 async def get_project_config(workspace=Depends(get_agent_for_request)):
     return _game_service_or_404(workspace).project_config
+
+
+@router.get("/setup-status")
+async def get_project_setup_status(workspace=Depends(get_agent_for_request)):
+    game_service = _game_service_or_404(workspace)
+    return _build_setup_status(game_service)
+
+
+@router.put("/root")
+async def save_project_root(
+    request: ProjectRootUpdateRequest,
+    workspace=Depends(get_agent_for_request),
+):
+    game_service = _game_service_or_404(workspace)
+    project_root = _validate_local_project_root(request.project_root)
+    user_config = game_service.user_config
+    user_config.svn_local_root = str(project_root)
+    save_user_config(user_config)
+    await game_service.reload_config()
+    return {
+        "project_key": get_project_key(project_root),
+        "project_bundle_root": str(get_project_bundle_root(project_root)),
+        "setup_status": _build_setup_status(game_service),
+    }
+
+
+@router.put("/sources/tables")
+async def save_project_tables_source(
+    request: ProjectTablesSourceConfigRequest,
+    workspace=Depends(get_agent_for_request),
+):
+    game_service = _game_service_or_404(workspace)
+    project_root = _project_root_path(_configured_project_root(game_service))
+    if project_root is None:
+        raise HTTPException(status_code=400, detail="project_root must be configured before saving table sources")
+    if not project_root.exists():
+        raise HTTPException(status_code=400, detail=f"project_root does not exist: {project_root}")
+    roots = _sanitize_string_list(request.roots)
+    if not roots:
+        raise HTTPException(status_code=400, detail="roots must not be empty")
+    if request.header_row < 1:
+        raise HTTPException(status_code=400, detail="header_row must be greater than or equal to 1")
+    tables_config = ProjectTablesSourceConfig(
+        roots=roots,
+        include=_sanitize_string_list(request.include, DEFAULT_TABLES_INCLUDE_PATTERNS),
+        exclude=_sanitize_string_list(request.exclude, DEFAULT_TABLES_EXCLUDE_PATTERNS),
+        header_row=request.header_row,
+        primary_key_candidates=_sanitize_string_list(
+            request.primary_key_candidates,
+            DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES,
+        ),
+    )
+    save_project_tables_source_config(project_root, tables_config)
+    return {
+        "effective_config": _serialize_tables_config(tables_config),
+        "setup_status": _build_setup_status(game_service),
+        "config_path": str(get_project_tables_source_path(project_root)),
+    }
+
+
+@router.post("/sources/discover")
+async def discover_project_table_sources(workspace=Depends(get_agent_for_request)):
+    game_service = _game_service_or_404(workspace)
+    project_root = _project_root_path(_configured_project_root(game_service))
+    tables_config = _current_tables_config_or_default(game_service)
+    return discover_table_sources(project_root, tables_config)
 
 
 @router.put("/config")

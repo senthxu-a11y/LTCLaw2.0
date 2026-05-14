@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,7 +11,14 @@ from fastapi.testclient import TestClient
 from ltclaw_gy_x.app.routers import game_knowledge_map as map_router_module
 from ltclaw_gy_x.app.routers.game_knowledge_map import router
 from ltclaw_gy_x.game.knowledge_release_store import CurrentKnowledgeReleaseNotSetError
-from ltclaw_gy_x.game.models import KnowledgeMap, KnowledgeMapCandidateResult, KnowledgeRelationship, KnowledgeTableRef, MapDiffReview
+from ltclaw_gy_x.game.models import CanonicalField, CanonicalTableSchema, KnowledgeMap, KnowledgeMapCandidateResult, KnowledgeRelationship, KnowledgeTableRef, MapDiffReview
+from ltclaw_gy_x.game.paths import (
+    get_project_bundle_root,
+    get_project_canonical_table_schema_path,
+    get_project_canonical_tables_dir,
+    get_project_raw_table_indexes_path,
+    get_project_tables_source_path,
+)
 
 
 _CAPABILITY_UNSET = object()
@@ -53,6 +61,48 @@ def _map(release_id: str = 'release-001') -> KnowledgeMap:
         ],
         source_hash='sha256:map-source',
     )
+
+
+def _write_json(path: Path, payload) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str), encoding='utf-8')
+
+
+def _write_tables_config(project_root: Path) -> None:
+    path = get_project_tables_source_path(project_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        'roots:\n  - Tables\ninclude:\n  - "**/*.csv"\nexclude: []\nheader_row: 1\nprimary_key_candidates:\n  - ID\n',
+        encoding='utf-8',
+    )
+
+
+def _write_raw_indexes(project_root: Path, tables: list[dict]) -> None:
+    _write_json(get_project_raw_table_indexes_path(project_root), {'version': '1.0', 'tables': tables})
+
+
+def _write_canonical_table(project_root: Path, table_id: str = 'HeroTable') -> None:
+    schema = CanonicalTableSchema(
+        table_id=table_id,
+        source_path=f'Tables/{table_id}.csv',
+        source_hash=f'sha256:{table_id}',
+        primary_key='ID',
+        fields=[
+            CanonicalField(
+                raw_header='ID',
+                canonical_header='id',
+                aliases=['ID', 'id'],
+                semantic_type='id',
+                description='identifier',
+                confidence=1.0,
+                confirmed=True,
+                source='raw_index_rule',
+                raw_type='int',
+            )
+        ],
+        updated_at=datetime(2026, 1, 1, 12, 0, 0),
+    )
+    _write_json(get_project_canonical_table_schema_path(project_root, table_id), schema.model_dump(mode='json'))
 
 
 def test_candidate_map_router_forwards_project_root(monkeypatch, tmp_path):
@@ -316,6 +366,218 @@ def test_candidate_map_router_allows_knowledge_candidate_read_when_capabilities_
 
     assert response.status_code == 200
     assert captured == {'project_root': tmp_path / 'project-root', 'release_id': None}
+
+
+def test_build_readiness_returns_project_root_missing_when_unconfigured(monkeypatch):
+    workspace = _workspace(_service(None))
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(capabilities={'knowledge.candidate.read'})) as client:
+        response = client.get('/api/game/knowledge/map/build-readiness')
+
+    assert response.status_code == 200
+    assert response.json()['blocking_reason'] == 'project_root_missing'
+
+
+def test_build_readiness_returns_tables_source_missing_when_config_missing(monkeypatch, tmp_path):
+    project_root = tmp_path / 'project-root'
+    project_root.mkdir(parents=True, exist_ok=True)
+    workspace = _workspace(_service(project_root))
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(capabilities={'knowledge.candidate.read'})) as client:
+        response = client.get('/api/game/knowledge/map/build-readiness')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['tables_config_exists'] is False
+    assert payload['blocking_reason'] == 'tables_source_missing'
+
+
+def test_build_readiness_returns_no_raw_indexes_when_sources_exist(monkeypatch, tmp_path):
+    project_root = tmp_path / 'project-root'
+    (project_root / 'Tables').mkdir(parents=True, exist_ok=True)
+    (project_root / 'Tables' / 'HeroTable.csv').write_text('ID,Name\n1,HeroA\n', encoding='utf-8')
+    _write_tables_config(project_root)
+    workspace = _workspace(_service(project_root))
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(capabilities={'knowledge.candidate.read'})) as client:
+        response = client.get('/api/game/knowledge/map/build-readiness')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['discovered_table_count'] == 1
+    assert payload['raw_table_index_count'] == 0
+    assert payload['blocking_reason'] == 'no_raw_indexes'
+
+
+def test_build_readiness_returns_no_canonical_facts_when_raw_exists(monkeypatch, tmp_path):
+    project_root = tmp_path / 'project-root'
+    (project_root / 'Tables').mkdir(parents=True, exist_ok=True)
+    (project_root / 'Tables' / 'HeroTable.csv').write_text('ID,Name\n1,HeroA\n', encoding='utf-8')
+    _write_tables_config(project_root)
+    _write_raw_indexes(project_root, [{'table_name': 'HeroTable'}])
+    workspace = _workspace(_service(project_root))
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(capabilities={'knowledge.candidate.read'})) as client:
+        response = client.get('/api/game/knowledge/map/build-readiness')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['raw_table_index_count'] == 1
+    assert payload['canonical_table_count'] == 0
+    assert payload['blocking_reason'] == 'no_canonical_facts'
+
+
+def test_build_readiness_returns_candidate_ready_when_canonical_exists(monkeypatch, tmp_path):
+    project_root = tmp_path / 'project-root'
+    (project_root / 'Tables').mkdir(parents=True, exist_ok=True)
+    (project_root / 'Tables' / 'HeroTable.csv').write_text('ID,Name\n1,HeroA\n', encoding='utf-8')
+    _write_tables_config(project_root)
+    _write_raw_indexes(project_root, [{'table_name': 'HeroTable'}])
+    _write_canonical_table(project_root)
+    workspace = _workspace(_service(project_root))
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(capabilities={'knowledge.candidate.read'})) as client:
+        response = client.get('/api/game/knowledge/map/build-readiness')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['canonical_table_count'] == 1
+    assert payload['blocking_reason'] == 'candidate_ready'
+    assert payload['next_action'] == 'build_candidate_from_source'
+
+
+def test_build_readiness_returns_path_mismatch_when_candidate_read_dir_outside_bundle(monkeypatch, tmp_path):
+    project_root = tmp_path / 'project-root'
+    project_root.mkdir(parents=True, exist_ok=True)
+    _write_tables_config(project_root)
+    workspace = _workspace(_service(project_root))
+    outside_dir = tmp_path / 'outside-candidate-dir'
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(map_router_module, '_candidate_read_dir', lambda _project_root: outside_dir)
+
+    with TestClient(_build_app(capabilities={'knowledge.candidate.read'})) as client:
+        response = client.get('/api/game/knowledge/map/build-readiness')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['same_project_bundle'] is False
+    assert payload['project_bundle_root'] == str(get_project_bundle_root(project_root))
+    assert payload['candidate_read_dir'] == str(outside_dir)
+    assert payload['blocking_reason'] == 'path_mismatch'
+
+
+def test_source_candidate_router_returns_diagnostics_when_canonical_is_missing(monkeypatch, tmp_path):
+    project_root = tmp_path / 'project-root'
+    (project_root / 'Tables').mkdir(parents=True, exist_ok=True)
+    (project_root / 'Tables' / 'HeroTable.csv').write_text('ID,Name\n1,HeroA\n', encoding='utf-8')
+    _write_tables_config(project_root)
+    _write_raw_indexes(project_root, [{'table_name': 'HeroTable'}])
+    workspace = _workspace(_service(project_root))
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(capabilities={'knowledge.candidate.write'})) as client:
+        response = client.post('/api/game/knowledge/map/candidate/from-source', json={'use_existing_formal_map_as_hint': True})
+
+    assert response.status_code == 200
+    assert response.json()['mode'] == 'no_canonical_facts'
+    assert response.json()['diagnostics'] == {
+        'raw_table_index_count': 1,
+        'canonical_table_count': 0,
+        'canonical_tables_dir': str(get_project_canonical_tables_dir(project_root)),
+        'blocking_reason': 'no_canonical_facts',
+        'next_action': 'run_canonical_rebuild',
+    }
+
+
+def test_source_candidate_router_returns_candidate_count_and_refs_on_success(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(map_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(map_router_module, 'load_formal_knowledge_map', lambda _root: None)
+    monkeypatch.setattr(
+        map_router_module,
+        'build_map_candidate_from_canonical_facts',
+        lambda project_root, existing_formal_map=None: KnowledgeMapCandidateResult(
+            mode='candidate_map',
+            map=KnowledgeMap(
+                release_id='candidate-source-canonical',
+                tables=[
+                    KnowledgeTableRef(
+                        table_id='HeroTable',
+                        title='HeroTable',
+                        source_path='Tables/HeroTable.csv',
+                        source_hash='sha256:hero',
+                        system_id=None,
+                    )
+                ],
+            ),
+            release_id=None,
+            candidate_source='source_canonical',
+            is_formal_map=False,
+            source_release_id=None,
+            uses_existing_formal_map_as_hint=False,
+            warnings=[],
+        ),
+    )
+    monkeypatch.setattr(map_router_module, 'resolve_map_diff_base', lambda project_root, existing_formal_map=None: (None, 'none'))
+    monkeypatch.setattr(
+        map_router_module,
+        'build_map_diff_review',
+        lambda base_map, candidate_map, *, candidate_source, base_map_source, warnings=(): MapDiffReview(
+            base_map_source='none',
+            candidate_source='source_canonical',
+            added_refs=['table:HeroTable'],
+            removed_refs=[],
+            changed_refs=[],
+            unchanged_refs=[],
+            warnings=[],
+        ),
+    )
+
+    with TestClient(_build_app(capabilities={'knowledge.candidate.write'})) as client:
+        response = client.post('/api/game/knowledge/map/candidate/from-source', json={'use_existing_formal_map_as_hint': False})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['candidate_table_count'] == 1
+    assert payload['candidate_refs'] == ['table:HeroTable']
+    assert payload['map']['tables'][0]['table_id'] == 'HeroTable'
 
 
 def test_source_candidate_router_builds_from_source_and_attaches_diff(monkeypatch, tmp_path):

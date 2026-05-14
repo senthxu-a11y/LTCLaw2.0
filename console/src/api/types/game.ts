@@ -69,6 +69,119 @@ export interface UserGameConfig {
   svn_trust_cert?: boolean;
 }
 
+export interface ProjectTablesSourceConfig {
+  roots: string[];
+  include: string[];
+  exclude: string[];
+  header_row: number;
+  primary_key_candidates: string[];
+}
+
+export interface ProjectSetupReadiness {
+  blocking_reason: string | null;
+  next_action: string;
+}
+
+export interface ProjectSetupDiscoverySummary {
+  discovered_table_count: number;
+  available_table_count?: number;
+  excluded_table_count: number;
+  unsupported_table_count: number;
+  error_count: number;
+}
+
+export interface ProjectSetupStatusResponse {
+  project_root: string | null;
+  project_root_exists: boolean;
+  project_bundle_root: string | null;
+  project_key: string | null;
+  tables_config: ProjectTablesSourceConfig;
+  discovery: ProjectSetupDiscoverySummary;
+  build_readiness: ProjectSetupReadiness;
+}
+
+export interface SaveProjectRootResponse {
+  project_key: string;
+  project_bundle_root: string;
+  setup_status: ProjectSetupStatusResponse;
+}
+
+export interface SaveProjectTablesSourceResponse {
+  effective_config: ProjectTablesSourceConfig;
+  setup_status: ProjectSetupStatusResponse;
+  config_path: string;
+}
+
+export interface ProjectTableSourceEntry {
+  source_path: string;
+  format: string;
+  status: string;
+  reason: string;
+}
+
+export interface ProjectTableSourceError {
+  source_path?: string;
+  reason: string;
+}
+
+export interface ProjectTableSourceDiscoveryResponse {
+  success: boolean;
+  project_root: string | null;
+  table_files: ProjectTableSourceEntry[];
+  excluded_files: ProjectTableSourceEntry[];
+  unsupported_files: ProjectTableSourceEntry[];
+  errors: ProjectTableSourceError[];
+  summary: {
+    discovered_table_count: number;
+    available_table_count: number;
+    excluded_table_count: number;
+    unsupported_table_count: number;
+    error_count: number;
+  };
+  next_action: string;
+}
+
+export interface ColdStartJobCounts {
+  discovered_table_count: number;
+  raw_table_index_count: number;
+  canonical_table_count: number;
+  candidate_table_count: number;
+}
+
+export interface ColdStartJobError {
+  stage?: string | null;
+  error: string;
+  source_path?: string | null;
+}
+
+export interface ColdStartJobState {
+  job_id: string;
+  project_key: string;
+  project_root: string;
+  status: string;
+  stage: string;
+  progress: number;
+  message: string;
+  current_file?: string | null;
+  counts: ColdStartJobCounts;
+  warnings: string[];
+  errors: ColdStartJobError[];
+  next_action?: string | null;
+  partial_outputs: Record<string, unknown>;
+  timeout_seconds: number;
+  timed_out: boolean;
+  candidate_refs: string[];
+  created_at: string;
+  updated_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+}
+
+export interface ColdStartJobCreateResponse {
+  reused_existing: boolean;
+  job: ColdStartJobState;
+}
+
 export interface GameStorageSummary {
   working_root: string;
   game_data_root: string;

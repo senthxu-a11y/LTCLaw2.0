@@ -1,6 +1,8 @@
 """单元测试: TableIndexer 工具方法。"""
 from types import SimpleNamespace
+from pathlib import Path
 
+import openpyxl
 import pytest
 
 import ltclaw_gy_x.game.table_indexer as table_indexer_module
@@ -136,3 +138,79 @@ async def test_generate_table_summary_logs_error_and_falls_back_on_empty_respons
 async def _record_call(calls, prompt, model_type, response):
     calls.append(model_type)
     return response
+
+
+def _write_xlsx(path: Path, sheets: list[tuple[str, list[list[object]]]]) -> None:
+    workbook = openpyxl.Workbook()
+    first_sheet = workbook.active
+    assert first_sheet is not None
+    first_title, first_rows = sheets[0]
+    first_sheet.title = first_title
+    for row in first_rows:
+        first_sheet.append(row)
+    for title, rows in sheets[1:]:
+        sheet = workbook.create_sheet(title=title)
+        for row in rows:
+            sheet.append(row)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workbook.save(path)
+
+
+@pytest.mark.asyncio
+async def test_index_one_rule_only_reads_single_sheet_xlsx(indexer, tmp_path):
+    svn_root = tmp_path / 'svn'
+    svn_root.mkdir()
+    source = svn_root / 'Tables' / 'HeroTable.xlsx'
+    _write_xlsx(source, [('Heroes', [['ID', 'Name'], [1, 'HeroA']])])
+
+    result = await indexer.index_one(source, svn_root, 1, rule_only=True)
+
+    assert result.table_name == 'HeroTable'
+    assert result.row_count == 1
+    assert result.primary_key == 'ID'
+    assert result.source_path == 'Tables/HeroTable.xlsx'
+
+
+@pytest.mark.asyncio
+async def test_index_one_rule_only_uses_active_sheet_for_multi_sheet_xlsx(indexer, tmp_path):
+    svn_root = tmp_path / 'svn'
+    svn_root.mkdir()
+    source = svn_root / 'Tables' / 'MultiSheet.xlsx'
+    _write_xlsx(
+        source,
+        [
+            ('Main', [['ID', 'Name'], [1, 'HeroA']]),
+            ('Secondary', [['Code', 'Value'], ['A', 100]]),
+        ],
+    )
+
+    result = await indexer.index_one(source, svn_root, 1, rule_only=True)
+
+    assert [field.name for field in result.fields] == ['ID', 'Name']
+    assert result.primary_key == 'ID'
+    assert result.row_count == 1
+
+
+@pytest.mark.asyncio
+async def test_index_one_rule_only_returns_explicit_error_for_empty_xlsx_sheet(indexer, tmp_path):
+    svn_root = tmp_path / 'svn'
+    svn_root.mkdir()
+    source = svn_root / 'Tables' / 'EmptySheet.xlsx'
+    _write_xlsx(source, [('Empty', [])])
+
+    with pytest.raises(ValueError, match='文件为空'):
+        await indexer.index_one(source, svn_root, 1, rule_only=True)
+
+
+@pytest.mark.asyncio
+async def test_index_one_rule_only_falls_back_to_default_primary_key_when_header_is_missing(indexer, tmp_path):
+    svn_root = tmp_path / 'svn'
+    svn_root.mkdir()
+    source = svn_root / 'Tables' / 'NoPrimaryKey.csv'
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text('Name,HP\nHeroA,100\n', encoding='utf-8')
+
+    result = await indexer.index_one(source, svn_root, 1, rule_only=True)
+
+    assert result.primary_key == 'ID'
+    assert result.row_count == 1

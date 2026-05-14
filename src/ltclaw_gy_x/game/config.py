@@ -16,6 +16,7 @@ from .paths import (
     get_legacy_project_config_path,
     get_legacy_user_config_path,
     get_project_config_path,
+    get_project_tables_source_path,
     get_user_config_path,
 )
 
@@ -39,6 +40,10 @@ SUPPORTED_MODEL_TYPES = (
     WORKBENCH_SUGGEST_MODEL_TYPE,
     DEPENDENCY_ANALYZER_MODEL_TYPE,
 )
+
+DEFAULT_TABLES_INCLUDE_PATTERNS = ["**/*.csv", "**/*.xlsx", "**/*.txt"]
+DEFAULT_TABLES_EXCLUDE_PATTERNS = ["**/~$*", "**/.backup/**"]
+DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES = ["ID", "Id", "id"]
 
 
 class ProjectMeta(BaseModel):
@@ -198,6 +203,18 @@ class ProjectConfig(BaseModel):
     )
 
 
+class ProjectTablesSourceConfig(BaseModel):
+    """Project-local table source config persisted under the project bundle."""
+
+    roots: list[str] = Field(default_factory=list)
+    include: list[str] = Field(default_factory=lambda: list(DEFAULT_TABLES_INCLUDE_PATTERNS))
+    exclude: list[str] = Field(default_factory=lambda: list(DEFAULT_TABLES_EXCLUDE_PATTERNS))
+    header_row: int = Field(default=1)
+    primary_key_candidates: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES)
+    )
+
+
 class UserGameConfig(BaseModel):
     """??????"""
     my_role: Literal["maintainer", "planner", "consumer"] = Field(default="consumer", description="Legacy local role shortcut")
@@ -237,9 +254,44 @@ def load_project_config(svn_root: Path) -> Union[ProjectConfig, None]:
     return None
 
 
+def load_project_tables_source_config(project_root: Path) -> ProjectTablesSourceConfig | None:
+    """Load project-local tables source config from the project bundle."""
+    config_path = get_project_tables_source_path(project_root)
+    if not config_path.exists():
+        return None
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        return ProjectTablesSourceConfig.model_validate(data)
+    except Exception:
+        return None
+
+
 def save_project_config(svn_root: Path, cfg: ProjectConfig) -> None:
     """???????????"""
     config_path = get_project_config_path(svn_root)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=config_path.parent,
+        delete=False,
+        suffix=".tmp"
+    ) as tmp:
+        yaml.dump(
+            cfg.model_dump(exclude_defaults=False),
+            tmp,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=True
+        )
+        tmp_path = tmp.name
+    Path(tmp_path).replace(config_path)
+
+
+def save_project_tables_source_config(project_root: Path, cfg: ProjectTablesSourceConfig) -> None:
+    """Persist project-local tables source config under the project bundle."""
+    config_path = get_project_tables_source_path(project_root)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         mode="w",

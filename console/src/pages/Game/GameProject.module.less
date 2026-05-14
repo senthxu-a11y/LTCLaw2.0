@@ -153,6 +153,127 @@
           line-height: 1.7;
         }
 
+        .projectSetupBlocks {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          margin-top: 20px;
+          padding-top: 20px;
+          border-top: 1px solid var(--ant-color-border-secondary);
+        }
+
+        .projectSetupBlock {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          padding: 16px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 10px;
+          background: var(--ant-color-bg-container);
+        }
+
+        .projectSetupBlockHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .projectSetupHint {
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+          line-height: 1.6;
+        }
+
+        .projectSetupMeta {
+          :global(.ant-descriptions-item-label) {
+            color: var(--ant-color-text-secondary);
+          }
+        }
+
+        .projectSetupSummaryGrid {
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .projectSetupSummaryItem {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 10px 12px;
+          border-radius: 8px;
+          background: var(--ant-color-fill-quaternary);
+
+          span {
+            color: var(--ant-color-text-secondary);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+          }
+
+          strong {
+            color: var(--ant-color-text);
+            font-size: 18px;
+          }
+        }
+
+        .projectSetupListGroup {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .projectSetupListSection {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          min-height: 76px;
+          padding: 12px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 8px;
+        }
+
+        .projectSetupListItem {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 8px;
+          font-size: 13px;
+          line-height: 1.6;
+          word-break: break-word;
+        }
+
+        .projectSetupListEmpty {
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+        }
+
+        .projectSetupDisabledBuildButton {
+          align-self: flex-start;
+        }
+
+        .projectSetupJobPanel {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .projectSetupJobActions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .projectSetupSuccessMeta {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          font-size: 13px;
+          line-height: 1.6;
+          word-break: break-word;
+        }
+
         .releaseHint {
           margin-bottom: 16px;
           color: var(--ant-color-text-secondary);
@@ -964,6 +1085,25 @@
     :global(.ant-btn) {
       min-width: 80px;
       border-radius: 6px;
+    }
+  }
+
+  @media (max-width: 960px) {
+    .content .form .section {
+      .workspaceEntryGrid,
+      .projectSetupListGroup,
+      .projectSetupSummaryGrid {
+        grid-template-columns: 1fr;
+      }
+
+      .projectSetupBlockHeader {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .projectSetupJobActions {
+        flex-direction: column;
+      }
     }
   }
 }
