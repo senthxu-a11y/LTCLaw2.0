@@ -12,9 +12,14 @@ from ...game.knowledge_formal_map_store import (
     load_formal_knowledge_map,
     save_formal_knowledge_map,
 )
-from ...game.knowledge_map_candidate import build_map_candidate_from_release
+from ...game.knowledge_map_candidate import (
+    build_map_candidate_from_canonical_facts,
+    build_map_candidate_result_from_release,
+    build_map_diff_review,
+    resolve_map_diff_base,
+)
 from ...game.knowledge_release_store import CurrentKnowledgeReleaseNotSetError
-from ...game.models import KnowledgeMap
+from ...game.models import KnowledgeMap, KnowledgeMapCandidateResult
 from ..capabilities import require_capability
 from ..agent_context import get_agent_for_request
 
@@ -22,10 +27,8 @@ from ..agent_context import get_agent_for_request
 router = APIRouter(prefix='/game/knowledge/map', tags=['game-knowledge-map'])
 
 
-class KnowledgeMapCandidateResponse(BaseModel):
-    mode: str
-    map: KnowledgeMap | None = None
-    release_id: str | None = None
+class BuildSourceCandidateRequest(BaseModel):
+    use_existing_formal_map_as_hint: bool = Field(default=True)
 
 
 class FormalKnowledgeMapResponse(BaseModel):
@@ -70,22 +73,53 @@ def _project_root_or_400(game_service) -> Path:
     raise HTTPException(status_code=400, detail='Local project directory not configured')
 
 
-@router.get('/candidate', response_model=KnowledgeMapCandidateResponse)
-async def get_map_candidate(request: Request, release_id: str | None = None) -> KnowledgeMapCandidateResponse:
-    require_capability(request, 'knowledge.map.read')
+@router.get('/candidate', response_model=KnowledgeMapCandidateResult)
+async def get_map_candidate(request: Request, release_id: str | None = None) -> KnowledgeMapCandidateResult:
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.candidate.read')
     project_root = _project_root_or_400(_game_service_or_404(workspace))
     try:
-        candidate = build_map_candidate_from_release(project_root, release_id=release_id)
+        candidate = build_map_candidate_result_from_release(project_root, release_id=release_id)
     except CurrentKnowledgeReleaseNotSetError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return KnowledgeMapCandidateResponse(mode='candidate_map', map=candidate, release_id=candidate.release_id)
+    return candidate
+
+
+@router.post('/candidate/from-source', response_model=KnowledgeMapCandidateResult)
+async def build_map_candidate_from_source(
+    request: Request,
+    body: BuildSourceCandidateRequest,
+) -> KnowledgeMapCandidateResult:
+    workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.candidate.write')
+    project_root = _project_root_or_400(_game_service_or_404(workspace))
+
+    existing_formal_map = None
+    if body.use_existing_formal_map_as_hint:
+        record = load_formal_knowledge_map(project_root)
+        if record is not None:
+            existing_formal_map = record.knowledge_map
+
+    candidate = build_map_candidate_from_canonical_facts(
+        project_root,
+        existing_formal_map=existing_formal_map,
+    )
+    if candidate.map is not None:
+        diff_base, base_map_source = resolve_map_diff_base(project_root, existing_formal_map=existing_formal_map)
+        candidate.diff_review = build_map_diff_review(
+            diff_base,
+            candidate.map,
+            candidate_source=candidate.candidate_source,
+            base_map_source=base_map_source,
+            warnings=candidate.warnings,
+        )
+    return candidate
 
 
 @router.get('', response_model=FormalKnowledgeMapResponse)
 async def get_formal_map(request: Request) -> FormalKnowledgeMapResponse:
-    require_capability(request, 'knowledge.map.read')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.map.read')
     project_root = _project_root_or_400(_game_service_or_404(workspace))
     record = load_formal_knowledge_map(project_root)
     if record is None:
@@ -101,8 +135,8 @@ async def get_formal_map(request: Request) -> FormalKnowledgeMapResponse:
 
 @router.put('', response_model=FormalKnowledgeMapResponse)
 async def put_formal_map(request: Request, body: SaveFormalKnowledgeMapRequest) -> FormalKnowledgeMapResponse:
-    require_capability(request, 'knowledge.map.edit')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.map.edit')
     project_root = _project_root_or_400(_game_service_or_404(workspace))
     if body.knowledge_map is None:
         raise HTTPException(status_code=422, detail='map is required')

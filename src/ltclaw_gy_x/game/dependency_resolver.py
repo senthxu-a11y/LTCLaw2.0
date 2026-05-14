@@ -1,5 +1,8 @@
 """
-依赖关系解析器
+依赖关系解析器。
+
+DependencyGraph 属于 technical index / impact evidence，服务于 Workbench 影响分析
+与工程侧排查。它不是 Formal Map relationship，也不是 RAG 的正式知识结构来源。
 """
 
 import logging
@@ -10,6 +13,17 @@ from .config import ProjectConfig
 from .models import TableIndex, DependencyGraph, DependencyEdge, FieldConfidence, FieldInfo
 
 logger = logging.getLogger(__name__)
+
+
+def get_dependency_graph_source_metadata() -> dict[str, object]:
+    return {
+        'source_type': 'dependency_graph',
+        'semantic_role': 'technical_impact_evidence',
+        'is_formal_map_relationship': False,
+        'governs_release': False,
+        'governs_rag': False,
+        'governs_workbench_write': False,
+    }
 
 
 class DependencyResolver:

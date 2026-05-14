@@ -236,3 +236,27 @@ def test_create_test_plan_allows_workbench_test_write_without_knowledge_build_or
     assert response.json()['id'] == 'plan-002'
     assert captured['project_root'] == tmp_path / 'project-root'
     assert captured['plan'].id == 'plan-001'
+
+
+def test_create_test_plan_requires_injected_viewer_capabilities(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(request):
+        request.state.capabilities = {'workbench.read'}
+        return workspace
+
+    def _append(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('append should be blocked by injected viewer capabilities')
+
+    monkeypatch.setattr(test_plan_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(test_plan_router_module, 'append_test_plan', _append)
+
+    with TestClient(_build_app(workspace)) as client:
+        response = client.post('/api/game/knowledge/test-plans', json=_plan().model_dump(mode='json'))
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: workbench.test.write'
+    assert called is False

@@ -22,7 +22,6 @@ const ProjectPage = lazyImportWithRetry("../../pages/Game/Project");
 const KnowledgePage = lazyImportWithRetry("../../pages/Game/Knowledge");
 const MapEditorPage = lazyImportWithRetry("../../pages/Game/MapEditor");
 const AdvancedPage = lazyImportWithRetry("../../pages/Game/Advanced");
-const AdvancedSvnPage = lazyImportWithRetry("../../pages/Game/AdvancedSvn");
 const IndexMapPage = lazyImportWithRetry("../../pages/Game/IndexMap");
 const DocLibraryPage = lazyImportWithRetry("../../pages/Game/DocLibrary");
 const KnowledgeBasePage = lazyImportWithRetry("../../pages/Game/KnowledgeBase");
@@ -154,8 +153,8 @@ export default function MainLayout() {
                   <Route path="/game/knowledge" element={<KnowledgePage />} />
                   <Route path="/game/map" element={<MapEditorPage />} />
                   <Route path="/game/advanced" element={<AdvancedPage />} />
-                  <Route path="/game/advanced/svn" element={<AdvancedSvnPage />} />
-                  <Route path="/svn-sync" element={<Navigate to="/game/advanced/svn" replace />} />
+                  <Route path="/game/advanced/svn" element={<Navigate to="/game/advanced" replace />} />
+                  <Route path="/svn-sync" element={<Navigate to="/game/project" replace />} />
                   <Route path="/index-map" element={<IndexMapPage />} />
                   <Route path="/doc-library" element={<DocLibraryPage />} />
                   <Route path="/knowledge-base" element={<KnowledgeBasePage />} />

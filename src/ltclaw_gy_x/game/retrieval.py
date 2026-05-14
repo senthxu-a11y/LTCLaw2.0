@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""Legacy retrieval and KB aggregation helpers.
+
+These functions are retained for legacy, debug, and migration-only surfaces.
+They are not part of the formal current-release knowledge chain used by
+Release, RAG context, or Workbench Suggest.
+"""
+
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -35,6 +42,17 @@ _DOC_NOISE_PREFIXES = (
 _DOC_TEXT_LIMIT = 120000
 _DOC_CHUNK_SIZE = 1200
 _DOC_CHUNK_OVERLAP = 180
+_LEGACY_RETRIEVAL_ROLE = "debug_migration_only"
+
+
+def _legacy_retrieval_metadata() -> dict[str, Any]:
+    return {
+        "scope": "legacy",
+        "semantic_role": _LEGACY_RETRIEVAL_ROLE,
+        "affects_release": False,
+        "affects_rag": False,
+        "affects_workbench_suggest": False,
+    }
 
 
 def _retrieval_dir(workspace_dir: Path, svn_root: Path | None = None) -> Path:
@@ -285,6 +303,7 @@ def load_doc_chunk_index(workspace_dir: Path, game_service, rebuild: bool = Fals
 
 
 def get_retrieval_status(game_service, *, rebuild_doc_index: bool = False) -> dict[str, Any]:
+    """Return legacy retrieval/debug status only, never formal knowledge status."""
     workspace_dir = Path(game_service.workspace_dir)
     _, status = load_doc_chunk_index(workspace_dir, game_service, rebuild=rebuild_doc_index)
     svn_root = _resolve_svn_root(game_service)
@@ -300,6 +319,7 @@ def get_retrieval_status(game_service, *, rebuild_doc_index: bool = False) -> di
     status["kb_entry_count"] = kb_store.size
     status["table_count"] = len(tables)
     status["code_file_count"] = len(code_files)
+    status.update(_legacy_retrieval_metadata())
     return status
 
 
@@ -417,10 +437,17 @@ def _code_results(query: str, code_entries: Iterable[CodeFileIndex], limit: int)
 
 
 def unified_search(game_service, query: str, *, top_k: int = 8, mode: str = "hybrid", rebuild_doc_index: bool = False) -> dict[str, Any]:
+    """Search the legacy mixed retrieval surface for debug/migration workflows only."""
     query = (query or "").strip()
     workspace_dir = Path(game_service.workspace_dir)
     if not query:
-        return {"query": query, "mode": mode, "results": [], "status": {}}
+        return {
+            "query": query,
+            "mode": mode,
+            "results": [],
+            "status": {},
+            **_legacy_retrieval_metadata(),
+        }
 
     status: dict[str, Any] = {}
     results: list[dict[str, Any]] = []
@@ -504,6 +531,7 @@ def unified_search(game_service, query: str, *, top_k: int = 8, mode: str = "hyb
         "mode": mode,
         "results": merged[:top_k],
         "status": status,
+        **_legacy_retrieval_metadata(),
     }
 
 

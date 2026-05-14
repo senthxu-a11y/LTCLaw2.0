@@ -14,12 +14,15 @@ from ltclaw_gy_x.game.config import (
     save_user_config,
     validate_project_config,
 )
-from ltclaw_gy_x.game.models import CommitResult
 from ltclaw_gy_x.game.paths import get_project_config_path, get_storage_summary
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/game/project", tags=["game-project"])
+
+PROJECT_CONFIG_COMMIT_FROZEN_REASON = (
+    "Project config commit is frozen in P0-01. LTClaw keeps reading legacy local project path fields, but SVN add/commit must run outside LTClaw."
+)
 
 
 def _game_service_or_404(workspace):
@@ -64,27 +67,24 @@ async def save_project_config_api(config: ProjectConfig, workspace=Depends(get_a
     return {"message": "\u914d\u7f6e\u4fdd\u5b58\u6210\u529f"}
 
 
-@router.post("/config/commit", response_model=CommitResult)
+@router.post("/config/commit")
 async def commit_project_config(
     commit_request: dict = None,
     workspace=Depends(get_agent_for_request),
 ):
     game_service = _game_service_or_404(workspace)
     user_config = game_service.user_config
-    if user_config.my_role != "maintainer":
-        return CommitResult(revision=None, files_committed=0, skipped_reason="not maintainer")
-    if not game_service.svn:
-        raise HTTPException(status_code=400, detail="SVN\u672a\u914d\u7f6e\u6216\u4e0d\u53ef\u7528")
-    message = "Update project config"
-    if commit_request and "message" in commit_request:
-        message = commit_request["message"] or message
-    svn_root = Path(user_config.svn_local_root)
-    config_path = get_project_config_path(svn_root)
-    if not config_path.exists():
-        raise HTTPException(status_code=400, detail="\u9879\u76ee\u914d\u7f6e\u6587\u4ef6\u4e0d\u5b58\u5728")
-    await game_service.svn.add([config_path])
-    revision = await game_service.svn.commit([config_path], message)
-    return CommitResult(revision=revision, files_committed=1, skipped_reason=None)
+    config_exists = False
+    if user_config.svn_local_root:
+        config_exists = get_project_config_path(Path(user_config.svn_local_root)).exists()
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "disabled": True,
+            "reason": PROJECT_CONFIG_COMMIT_FROZEN_REASON,
+            "config_exists": config_exists,
+        },
+    )
 
 
 @router.get("/user_config", response_model=UserGameConfig)

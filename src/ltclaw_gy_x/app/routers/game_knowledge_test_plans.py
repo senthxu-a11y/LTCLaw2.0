@@ -50,8 +50,8 @@ def _project_root_or_400(game_service) -> Path:
 
 @router.post('', response_model=WorkbenchTestPlan)
 async def create_test_plan(request: Request, body: WorkbenchTestPlan) -> WorkbenchTestPlan:
-    require_capability(request, 'workbench.test.write')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'workbench.test.write')
     game_service = _game_service_or_404(workspace)
     try:
         return append_test_plan(_project_root_or_400(game_service), body)
@@ -61,8 +61,8 @@ async def create_test_plan(request: Request, body: WorkbenchTestPlan) -> Workben
 
 @router.get('', response_model=list[WorkbenchTestPlan])
 async def get_test_plans(request: Request) -> list[WorkbenchTestPlan]:
-    require_capability(request, 'workbench.read')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'workbench.read')
     game_service = _game_service_or_404(workspace)
     try:
         return list_test_plans(_project_root_or_400(game_service))

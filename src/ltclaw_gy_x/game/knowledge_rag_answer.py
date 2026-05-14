@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from typing import Any, Mapping
 
@@ -9,6 +10,7 @@ from .knowledge_rag_provider_selection import (
     resolve_external_rag_model_client_config,
     resolve_rag_model_provider_name,
 )
+from .config import RAG_ANSWER_MODEL_TYPE
 
 
 _NO_GROUNDED_CONTEXT_WARNING = 'No grounded context was available for a safe answer.'
@@ -18,6 +20,7 @@ _MODEL_OUT_OF_CONTEXT_CITATION_WARNING = 'Ignored one or more model citation ids
 _CHANGE_QUERY_WARNING = 'For change proposals or edits, use the workbench flow.'
 _STRUCTURED_FACT_WARNING = 'For exact numeric or row-level facts, use the structured query flow.'
 _EXTERNAL_PROVIDER_NAME = 'future_external'
+_UNIFIED_ROUTER_MISSING_WARNING = 'Unified model router is not available for rag_answer.'
 
 MAX_SUMMARY_CHUNKS = 2
 MAX_SUMMARY_CHARS = 220
@@ -144,12 +147,92 @@ def build_rag_answer_with_service_config(
     factories: Mapping[str, Any] | None = None,
     expected_generation: int | None = None,
 ) -> dict[str, Any]:
+    if _looks_like_game_service(service_config):
+        return _build_rag_answer_with_unified_router(
+            query,
+            context,
+            service_config,
+            factories=factories,
+            expected_generation=expected_generation,
+        )
     return build_rag_answer_with_provider(
         query,
         context,
         config_or_service=service_config,
         factories=factories,
         expected_generation=expected_generation,
+    )
+
+
+def _build_rag_answer_with_unified_router(
+    query: str,
+    context: Mapping[str, Any],
+    service_config: Any,
+    *,
+    factories: Mapping[str, Any] | None,
+    expected_generation: int | None,
+) -> dict[str, Any]:
+    del factories
+
+    if _normalize_text(context.get('mode')) == 'no_current_release':
+        return build_rag_answer(query, context)
+
+    grounded_chunks, grounded_citations, warnings = _collect_grounded_context(context)
+    if not grounded_chunks:
+        return {
+            'mode': 'insufficient_context',
+            'answer': '',
+            'release_id': _normalize_release_id(context.get('release_id')),
+            'citations': [],
+            'warnings': _dedupe_strings([*warnings, _NO_GROUNDED_CONTEXT_WARNING]),
+        }
+
+    _assert_expected_config_generation(service_config, expected_generation=expected_generation)
+    router = _resolve_unified_model_router(service_config)
+    if router is None or not hasattr(router, 'call_model_blocking'):
+        return {
+            'mode': 'insufficient_context',
+            'answer': '',
+            'release_id': _normalize_release_id(context.get('release_id')),
+            'citations': [],
+            'warnings': _dedupe_strings([*warnings, _UNIFIED_ROUTER_MISSING_WARNING]),
+        }
+
+    policy_warnings = _policy_warnings_for_query(query)
+    prompt = _build_unified_router_prompt(
+        query=query,
+        context=context,
+        grounded_chunks=grounded_chunks,
+        grounded_citations=grounded_citations,
+        policy_warnings=policy_warnings,
+    )
+    try:
+        result = router.call_model_blocking(prompt, model_type=RAG_ANSWER_MODEL_TYPE)
+    except Exception:
+        warning = 'Unified model router failed for rag_answer: provider_exception'
+        return {
+            'mode': 'insufficient_context',
+            'answer': '',
+            'release_id': _normalize_release_id(context.get('release_id')),
+            'citations': [],
+            'warnings': _dedupe_strings([*warnings, *policy_warnings, warning]),
+        }
+    if not getattr(result, 'ok', False):
+        warning = _build_router_failure_warning(result)
+        return {
+            'mode': 'insufficient_context',
+            'answer': '',
+            'release_id': _normalize_release_id(context.get('release_id')),
+            'citations': [],
+            'warnings': _dedupe_strings([*warnings, *policy_warnings, warning]),
+        }
+
+    raw_response = _parse_unified_router_response(getattr(result, 'text', ''))
+    return _build_model_client_answer(
+        release_id=_normalize_release_id(context.get('release_id')),
+        grounded_citations=grounded_citations,
+        base_warnings=[*warnings, *policy_warnings],
+        raw_response=raw_response,
     )
 
 
@@ -184,6 +267,79 @@ def _resolve_rag_model_client(
         factories=factories,
         external_config=external_config,
     )
+
+
+def _looks_like_game_service(config_or_service: Any) -> bool:
+    return hasattr(config_or_service, '_model_router') and callable(getattr(config_or_service, '_model_router', None))
+
+
+def _resolve_unified_model_router(service_config: Any):
+    try:
+        return service_config._model_router()
+    except Exception:
+        return None
+
+
+def _build_unified_router_prompt(
+    *,
+    query: str,
+    context: Mapping[str, Any],
+    grounded_chunks: list[dict[str, Any]],
+    grounded_citations: list[dict[str, Any]],
+    policy_warnings: list[str],
+) -> str:
+    prompt_payload = build_rag_model_prompt_payload(
+        query=_normalize_text(query),
+        release_id=_normalize_release_id(context.get('release_id')),
+        built_at=context.get('built_at'),
+        chunks=grounded_chunks,
+        citations=grounded_citations,
+        policy_hints=policy_warnings,
+    )
+    return (
+        'You are the unified rag_answer model. Use only the grounded current-release context below.\n'
+        'Return strict JSON with shape {"answer": string, "citation_ids": string[], "warnings": string[]}.\n'
+        'Do not emit markdown fences. Do not cite ids outside the provided citations.\n\n'
+        f'{json.dumps(prompt_payload, ensure_ascii=False)}'
+    )
+
+
+def _parse_unified_router_response(raw_text: str) -> dict[str, Any]:
+    text = _normalize_text(raw_text)
+    try:
+        return json.loads(_strip_json_fences(text))
+    except Exception:
+        try:
+            start = text.find('{')
+            end = text.rfind('}')
+            if start >= 0 and end > start:
+                return json.loads(text[start : end + 1])
+        except Exception:
+            pass
+    return {'answer': '', 'citation_ids': [], 'warnings': ['Unified router response could not be parsed as grounded JSON.']}
+
+
+def _strip_json_fences(text: str) -> str:
+    cleaned = str(text or '').strip()
+    if cleaned.startswith('```json'):
+        cleaned = cleaned[7:]
+    elif cleaned.startswith('```'):
+        cleaned = cleaned[3:]
+    if cleaned.endswith('```'):
+        cleaned = cleaned[:-3]
+    return cleaned.strip()
+
+
+def _build_router_failure_warning(result: Any) -> str:
+    error_code = _normalize_text(getattr(result, 'error_code', None))
+    message = _normalize_text(getattr(result, 'message', None))
+    if error_code and message:
+        return f'Unified model router failed for rag_answer: {error_code}: {message}'
+    if error_code:
+        return f'Unified model router failed for rag_answer: {error_code}'
+    if message:
+        return f'Unified model router failed for rag_answer: {message}'
+    return 'Unified model router failed for rag_answer.'
 
 
 def _build_model_client_answer(

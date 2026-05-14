@@ -16,7 +16,7 @@ from .config import (
 from .change_applier import ChangeApplier
 from .change_proposal import ProposalStore
 from .svn_committer import SvnCommitter
-from .svn_client import SvnClient, SvnNotInstalledError, TortoiseUiOnlyError
+from .svn_client import SvnClient, TortoiseUiOnlyError
 from .paths import (
     get_workspace_game_dir,
     get_chroma_dir,
@@ -30,77 +30,35 @@ from .index_committer import IndexCommitter
 from .svn_watcher import SvnWatcher
 from .query_router import QueryRouter
 from .code_indexer import CodeIndexer, CodeIndexStore, index_cs_batch
+from .unified_model_router import UnifiedModelRouter
 
 logger = logging.getLogger(__name__)
 
 
-class SimpleModelRouter:
-    """轻量 LLM 调用桥接：把 game 子系统的 call_model(prompt, model_type)
-    转发到 ProviderManager 当前激活的模型。失败时返回空字符串，由调用方走兜底。
-    不在源码里出现任何凭据 / URL 字面量；一切走 ProviderManager 已存储的运行时配置。
+SVN_RUNTIME_DISABLED_REASON = (
+    "SVN runtime is frozen in P0-01. Use the local project root as a filesystem path and run SVN externally."
+)
+
+
+class SimpleModelRouter(UnifiedModelRouter):
+    """Compatibility adapter around the unified model router.
+
+    Keep call_model(prompt, model_type) stable for legacy callers while the
+    formal boundary is centralized in UnifiedModelRouter.
     """
 
-    def __init__(self, provider_manager: Any = None) -> None:
-        self._pm = provider_manager
-
-    def _resolve_active(self):
-        if self._pm is None:
-            return None, None
-        active = getattr(self._pm, "active_model", None)
-        if active is None:
-            getter = getattr(self._pm, "get_active_model", None)
-            if callable(getter):
-                active = getter()
-        if active is None:
-            return None, None
-        provider = self._pm.get_provider(active.provider_id)
-        return provider, active
-
-    async def call_model(self, prompt: str, model_type: str = "default") -> str:
-        provider, active = self._resolve_active()
-        if provider is None or active is None:
-            logger.debug("SimpleModelRouter: no active model, returning empty")
-            return ""
-        model_id = getattr(active, "model_id", None) or getattr(active, "model", None)
-        if not model_id:
-            logger.warning("SimpleModelRouter: active model has no model id")
-            return ""
-        provider_type = type(provider).__name__
-        try:
-            if provider_type == "AnthropicProvider":
-                client = provider._client(timeout=60)
-                resp = await client.messages.create(
-                    model=model_id,
-                    max_tokens=16384,
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                parts = []
-                for blk in (getattr(resp, "content", []) or []):
-                    tx = getattr(blk, "text", None)
-                    if tx:
-                        parts.append(tx)
-                return "".join(parts)
-            base_url = getattr(provider, "base_url", None)
-            api_key = getattr(provider, "api_key", None)
-            if not (base_url and api_key):
-                return ""
-            try:
-                from openai import AsyncOpenAI
-            except Exception:
-                return ""
-            client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=60)
-            resp = await client.chat.completions.create(
-                model=model_id,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.2,
-            )
-            choice = resp.choices[0] if resp.choices else None
-            if choice and choice.message and choice.message.content:
-                return choice.message.content
-            return ""
-        except Exception as e:
-            logger.warning(f"SimpleModelRouter.call_model failed ({model_type}, provider={provider_type}): {e}")
-            return ""
+    def __init__(
+        self,
+        provider_manager: Any = None,
+        *,
+        project_config: ProjectConfig | None = None,
+        compatibility_router: Any = None,
+    ) -> None:
+        super().__init__(
+            provider_manager=provider_manager,
+            project_config=project_config,
+            compatibility_router=compatibility_router,
+        )
 
 
 class GameService:
@@ -209,16 +167,29 @@ class GameService:
         return None
 
     def _model_router(self):
+        compatibility_router = getattr(self.runner, "model_router", None) if self.runner is not None else None
         if self.runner is not None:
             r = getattr(self.runner, "model_router", None)
             if r is not None:
-                return r
+                return SimpleModelRouter(
+                    None,
+                    project_config=self._project_config,
+                    compatibility_router=r,
+                )
         try:
             from ..providers.provider_manager import ProviderManager
-            return SimpleModelRouter(ProviderManager.get_instance())
+            return SimpleModelRouter(
+                ProviderManager.get_instance(),
+                project_config=self._project_config,
+                compatibility_router=compatibility_router,
+            )
         except Exception as e:
             logger.debug(f"ProviderManager unavailable, using stub router: {e}")
-            return SimpleModelRouter(None)
+            return SimpleModelRouter(
+                None,
+                project_config=self._project_config,
+                compatibility_router=compatibility_router,
+            )
 
     def _rebuild_runtime_components(self) -> None:
         runtime_svn_root = self._runtime_svn_root()
@@ -232,7 +203,7 @@ class GameService:
         self._code_indexer = None
         self._code_index_store = None
         if self._project_config:
-            svn_root = Path(self._project_config.svn.root)
+            project_root = runtime_svn_root or Path(self._project_config.svn.root)
             self._table_indexer = TableIndexer(
                 project=self._project_config,
                 model_router=self._model_router(),
@@ -244,7 +215,7 @@ class GameService:
             )
             self._change_applier = ChangeApplier(
                 self._project_config,
-                svn_root,
+                project_root,
                 self._table_indexer,
             )
             try:
@@ -256,33 +227,10 @@ class GameService:
                 logger.warning(f"初始化 code indexer 失败: {e}")
                 self._code_indexer = None
                 self._code_index_store = None
-        if self._project_config and self._svn_client:
-            self._index_committer = IndexCommitter(
-                project=self._project_config,
-                svn_client=self._svn_client,
-                workspace_dir=self.workspace_dir,
-            )
-            self._svn_watcher = SvnWatcher(
-                project=self._project_config,
-                svn_client=self._svn_client,
-                change_callback=self._handle_svn_change,
-            )
-            if self._user_config.my_role == "maintainer":
-                self._svn_committer = SvnCommitter(
-                    self._svn_client,
-                    Path(self._project_config.svn.root),
-                )
         self._query_router = QueryRouter(self)
 
     async def _maybe_start_watcher(self) -> None:
-        if not self._svn_watcher:
-            return
-        if self._user_config.my_role != "maintainer":
-            return
-        try:
-            await self._svn_watcher.start()
-        except Exception as e:
-            logger.warning(f"SVN watcher 启动失败: {e}")
+        logger.info("跳过 SVN watcher 启动：%s", SVN_RUNTIME_DISABLED_REASON)
 
     async def start(self) -> None:
         if self._started:
@@ -293,19 +241,6 @@ class GameService:
             if self._user_config.svn_local_root:
                 svn_root = Path(self._user_config.svn_local_root)
                 self._project_config = load_project_config(svn_root)
-                if self._project_config and self._user_config.my_role == "maintainer":
-                    try:
-                        self._svn_client = SvnClient(
-                            working_copy=svn_root,
-                            username=self._user_config.svn_username,
-                            password=self._user_config.svn_password,
-                            trust_server_cert=self._user_config.svn_trust_cert,
-                        )
-                        await self._svn_client.check_installed()
-                    except SvnNotInstalledError:
-                        logger.warning("SVN未安装，部分功能将不可用")
-                    except Exception as e:
-                        logger.warning(f"SVN客户端初始化失败: {e}")
             runtime_svn_root = self._runtime_svn_root()
             get_chroma_dir(self.workspace_dir, runtime_svn_root).mkdir(parents=True, exist_ok=True)
             get_llm_cache_dir(self.workspace_dir, runtime_svn_root).mkdir(parents=True, exist_ok=True)
@@ -354,17 +289,6 @@ class GameService:
             if self._user_config.svn_local_root:
                 svn_root = Path(self._user_config.svn_local_root)
                 self._project_config = load_project_config(svn_root)
-                if self._project_config and self._user_config.my_role == "maintainer":
-                    try:
-                        self._svn_client = SvnClient(
-                            working_copy=svn_root,
-                            username=self._user_config.svn_username,
-                            password=self._user_config.svn_password,
-                            trust_server_cert=self._user_config.svn_trust_cert,
-                        )
-                    except Exception as e:
-                        logger.warning(f"SVN客户端重新初始化失败: {e}")
-                        self._svn_client = None
             self._rebuild_runtime_components()
             await self._maybe_start_watcher()
             self._config_generation += 1
@@ -553,29 +477,21 @@ class GameService:
             logger.error(f"处理SVN变更时出错: {e}")
 
     async def start_svn_monitoring(self) -> bool:
-        if not self._svn_watcher:
-            return False
-        try:
-            await self._svn_watcher.start()
-            return True
-        except Exception as e:
-            logger.error(f"启动SVN监控失败: {e}")
-            return False
+        logger.info("忽略 start_svn_monitoring：%s", SVN_RUNTIME_DISABLED_REASON)
+        return False
 
     async def stop_svn_monitoring(self) -> bool:
-        if not self._svn_watcher:
-            return False
-        try:
-            await self._svn_watcher.stop()
-            return True
-        except Exception as e:
-            logger.error(f"停止SVN监控失败: {e}")
-            return False
+        logger.info("忽略 stop_svn_monitoring：%s", SVN_RUNTIME_DISABLED_REASON)
+        return False
 
     def get_svn_monitoring_status(self) -> dict:
-        if not self._svn_watcher:
-            return {"error": "SVN监控器未初始化"}
-        return self._svn_watcher.get_status()
+        return {
+            "disabled": True,
+            "running": False,
+            "configured": self.configured,
+            "reason": SVN_RUNTIME_DISABLED_REASON,
+            "my_role": self._user_config.my_role,
+        }
 
     async def force_full_rescan(self) -> dict:
         import fnmatch

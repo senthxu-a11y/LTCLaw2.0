@@ -7,7 +7,10 @@ from contextvars import ContextVar
 from typing import Optional, TYPE_CHECKING
 from fastapi import Request
 from .multi_agent_manager import MultiAgentManager
+from .capabilities import build_agent_capability_profile
 from ..config.utils import load_config
+from ..config.config import load_agent_config
+from ..game.config import load_user_config
 
 if TYPE_CHECKING:
     from .workspace import Workspace
@@ -105,6 +108,30 @@ async def get_agent_for_request(
                 status_code=404,
                 detail=f"Agent '{target_agent_id}' not found",
             )
+        agent_config = load_agent_config(target_agent_id)
+        user_config = load_user_config()
+        local_profile = user_config.agent_profiles.get(target_agent_id)
+        capability_profile = build_agent_capability_profile(
+            agent_id=target_agent_id,
+            display_name=agent_config.name,
+            local_profile=local_profile,
+            legacy_my_role=user_config.my_role,
+        )
+        request.state.agent_id = target_agent_id
+        request.state.agent_profile = {
+            'agent_id': capability_profile.agent_id,
+            'display_name': capability_profile.display_name,
+            'role': capability_profile.role,
+            'capabilities': list(capability_profile.capabilities),
+            'note': 'Local capability boundary only; not a server security system.',
+        }
+        request.state.capabilities = set(capability_profile.capabilities)
+        request.state.user = {
+            'agent_id': capability_profile.agent_id,
+            'display_name': capability_profile.display_name,
+            'role': capability_profile.role,
+            'capabilities': list(capability_profile.capabilities),
+        }
         return workspace
     except ValueError as e:
         raise HTTPException(

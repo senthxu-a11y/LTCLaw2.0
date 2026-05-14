@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
-from ..knowledge_base.kb_store import KnowledgeBaseEntry, get_kb_store
 from .code_indexer import CodeIndexStore
 from .knowledge_formal_map_store import FormalKnowledgeMapStoreError, load_formal_knowledge_map
 from .knowledge_release_builders import (
@@ -33,7 +32,9 @@ from .models import (
     KnowledgeScriptRef,
     KnowledgeSystem,
     KnowledgeTableRef,
+    ReleaseBuildMode,
     ReleaseCandidate,
+    ReleaseMapSource,
     TableIndex,
 )
 from .paths import get_code_index_dir, get_table_indexes_path
@@ -57,6 +58,27 @@ class KnowledgeReleaseBuildResult:
     manifest: KnowledgeManifest
     knowledge_map: KnowledgeMap
     artifacts: dict[str, KnowledgeIndexArtifact]
+    build_mode: ReleaseBuildMode
+    status: str
+    map_source: ReleaseMapSource
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _ResolvedReleaseBuildMap:
+    knowledge_map: KnowledgeMap
+    build_mode: ReleaseBuildMode
+    map_source: ReleaseMapSource
+    warnings: tuple[str, ...]
+
+
+_BOOTSTRAP_CURRENT_RELEASE_WARNING = (
+    'Bootstrap release used the current release map snapshot; this is not an administrator-approved formal map.'
+)
+_BOOTSTRAP_CURRENT_INDEXES_WARNING = (
+    'Bootstrap release synthesized a map from current project indexes; this is not an administrator-approved formal map.'
+)
+_STRICT_FORMAL_MAP_REQUIRED = 'Strict release build requires a saved formal knowledge map'
 
 
 def build_knowledge_release(
@@ -72,6 +94,9 @@ def build_knowledge_release(
     created_by: str | None = None,
     created_at: datetime | None = None,
     release_notes: str = '',
+    build_mode: ReleaseBuildMode = 'strict',
+    map_source: ReleaseMapSource = 'provided',
+    warnings: Iterable[str] = (),
 ) -> KnowledgeReleaseBuildResult:
     root = Path(project_root).expanduser().resolve(strict=False)
     if not root.exists() or not root.is_dir():
@@ -101,6 +126,7 @@ def build_knowledge_release(
         'script_evidence': script_artifact,
         'candidate_evidence': candidate_artifact,
     }
+    warning_list = tuple(str(warning) for warning in warnings if str(warning).strip())
     manifest = build_minimal_manifest(
         root,
         validated_release_id,
@@ -115,6 +141,9 @@ def build_knowledge_release(
         ),
         created_by=created_by,
         created_at=created_at,
+        build_mode=build_mode,
+        map_source=map_source,
+        warnings=warning_list,
         index_entries=artifacts,
     )
     release_dir = create_release(
@@ -134,6 +163,10 @@ def build_knowledge_release(
         manifest=manifest,
         knowledge_map=knowledge_map,
         artifacts=dict(manifest.indexes),
+        build_mode=manifest.build_mode,
+        status=manifest.status,
+        map_source=manifest.map_source,
+        warnings=tuple(manifest.warnings),
     )
 
 
@@ -142,6 +175,7 @@ def build_knowledge_release_from_current_indexes(
     workspace_dir: Path,
     release_id: str,
     *,
+    bootstrap: bool = False,
     candidate_ids: Iterable[str] = (),
     created_by: str | None = None,
     created_at: datetime | None = None,
@@ -153,27 +187,26 @@ def build_knowledge_release_from_current_indexes(
 
     workspace = Path(workspace_dir).expanduser().resolve(strict=False)
     validated_release_id = validate_release_id(release_id)
-    approved_docs = _load_approved_doc_entries(workspace)
     table_index_inventory = _load_current_table_indexes(root)
     code_index_inventory = _load_current_code_indexes(workspace, root)
-    current_map = _resolve_effective_map_for_safe_build(
+    resolved_map = _resolve_effective_map_for_safe_build(
         root,
         validated_release_id,
         table_index_inventory=table_index_inventory,
         code_index_inventory=code_index_inventory,
-        approved_docs=approved_docs,
+        bootstrap=bootstrap,
     )
     selected_candidates = _resolve_release_candidates(root, candidate_ids)
 
     release_time = created_at or datetime.now(timezone.utc)
-    table_indexes = _select_current_table_indexes(table_index_inventory, current_map)
-    code_indexes = _select_current_code_indexes(code_index_inventory, current_map)
-    doc_indexes, knowledge_docs = _build_release_docs(current_map, approved_docs, release_time)
+    table_indexes = _select_current_table_indexes(table_index_inventory, resolved_map.knowledge_map)
+    code_indexes = _select_current_code_indexes(code_index_inventory, resolved_map.knowledge_map)
+    doc_indexes, knowledge_docs = _build_release_docs(resolved_map.knowledge_map, release_time)
 
     return build_knowledge_release(
         root,
         validated_release_id,
-        current_map,
+        resolved_map.knowledge_map,
         table_indexes=table_indexes,
         doc_indexes=doc_indexes,
         code_indexes=code_indexes,
@@ -182,6 +215,9 @@ def build_knowledge_release_from_current_indexes(
         created_by=created_by,
         created_at=release_time,
         release_notes=release_notes,
+        build_mode=resolved_map.build_mode,
+        map_source=resolved_map.map_source,
+        warnings=resolved_map.warnings,
     )
 
 
@@ -191,27 +227,44 @@ def _resolve_effective_map_for_safe_build(
     *,
     table_index_inventory: list[TableIndex],
     code_index_inventory: list[CodeFileIndex],
-    approved_docs: dict[str, KnowledgeBaseEntry],
-) -> KnowledgeMap:
+    bootstrap: bool,
+) -> _ResolvedReleaseBuildMap:
     try:
         formal_map_record = load_formal_knowledge_map(project_root)
     except FormalKnowledgeMapStoreError as exc:
         raise KnowledgeReleasePrerequisiteError(f'Saved formal knowledge map is invalid: {exc}') from exc
 
     if formal_map_record is not None:
-        return formal_map_record.knowledge_map.model_copy(update={'release_id': release_id})
+        return _ResolvedReleaseBuildMap(
+            knowledge_map=formal_map_record.knowledge_map.model_copy(update={'release_id': release_id}),
+            build_mode='strict',
+            map_source='formal_map',
+            warnings=(),
+        )
+
+    if not bootstrap:
+        raise KnowledgeReleasePrerequisiteError(_STRICT_FORMAL_MAP_REQUIRED)
 
     try:
         current_map = get_current_release_map(project_root)
     except CurrentKnowledgeReleaseNotSetError:
-        return _build_bootstrap_map_from_current_indexes(
-            project_root,
-            release_id,
-            table_index_inventory=table_index_inventory,
-            code_index_inventory=code_index_inventory,
-            approved_docs=approved_docs,
+        return _ResolvedReleaseBuildMap(
+            knowledge_map=_build_bootstrap_map_from_current_indexes(
+                project_root,
+                release_id,
+                table_index_inventory=table_index_inventory,
+                code_index_inventory=code_index_inventory,
+            ),
+            build_mode='bootstrap',
+            map_source='bootstrap_current_indexes',
+            warnings=(_BOOTSTRAP_CURRENT_INDEXES_WARNING,),
         )
-    return current_map.model_copy(update={'release_id': release_id})
+    return _ResolvedReleaseBuildMap(
+        knowledge_map=current_map.model_copy(update={'release_id': release_id}),
+        build_mode='bootstrap',
+        map_source='current_release',
+        warnings=(_BOOTSTRAP_CURRENT_RELEASE_WARNING,),
+    )
 
 
 def _build_bootstrap_map_from_current_indexes(
@@ -220,7 +273,6 @@ def _build_bootstrap_map_from_current_indexes(
     *,
     table_index_inventory: list[TableIndex],
     code_index_inventory: list[CodeFileIndex],
-    approved_docs: dict[str, KnowledgeBaseEntry],
 ) -> KnowledgeMap:
     if not table_index_inventory:
         raise KnowledgeReleasePrerequisiteError(
@@ -240,17 +292,7 @@ def _build_bootstrap_map_from_current_indexes(
     ]
     table_ids = {table_ref.table_id for table_ref in table_refs}
 
-    doc_refs = [
-        KnowledgeDocRef(
-            doc_id=_stable_doc_id(source_path),
-            title=approved_entry.title or Path(source_path).stem,
-            source_path=source_path,
-            source_hash=_hash_project_source(project_root, source_path),
-            system_id=_doc_system_id(approved_entry),
-            status='active',
-        )
-        for source_path, approved_entry in sorted(approved_docs.items())
-    ]
+    doc_refs: list[KnowledgeDocRef] = []
 
     script_refs: list[KnowledgeScriptRef] = []
     relationships: list[KnowledgeRelationship] = []
@@ -442,31 +484,12 @@ def _normalize_system_id(value: str | None) -> str | None:
     return candidate or None
 
 
-def _doc_system_id(entry: KnowledgeBaseEntry) -> str | None:
-    for tag in entry.tags or []:
-        candidate = _normalize_system_id(str(tag or ''))
-        if candidate:
-            return candidate
-    return None
-
-
 def _stable_doc_id(source_path: str) -> str:
     return 'doc-' + hashlib.sha1(source_path.encode('utf-8')).hexdigest()[:12]
 
 
 def _stable_script_id(source_path: str) -> str:
     return 'script-' + hashlib.sha1(source_path.encode('utf-8')).hexdigest()[:12]
-
-
-def _hash_project_source(project_root: Path, source_path: str) -> str:
-    try:
-        normalized = normalize_local_project_relative_path(source_path, error_label='approved doc path')
-    except ValueError as exc:
-        raise KnowledgeReleasePrerequisiteError(str(exc)) from exc
-    absolute_path = project_root / normalized
-    if not absolute_path.exists() or not absolute_path.is_file():
-        raise KnowledgeReleasePrerequisiteError(f'Approved doc source is missing: {source_path}')
-    return 'sha256:' + hashlib.sha256(absolute_path.read_bytes()).hexdigest()
 
 
 def _script_system_id(code_index: CodeFileIndex, table_indexes: Iterable[TableIndex]) -> str | None:
@@ -535,55 +558,36 @@ def _build_bootstrap_systems(
     ]
 
 
-def _load_approved_doc_entries(workspace_dir: Path) -> dict[str, KnowledgeBaseEntry]:
-    approved_docs: dict[str, KnowledgeBaseEntry] = {}
-    for entry in get_kb_store(workspace_dir).list_entries():
-        if entry.source != 'doc_library':
-            continue
-        doc_path = str(entry.extra.get('doc_path') or '').strip()
-        if not doc_path:
-            continue
-        approved_docs[doc_path] = entry
-    return approved_docs
-
-
 def _build_release_docs(
     knowledge_map: KnowledgeMap,
-    approved_docs: dict[str, KnowledgeBaseEntry],
     indexed_at: datetime,
 ) -> tuple[list[DocIndex], list[KnowledgeDocRef]]:
-    missing: list[str] = []
     doc_indexes: list[DocIndex] = []
     knowledge_docs: list[KnowledgeDocRef] = []
     related_tables = _collect_related_tables_by_doc(knowledge_map)
 
     for doc_ref in knowledge_map.docs:
-        approved_entry = approved_docs.get(doc_ref.source_path)
-        if approved_entry is None:
-            missing.append(doc_ref.source_path)
-            continue
         knowledge_docs.append(doc_ref)
-        category = str(approved_entry.extra.get('doc_type') or approved_entry.category or 'doc')
-        if category.startswith('doc:'):
-            category = category[4:] or 'doc'
+        doc_title = str(doc_ref.title or Path(doc_ref.source_path).stem or doc_ref.doc_id)
         doc_indexes.append(
             DocIndex(
                 source_path=doc_ref.source_path,
                 source_hash=doc_ref.source_hash,
                 svn_revision=0,
-                doc_type=category,
-                title=approved_entry.title or doc_ref.title,
-                summary=approved_entry.summary or doc_ref.title,
+                doc_type=_infer_doc_type(doc_ref.source_path),
+                title=doc_title,
+                summary=doc_title,
                 related_tables=related_tables.get(doc_ref.doc_id, []),
                 last_indexed_at=indexed_at,
             )
         )
 
-    if missing:
-        raise KnowledgeReleasePrerequisiteError(
-            'Approved docs are missing for current formal map: ' + ', '.join(sorted(missing))
-        )
     return doc_indexes, knowledge_docs
+
+
+def _infer_doc_type(source_path: str) -> str:
+    suffix = Path(source_path).suffix.lower().lstrip('.')
+    return suffix or 'doc'
 
 
 def _collect_related_tables_by_doc(knowledge_map: KnowledgeMap) -> dict[str, list[str]]:

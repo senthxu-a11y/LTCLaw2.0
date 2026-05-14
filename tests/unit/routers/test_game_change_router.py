@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from httpx import ASGITransport, AsyncClient
 
 from ltclaw_gy_x.app.agent_context import get_agent_for_request
@@ -146,6 +146,30 @@ async def test_create_proposal_allows_local_trusted_fallback_without_capability_
 
 
 @pytest.mark.asyncio
+async def test_create_proposal_requires_injected_request_state_capabilities(app, client):
+    workspace = _workspace()
+
+    async def _override(request: Request):
+        request.state.capabilities = {'workbench.read'}
+        return workspace
+
+    app.dependency_overrides[get_agent_for_request] = _override
+
+    async with client:
+        response = await client.post(
+            '/api/game/change/proposals',
+            json={
+                'title': 'Export hp',
+                'description': 'Export draft',
+                'ops': [{'op': 'update_cell', 'table': 'Hero', 'row_id': 1, 'field': 'HP', 'new_value': 100}],
+            },
+        )
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: workbench.test.export'
+
+
+@pytest.mark.asyncio
 async def test_invalid_state_transition_returns_409(app, client):
     store = _Store()
     proposal = ChangeProposal(
@@ -204,3 +228,77 @@ async def test_missing_service_returns_404(app, client):
         response = await client.get("/api/game/change/proposals")
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_apply_does_not_read_svn_revision(app, client):
+    store = _Store()
+    proposal = ChangeProposal(
+        id="p-apply",
+        title="Apply only",
+        ops=[ChangeOp(op="update_cell", table="Hero", row_id=1, field="HP", new_value=100)],
+        status="approved",
+    )
+    store.items[proposal.id] = proposal
+
+    svn = SimpleNamespace(info=pytest.fail)
+
+    async def _apply(_proposal):
+        return {"changed_files": ["Tables/Hero.csv"], "summary": "1 updates / 0 inserts / 0 deletes"}
+
+    service = SimpleNamespace(
+        proposal_store=store,
+        change_applier=SimpleNamespace(apply=_apply),
+        svn_committer=None,
+        user_config=SimpleNamespace(my_role="maintainer"),
+        svn=svn,
+    )
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service=service)
+
+    async with client:
+        response = await client.post("/api/game/change/proposals/p-apply/apply")
+
+    assert response.status_code == 200
+    assert response.json()["proposal"]["applied_revision"] is None
+
+
+@pytest.mark.asyncio
+async def test_commit_is_frozen(app, client):
+    store = _Store()
+    proposal = ChangeProposal(id="p-commit", title="Commit", ops=[], status="applied")
+    store.items[proposal.id] = proposal
+    service = SimpleNamespace(
+        proposal_store=store,
+        change_applier=None,
+        svn_committer=SimpleNamespace(),
+        user_config=SimpleNamespace(my_role="maintainer"),
+        svn=None,
+    )
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service=service)
+
+    async with client:
+        response = await client.post("/api/game/change/proposals/p-commit/commit")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["disabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_revert_is_frozen(app, client):
+    store = _Store()
+    proposal = ChangeProposal(id="p-revert", title="Revert", ops=[], status="applied")
+    store.items[proposal.id] = proposal
+    service = SimpleNamespace(
+        proposal_store=store,
+        change_applier=None,
+        svn_committer=SimpleNamespace(),
+        user_config=SimpleNamespace(my_role="maintainer"),
+        svn=None,
+    )
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service=service)
+
+    async with client:
+        response = await client.post("/api/game/change/proposals/p-revert/revert")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["disabled"] is True

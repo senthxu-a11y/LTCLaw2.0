@@ -3,6 +3,11 @@ import { Avatar, Button, Empty, Input, Space, Tag, Tooltip, Typography } from "a
 import { CheckOutlined, RobotOutlined, SendOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { SuggestChange } from "../../../api/modules/gameWorkbench";
+import {
+  buildSuggestMessagePresentation,
+  buildSuggestionEvidencePresentation,
+  type WorkbenchSuggestMeta,
+} from "./workbenchSuggestEvidence";
 import styles from "../NumericWorkbench.module.less";
 
 const { Text } = Typography;
@@ -13,6 +18,8 @@ export interface ChatMessage {
   ts: number;
   /** AI 建议条目，仅 assistant 消息才有；点击「接受」回写到表 */
   suggestions?: SuggestChange[];
+  /** 响应级 evidence / validation 元信息。 */
+  suggestMeta?: WorkbenchSuggestMeta;
   /** 已经接受过的 dirty key 集合（用于禁用按钮） */
   acceptedKeys?: string[];
 }
@@ -115,26 +122,70 @@ export function WorkbenchChat(props: WorkbenchChatProps) {
               <div className={styles.chatBubbleWrap}>
                 <span className={styles.chatBubble}>{m.content}</span>
                 {m.role === "assistant" && m.suggestions && m.suggestions.length > 0 && (
-                  <div className={styles.suggestionList}>
+                  (() => {
+                    const summary = buildSuggestMessagePresentation(m.suggestions, m.suggestMeta);
+                    return (
+                      <div className={styles.suggestionList}>
                     <div className={styles.suggestionListHeader}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {t("gameWorkbench.suggestionListLabel", {
-                          count: m.suggestions.length,
-                          defaultValue: `共 ${m.suggestions.length} 条建议（点击逐条接受 / 一键全部接受）`,
-                        })}
-                      </Text>
-                      <Button
-                        size="small"
-                        type="primary"
-                        icon={<CheckOutlined />}
-                        onClick={() => onAcceptAll(m.suggestions!)}
-                      >
-                        {t("gameWorkbench.adoptAll", { defaultValue: "全部接受" })}
-                      </Button>
+                        <div className={styles.suggestionSummaryBlock}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {t("gameWorkbench.suggestionListLabel", {
+                              count: m.suggestions.length,
+                              defaultValue: `共 ${m.suggestions.length} 条建议（点击逐条接受 / 一键全部接受）`,
+                            })}
+                          </Text>
+                          <Space size={[4, 4]} wrap>
+                            {summary.hasFormalEvidence ? (
+                              <Tag color="green">
+                                {t("gameWorkbench.formalEvidenceTag", { defaultValue: "Formal evidence" })}
+                              </Tag>
+                            ) : null}
+                            {summary.usesDraftOverlay ? (
+                              <Tag color="gold">
+                                {t("gameWorkbench.draftOverlayTag", { defaultValue: "Draft Overlay" })}
+                              </Tag>
+                            ) : null}
+                            {summary.hasRuntimeOnlySuggestion ? (
+                              <Tag color="default">
+                                {t("gameWorkbench.runtimeOnlySuggestionTag", { defaultValue: "Runtime-only suggestion" })}
+                              </Tag>
+                            ) : null}
+                            {summary.formalContextStatus ? (
+                              <Tag>
+                                {t("gameWorkbench.formalContextStatusTag", {
+                                  defaultValue: `formal_context_status: ${summary.formalContextStatus}`,
+                                })}
+                              </Tag>
+                            ) : null}
+                            {summary.sourceReleaseId ? (
+                              <Tag color="blue">
+                                {t("gameWorkbench.sourceReleaseTag", {
+                                  defaultValue: `knowledge version: ${summary.sourceReleaseId}`,
+                                })}
+                              </Tag>
+                            ) : null}
+                          </Space>
+                          {summary.evidenceRefs.length > 0 ? (
+                            <div className={styles.suggestionEvidenceStrip}>
+                              {summary.evidenceRefs.map((ref) => (
+                                <Tag key={ref}>{ref}</Tag>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                        <Button
+                          size="small"
+                          type="primary"
+                          icon={<CheckOutlined />}
+                          onClick={() => onAcceptAll(m.suggestions!)}
+                        >
+                          {t("gameWorkbench.adoptAll", { defaultValue: "全部接受" })}
+                        </Button>
                     </div>
                     {m.suggestions.map((s, j) => {
                       const k = `${s.table}::${String(s.row_id)}::${s.field}`;
                       const accepted = (m.acceptedKeys || []).includes(k);
+                      const presentation = buildSuggestionEvidencePresentation(s, m.suggestMeta);
                       return (
                         <div key={j} className={styles.suggestionInlineCard}>
                           <Space wrap size={4}>
@@ -148,6 +199,55 @@ export function WorkbenchChat(props: WorkbenchChatProps) {
                               {formatVal(s.new_value)}
                             </Text>
                           </Space>
+                          <Space size={[4, 4]} wrap>
+                            <Tag color={presentation.evidenceKind === "formal" ? "green" : "default"}>
+                              {presentation.evidenceKind === "formal"
+                                ? t("gameWorkbench.formalEvidenceTag", { defaultValue: "Formal evidence" })
+                                : t("gameWorkbench.runtimeOnlySuggestionTag", { defaultValue: "Runtime-only suggestion" })}
+                            </Tag>
+                            {presentation.usesDraftOverlay ? (
+                              <Tag color="gold">
+                                {t("gameWorkbench.draftOverlayAssistTag", {
+                                  defaultValue: "Draft Overlay assist only",
+                                })}
+                              </Tag>
+                            ) : null}
+                            {presentation.confidenceText ? (
+                              <Tag>
+                                {t("gameWorkbench.suggestConfidenceTag", {
+                                  defaultValue: `confidence: ${presentation.confidenceText}`,
+                                })}
+                              </Tag>
+                            ) : null}
+                            {presentation.validationStatus ? (
+                              <Tag>
+                                {t("gameWorkbench.suggestValidationStatusTag", {
+                                  defaultValue: `validation: ${presentation.validationStatus}`,
+                                })}
+                              </Tag>
+                            ) : null}
+                            {presentation.sourceReleaseId ? (
+                              <Tag color="blue">
+                                {t("gameWorkbench.sourceReleaseTag", {
+                                  defaultValue: `knowledge version: ${presentation.sourceReleaseId}`,
+                                })}
+                              </Tag>
+                            ) : null}
+                          </Space>
+                          {presentation.evidenceRefs.length > 0 ? (
+                            <div className={styles.suggestionEvidenceBlock}>
+                              <Text type="secondary" style={{ fontSize: 12 }}>
+                                {t("gameWorkbench.suggestEvidenceLabel", {
+                                  defaultValue: "formal evidence_refs",
+                                })}
+                              </Text>
+                              <div className={styles.suggestionEvidenceStrip}>
+                                {presentation.evidenceRefs.map((ref) => (
+                                  <Tag key={ref}>{ref}</Tag>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                           {s.reason && (
                             <Tooltip title={s.reason}>
                               <Text type="secondary" style={{ fontSize: 12 }} ellipsis>
@@ -180,7 +280,9 @@ export function WorkbenchChat(props: WorkbenchChatProps) {
                         </div>
                       );
                     })}
-                  </div>
+                      </div>
+                    );
+                  })()
                 )}
               </div>
             </div>

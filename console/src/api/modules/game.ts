@@ -65,8 +65,8 @@ export const gameApi = {
     return request<SvnStatusResponse>(`/agents/${agentId}/game/svn/status`);
   },
   
-  async triggerSync(agentId: string): Promise<ChangeSet> {
-    return request<ChangeSet>(`/agents/${agentId}/game/svn/sync`, {
+  async triggerSync(agentId: string): Promise<ChangeSet | { disabled: true; reason: string; configured?: boolean }> {
+    return request<ChangeSet | { disabled: true; reason: string; configured?: boolean }>(`/agents/${agentId}/game/svn/sync`, {
       method: "POST",
     });
   },

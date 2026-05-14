@@ -4,14 +4,26 @@ from __future__ import annotations
 
 import asyncio
 import re
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from ...app.agent_context import get_agent_for_request
+from ...app.capabilities import require_capability
 from ...app.workspace.workspace import Workspace
 from ...game.change_proposal import ChangeOp, ChangeProposal
+from ...game.dependency_resolver import get_dependency_graph_source_metadata
+from ...game.workbench_suggest_context import (
+    build_workbench_suggest_formal_context,
+    build_workbench_suggest_prompt,
+    validate_workbench_suggest_payload,
+)
+from ...game.workbench_source_write_service import (
+    WorkbenchSourceWriteOp,
+    WorkbenchSourceWriteService,
+)
 
 
 class PreviewChange(BaseModel):
@@ -23,6 +35,11 @@ class PreviewChange(BaseModel):
 
 class PreviewRequest(BaseModel):
     changes: list[PreviewChange] = []
+
+
+class SourceWriteRequest(BaseModel):
+    ops: list[WorkbenchSourceWriteOp] = Field(default_factory=list)
+    reason: str = Field(default="")
 
 
 class ChatTurn(BaseModel):
@@ -40,6 +57,10 @@ class SuggestRequest(BaseModel):
 router = APIRouter(prefix="/game/workbench", tags=["game-workbench"])
 
 
+def _impact_source_metadata() -> dict[str, Any]:
+    return dict(get_dependency_graph_source_metadata())
+
+
 def _service(workspace: Workspace):
     svc = workspace.service_manager.services.get("game_service")
     if svc is None:
@@ -52,6 +73,24 @@ def _change_applier(svc):
     if applier is None:
         raise HTTPException(status_code=412, detail="Change applier not available")
     return applier
+
+
+def _project_root_or_none(game_service) -> Path | None:
+    runtime_root = getattr(game_service, '_runtime_svn_root', None)
+    if callable(runtime_root):
+        root = runtime_root()
+        if root is not None:
+            return Path(root)
+    user_config = getattr(game_service, 'user_config', None)
+    local_root = getattr(user_config, 'svn_local_root', None)
+    if local_root:
+        return Path(local_root).expanduser()
+    project_config = getattr(game_service, 'project_config', None)
+    svn_config = getattr(project_config, 'svn', None)
+    project_root = getattr(svn_config, 'root', None)
+    if project_root and '://' not in str(project_root):
+        return Path(project_root).expanduser()
+    return None
 
 
 def _make_key(change: PreviewChange) -> tuple[str, str, str]:
@@ -93,6 +132,7 @@ def _compute_reverse_impacts(
 
     seen: set[tuple[str, str, str, str]] = set()
     impacts: list[dict[str, Any]] = []
+    source_metadata = _impact_source_metadata()
 
     for target_table, target_field in targets:
         queue: list[tuple[str, str | None, int]] = [(target_table, target_field, 0)]
@@ -118,6 +158,9 @@ def _compute_reverse_impacts(
                     "confidence": conf,
                     "inferred_by": edge.inferred_by,
                     "depth": depth + 1,
+                    "source_type": source_metadata["source_type"],
+                    "semantic_role": source_metadata["semantic_role"],
+                    "is_formal_map_relationship": source_metadata["is_formal_map_relationship"],
                 })
                 queue.append((edge.from_table, None, depth + 1))
     return impacts
@@ -130,9 +173,10 @@ async def preview_workbench_changes(
 ) -> dict[str, Any]:
     svc = _service(workspace)
     applier = _change_applier(svc)
+    impact_source = _impact_source_metadata()
 
     if not body.changes:
-        return {"items": [], "impacts": [], "affected_tables": []}
+        return {"items": [], "impacts": [], "affected_tables": [], "impacts_metadata": impact_source}
 
     proposal = ChangeProposal(
         title="__workbench_preview__",
@@ -169,6 +213,7 @@ async def preview_workbench_changes(
             ],
             "impacts": [],
             "affected_tables": [],
+            "impacts_metadata": impact_source,
         }
 
     buckets: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
@@ -224,7 +269,28 @@ async def preview_workbench_changes(
         "items": items,
         "impacts": impacts,
         "affected_tables": affected_tables,
+        "impacts_metadata": impact_source,
     }
+
+
+@router.post("/source-write")
+async def write_workbench_changes_to_source(
+    request: Request,
+    body: SourceWriteRequest,
+    workspace: Workspace = Depends(get_agent_for_request),
+) -> dict[str, Any]:
+    require_capability(request, "workbench.source.write")
+    svc = _service(workspace)
+    applier = _change_applier(svc)
+    source_write_service = WorkbenchSourceWriteService(
+        change_applier=applier,
+        workspace_dir=getattr(workspace, "workspace_dir", getattr(applier, "svn_root", ".")),
+        agent_id=(getattr(workspace, "agent_id", None) or getattr(request.state, "agent_id", "") or ""),
+    )
+    outcome = await source_write_service.write(ops=body.ops, reason=body.reason)
+    if not outcome.ok:
+        raise HTTPException(status_code=outcome.status_code, detail=outcome.payload)
+    return outcome.payload
 
 
 def _strip_json_fences(text: str) -> str:
@@ -467,6 +533,7 @@ def _build_row_index(
 
 @router.post("/suggest")
 async def suggest_workbench_changes(
+    request: Request,
     body: SuggestRequest,
     workspace: Workspace = Depends(get_agent_for_request),
 ) -> dict[str, Any]:
@@ -475,6 +542,9 @@ async def suggest_workbench_changes(
     import logging
 
     logger = logging.getLogger(__name__)
+
+    require_capability(request, "workbench.read")
+    require_capability(request, "knowledge.read")
 
     svc = _service(workspace)
     intent = (body.user_intent or "").strip()
@@ -646,6 +716,10 @@ async def suggest_workbench_changes(
         }
         for p in body.current_pending
     ]
+    formal_context = build_workbench_suggest_formal_context(
+        _project_root_or_none(svc),
+        intent,
+    )
 
     # 多轮上下文(P0-5 顺手做): 取最近 6 轮
     history_dump: list[dict[str, str]] = []
@@ -660,58 +734,25 @@ async def suggest_workbench_changes(
             content = content[:600] + "…"
         history_dump.append({"role": role, "content": content})
 
-    prompt_parts: list[str] = []
-    prompt_parts.append(
-        "你是游戏数值策划助手。你将看到目标表(tables)与相关表(related_tables)。\n"
-        "tables[].fields 是完整字段(含 desc), tables[].row_index 仅含 PK + 名称列 + "
-        "与问题关键词命中的列(matched_columns), 用于按描述/数值定位 row_id。\n"
-        "tables[].ai_summary 是该表用途总结。related_tables 来自依赖图, 仅含 schema, "
-        "用于跨表理解, 不应直接产生其上的 changes(除非用户在 tables 里点选了)。"
+    prompt = build_workbench_suggest_prompt(
+        user_intent=intent,
+        tables_meta=tables_meta,
+        related_meta=related_meta,
+        chat_history=history_dump,
+        draft_overlay=pending_dump,
+        formal_context=formal_context,
     )
-    prompt_parts.append(
-        f"目标表 (tables, JSON):\n{_json.dumps(tables_meta, ensure_ascii=False)}"
-    )
-    if related_meta:
-        prompt_parts.append(
-            f"相关表 (related_tables, JSON):\n"
-            f"{_json.dumps(related_meta, ensure_ascii=False)}"
-        )
-    if history_dump:
-        prompt_parts.append(
-            f"最近对话历史 (chat_history):\n"
-            f"{_json.dumps(history_dump, ensure_ascii=False)}"
-        )
-    prompt_parts.append(
-        f"已有待编辑改动: {_json.dumps(pending_dump, ensure_ascii=False)}"
-    )
-    prompt_parts.append(f"策划本轮的需求: {intent}")
-    prompt_parts.append(
-        "输出规则:\n"
-        "1) row_id 必须取自目标表 row_index 中 primary_key 列的真实值; 找不到就把 "
-        "changes 留空, 在 message 中说明无法定位, 严禁编造 ID/字段值。\n"
-        "2) field 必须来自 tables[].fields[].name; 不要修改 related_tables 字段。\n"
-        "3) 若问题是查询/咨询(非改表), changes 留空, 在 message 中给出基于 row_index "
-        "与 ai_summary 的回答。\n"
-        "4) 严格 JSON, 不要 markdown 代码块, 不要解释:\n"
-        '{ "message": "<简短说明>", '
-        '"changes": [{"table":"<表>","row_id":"<行ID>","field":"<字段>",'
-        '"new_value":<新值>,"reason":"<理由>"}] }'
-    )
-    prompt = "\n\n".join(prompt_parts)
 
     router_obj = svc._model_router() if hasattr(svc, "_model_router") else None
-    if router_obj is None or not hasattr(router_obj, "call_model"):
+    if router_obj is None or not hasattr(router_obj, "call_model_result"):
         raise HTTPException(status_code=412, detail="No active model router")
 
-    try:
-        raw = await router_obj.call_model(prompt, model_type="default")
-    except Exception as exc:
-        logger.warning("game_workbench.suggest call_model failed: %s", exc)
-        raise HTTPException(status_code=502, detail=f"LLM call failed: {exc}")
+    result = await router_obj.call_model_result(prompt, model_type="workbench_suggest")
+    if not result.ok:
+        logger.warning("game_workbench.suggest unified model router failed: %s", result)
+        raise HTTPException(status_code=502, detail={"error_code": result.error_code, "message": result.message})
 
-    raw = (raw or "").strip()
-    if not raw:
-        raise HTTPException(status_code=502, detail="LLM returned empty response")
+    raw = (result.text or "").strip()
 
     parsed: dict[str, Any] | None = None
     try:
@@ -725,25 +766,26 @@ async def suggest_workbench_changes(
             parsed = None
 
     if not isinstance(parsed, dict):
-        return {"message": raw, "changes": [], "raw": raw}
+        return {
+            "message": raw,
+            "changes": [],
+            "evidence_refs": [],
+            "formal_context_status": formal_context.get("status"),
+            "raw": raw,
+        }
 
-    changes_out: list[dict[str, Any]] = []
-    for c in parsed.get("changes", []) or []:
-        if not isinstance(c, dict):
-            continue
-        if not c.get("table") or not c.get("field") or c.get("row_id") in (None, ""):
-            continue
-        changes_out.append({
-            "table": str(c.get("table")),
-            "row_id": c.get("row_id"),
-            "field": str(c.get("field")),
-            "new_value": c.get("new_value"),
-            "reason": str(c.get("reason") or ""),
-        })
+    validated = validate_workbench_suggest_payload(
+        parsed,
+        tables_meta=tables_meta,
+        formal_context=formal_context,
+        draft_overlay=pending_dump,
+    )
 
     return {
-        "message": str(parsed.get("message") or ""),
-        "changes": changes_out,
+        "message": validated["message"],
+        "changes": validated["changes"],
+        "evidence_refs": validated["evidence_refs"],
+        "formal_context_status": validated["formal_context_status"],
         "context_summary": {
             "main_tables": [m.get("table") for m in tables_meta],
             "related_tables": [m.get("table") for m in related_meta],

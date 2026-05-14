@@ -2,6 +2,10 @@
 
 来源：总规划书 Phase 0.6、18.1-18.10、19.3.1、19.4。
 
+## 前置边界
+
+本任务必须遵循 P0-00《架构边界冻结》：这里只收口正式知识链路边界，不新增 P1/P2/P3 能力，不让普通策划接触 Formal Map、Current Release 或正式 RAG 的发布入口。
+
 ## 目标
 
 冻结唯一正式知识链路，移除 KB、legacy retrieval、DependencyGraph、ProposalStore、TableIndex 等系统在正式链路里的重叠职责。
@@ -19,6 +23,12 @@ Source
 → Map-gated RAG
 → Chat / Workbench Suggest
 ```
+
+## Capability 与 Legacy 边界
+
+- [ ] 本任务只允许引用已有 capability 名称：`knowledge.read`、`knowledge.build`、`knowledge.publish`、`workbench.source.write`。
+- [ ] 本任务不新增 capability，只澄清谁可以读取、构建、发布正式知识，以及真实源表写回与知识底座更新的隔离关系。
+- [ ] legacy KB、legacy retrieval、SimpleModelRouter 只允许保留为 migration / debug / fallback，不得回升为正式链路。
 
 ## Checklist
 

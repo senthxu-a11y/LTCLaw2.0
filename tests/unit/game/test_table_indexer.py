@@ -1,4 +1,6 @@
 """单元测试: TableIndexer 工具方法。"""
+from types import SimpleNamespace
+
 import pytest
 
 from ltclaw_gy_x.game.config import (
@@ -58,3 +60,39 @@ def test_infer_field_type_numeric(indexer):
     result = indexer._infer_field_type([1, 2, 3])
     assert isinstance(result, str)
     assert result != ""
+
+
+@pytest.mark.asyncio
+async def test_describe_fields_uses_field_describer_model_type(indexer):
+    calls = []
+    indexer.model_router = SimpleNamespace(
+        call_model=lambda prompt, model_type="default": _record_call(calls, prompt, model_type, '{"Damage": {"description": "伤害", "confidence": 0.9}}')
+    )
+
+    payload = await indexer._describe_fields_with_llm(
+        "SkillTable",
+        [{"name": "Damage", "type": "int", "sample_values": [100, 120]}],
+    )
+
+    assert calls == ["field_describer"]
+    assert payload["Damage"]["description"] == "伤害"
+
+
+@pytest.mark.asyncio
+async def test_generate_table_summary_uses_table_summarizer_model_type(indexer):
+    calls = []
+    indexer.model_router = SimpleNamespace(
+        call_model=lambda prompt, model_type="default": _record_call(calls, prompt, model_type, "技能伤害配置表")
+    )
+    fields = [SimpleNamespace(name="Damage", description="伤害")]
+
+    summary, confidence = await indexer._generate_table_summary("SkillTable", fields, [{"Damage": 100}])
+
+    assert calls == ["table_summarizer"]
+    assert summary == "技能伤害配置表"
+    assert confidence == 0.8
+
+
+async def _record_call(calls, prompt, model_type, response):
+    calls.append(model_type)
+    return response

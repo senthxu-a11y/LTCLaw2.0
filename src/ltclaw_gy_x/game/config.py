@@ -20,6 +20,27 @@ from .paths import (
 )
 
 
+DEFAULT_MODEL_TYPE = "default"
+FIELD_DESCRIBER_MODEL_TYPE = "field_describer"
+TABLE_SUMMARIZER_MODEL_TYPE = "table_summarizer"
+MAP_BUILDER_MODEL_TYPE = "map_builder"
+MAP_DIFF_EXPLAINER_MODEL_TYPE = "map_diff_explainer"
+RAG_ANSWER_MODEL_TYPE = "rag_answer"
+WORKBENCH_SUGGEST_MODEL_TYPE = "workbench_suggest"
+DEPENDENCY_ANALYZER_MODEL_TYPE = "dependency_analyzer"
+
+SUPPORTED_MODEL_TYPES = (
+    DEFAULT_MODEL_TYPE,
+    FIELD_DESCRIBER_MODEL_TYPE,
+    TABLE_SUMMARIZER_MODEL_TYPE,
+    MAP_BUILDER_MODEL_TYPE,
+    MAP_DIFF_EXPLAINER_MODEL_TYPE,
+    RAG_ANSWER_MODEL_TYPE,
+    WORKBENCH_SUGGEST_MODEL_TYPE,
+    DEPENDENCY_ANALYZER_MODEL_TYPE,
+)
+
+
 class ProjectMeta(BaseModel):
     """??????"""
     name: str = Field(description="????")
@@ -54,6 +75,25 @@ class IDRange(BaseModel):
     type: str = Field(description="???? (?????)")
     start: int = Field(description="??ID")
     end: int = Field(description="??ID (??)")
+
+
+class LocalAgentProfile(BaseModel):
+    """Local capability profile for a single agent.
+
+    This profile is a local safety boundary to reduce accidental misuse. It is
+    not a server-side authentication or authorization system.
+    """
+
+    agent_id: str = Field(description="Local agent identifier")
+    display_name: str = Field(default="", description="Display name shown in local UI")
+    role: Literal["viewer", "planner", "source_writer", "admin"] = Field(
+        default="viewer",
+        description="Local role template name",
+    )
+    capabilities: list[str] = Field(
+        default_factory=list,
+        description="Explicit capability override list. Empty means use the role template.",
+    )
 
 
 class TableConvention(BaseModel):
@@ -151,16 +191,20 @@ class ProjectConfig(BaseModel):
     filters: FilterConfig = Field(default_factory=FilterConfig)
     table_convention: TableConvention = Field(default_factory=TableConvention)
     doc_templates: dict[str, str] = Field(default_factory=dict, description="??????")
-    models: dict[str, ModelSlotRef] = Field(default_factory=dict, description="AI????")
+    models: dict[str, ModelSlotRef] = Field(default_factory=dict, description="Unified model router slot mapping by model_type")
     external_provider_config: ExternalProviderProjectConfig | None = Field(
         default=None,
-        description="Backend-owned RAG provider config",
+        description="Legacy compatibility config. Formal model calls must go through the unified model router.",
     )
 
 
 class UserGameConfig(BaseModel):
     """??????"""
-    my_role: Literal["maintainer", "consumer"] = Field(default="consumer", description="????")
+    my_role: Literal["maintainer", "planner", "consumer"] = Field(default="consumer", description="Legacy local role shortcut")
+    agent_profiles: dict[str, LocalAgentProfile] = Field(
+        default_factory=dict,
+        description="Local agent capability boundary profiles. This is a local safety boundary, not a server auth system.",
+    )
     svn_local_root: Union[str, None] = Field(default=None, description="??SVN???????")
     svn_url: Union[str, None] = Field(default=None, description="SVN??URL")
     svn_username: Union[str, None] = Field(default=None, description="SVN???")

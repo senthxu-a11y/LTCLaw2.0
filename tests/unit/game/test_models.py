@@ -4,6 +4,10 @@ from datetime import datetime
 import pytest
 
 from ltclaw_gy_x.game.models import (
+    CanonicalDocFacts,
+    CanonicalField,
+    CanonicalScriptFacts,
+    CanonicalTableSchema,
     ChangeSet,
     CommitResult,
     DependencyEdge,
@@ -89,6 +93,60 @@ def test_doc_index_roundtrip():
     back = DocIndex.model_validate(d.model_dump(mode="json"))
     assert back.title == "bag"
     assert back.related_tables == ["Item"]
+
+
+def test_canonical_models_roundtrip():
+    canonical_field = CanonicalField(
+        raw_header="Hero ID",
+        canonical_header="hero_id",
+        aliases=["Hero ID", "hero_id"],
+        semantic_type="id",
+        description="hero identifier",
+        confidence=1.0,
+        confirmed=True,
+        source="raw_index_rule",
+        raw_type="int",
+    )
+    canonical_table = CanonicalTableSchema(
+        table_id="HeroTable",
+        source_path="Tables/HeroTable.xlsx",
+        source_hash="sha256:table",
+        primary_key="ID",
+        fields=[canonical_field],
+        updated_at=_now(),
+    )
+    canonical_doc = CanonicalDocFacts(
+        doc_id="doc-123",
+        source_path="Docs/Hero.md",
+        source_hash="sha256:doc",
+        title="Hero Doc",
+        summary="hero summary",
+        semantic_tags=["design"],
+        related_refs=["table:HeroTable"],
+        confidence=0.75,
+        confirmed=False,
+    )
+    canonical_script = CanonicalScriptFacts(
+        script_id="script-123",
+        source_path="Scripts/Hero.cs",
+        source_hash="sha256:script",
+        symbols=["HeroResolver"],
+        responsibilities=["resolve hero state"],
+        related_refs=["table:HeroTable", "symbol:DamageFormula"],
+        confidence=0.75,
+        confirmed=False,
+    )
+
+    table_back = CanonicalTableSchema.model_validate(canonical_table.model_dump(mode="json"))
+    doc_back = CanonicalDocFacts.model_validate(canonical_doc.model_dump(mode="json"))
+    script_back = CanonicalScriptFacts.model_validate(canonical_script.model_dump(mode="json"))
+
+    assert table_back.schema_version == "canonical-table-schema.v1"
+    assert table_back.fields[0].canonical_header == "hero_id"
+    assert doc_back.schema_version == "canonical-doc-facts.v1"
+    assert doc_back.related_refs == ["table:HeroTable"]
+    assert script_back.schema_version == "canonical-script-facts.v1"
+    assert script_back.symbols == ["HeroResolver"]
 
 
 def test_dependency_edge_and_graph():

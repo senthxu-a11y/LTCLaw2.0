@@ -27,6 +27,7 @@ class RagRequest(BaseModel):
     query: str = Field(default='')
     max_chunks: int = Field(default=8, ge=1, le=20)
     max_chars: int = Field(default=12000, ge=1000, le=50000)
+    focus_refs: list[str] = Field(default_factory=list)
 
 
 class RagContextResponse(BaseModel):
@@ -36,6 +37,10 @@ class RagContextResponse(BaseModel):
     built_at: datetime | None = None
     chunks: list[dict[str, Any]] = Field(default_factory=list)
     citations: list[dict[str, Any]] = Field(default_factory=list)
+    allowed_refs: list[str] = Field(default_factory=list)
+    map_hash: str | None = None
+    map_source_hash: str | None = None
+    reason: str | None = None
 
 
 class RagAnswerResponse(BaseModel):
@@ -81,12 +86,13 @@ def _config_generation(game_service) -> int:
 
 
 def _build_answer_context(game_service, body: RagRequest) -> dict[str, Any]:
-    return build_current_release_context(
-        _project_root_or_400(game_service),
-        body.query,
-        max_chunks=body.max_chunks,
-        max_chars=body.max_chars,
-    )
+    kwargs = {
+        'max_chunks': body.max_chunks,
+        'max_chars': body.max_chars,
+    }
+    if body.focus_refs:
+        kwargs['focus_refs'] = body.focus_refs
+    return build_current_release_context(_project_root_or_400(game_service), body.query, **kwargs)
 
 
 def _settle_answer_context(game_service, body: RagRequest) -> tuple[dict[str, Any], int | None]:
@@ -116,21 +122,22 @@ def _fail_closed_answer(context: dict[str, Any]) -> RagAnswerResponse:
 
 @router.post('/context', response_model=RagContextResponse)
 async def rag_context(request: Request, body: RagRequest) -> RagContextResponse:
-    require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
-    payload = build_current_release_context(
-        _project_root_or_400(_game_service_or_404(workspace)),
-        body.query,
-        max_chunks=body.max_chunks,
-        max_chars=body.max_chars,
-    )
+    require_capability(request, 'knowledge.read')
+    kwargs = {
+        'max_chunks': body.max_chunks,
+        'max_chars': body.max_chars,
+    }
+    if body.focus_refs:
+        kwargs['focus_refs'] = body.focus_refs
+    payload = build_current_release_context(_project_root_or_400(_game_service_or_404(workspace)), body.query, **kwargs)
     return RagContextResponse.model_validate(payload)
 
 
 @router.post('/answer', response_model=RagAnswerResponse)
 async def rag_answer(request: Request, body: RagRequest) -> RagAnswerResponse:
-    require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.read')
     game_service = _game_service_or_404(workspace)
 
     context, expected_generation = _settle_answer_context(game_service, body)

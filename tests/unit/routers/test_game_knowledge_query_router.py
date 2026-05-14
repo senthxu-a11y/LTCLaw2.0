@@ -188,3 +188,41 @@ def test_query_router_allows_knowledge_read_when_capabilities_present(monkeypatc
     assert response.status_code == 200
     assert captured['project_root'] == tmp_path / 'project-root'
     assert captured['query'] == 'damage'
+
+
+def test_query_router_allows_injected_read_capabilities(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {}
+
+    async def _get_agent(request):
+        request.state.capabilities = {'knowledge.read'}
+        return workspace
+
+    def _query(project_root, query, *, top_k, mode):
+        captured['project_root'] = project_root
+        captured['query'] = query
+        captured['top_k'] = top_k
+        captured['mode'] = mode
+        return {
+            'mode': 'current_release_keyword',
+            'query': query,
+            'top_k': top_k,
+            'release_id': 'release-001',
+            'built_at': datetime(2026, 1, 1, tzinfo=timezone.utc),
+            'results': [],
+            'count': 0,
+        }
+
+    monkeypatch.setattr(query_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(query_router_module, 'query_current_release', _query)
+
+    with TestClient(_build_app()) as client:
+        response = client.post('/api/game/knowledge/query', json={'query': 'damage'})
+
+    assert response.status_code == 200
+    assert captured == {
+        'project_root': tmp_path / 'project-root',
+        'query': 'damage',
+        'top_k': 10,
+        'mode': 'hybrid',
+    }

@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Legacy compatibility helpers for pre-unified RAG provider selection.
+
+These helpers remain available for compatibility and tests, but formal current
+RAG answer flow should be routed by the unified model router.
+"""
+
 from dataclasses import fields
 from typing import Any, Mapping
 

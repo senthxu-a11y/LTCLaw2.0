@@ -10,8 +10,6 @@ from httpx import ASGITransport, AsyncClient
 from ltclaw_gy_x.app.agent_context import get_agent_for_request
 from ltclaw_gy_x.app.routers.game_svn import router
 from ltclaw_gy_x.game.models import ChangeSet
-
-
 def _workspace(service):
     return SimpleNamespace(
         service_manager=SimpleNamespace(services={"game_service": service})
@@ -62,52 +60,48 @@ async def test_status_unconfigured(app, client):
 
 
 @pytest.mark.asyncio
-async def test_status_uses_watcher(app, client):
-    watcher = SimpleNamespace(
-        get_status=lambda: {"running": True, "poll_interval": 300, "last_checked_revision": 42}
-    )
-    service = _make_service(watcher=watcher)
+async def test_status_returns_frozen_shape_when_configured(app, client):
+    service = _make_service(watcher=SimpleNamespace())
     app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
     async with client:
         resp = await client.get("/api/game/svn/status")
     assert resp.status_code == 200
     body = resp.json()
     assert body["configured"] is True
-    assert body["running"] is True
-    assert body["last_checked_revision"] == 42
+    assert body["disabled"] is True
+    assert body["running"] is False
+    assert body["current_rev"] is None
 
 
 @pytest.mark.asyncio
-async def test_sync_requires_maintainer(app, client):
+async def test_sync_returns_frozen_error_for_consumer(app, client):
     service = _make_service(role="consumer")
     app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
     async with client:
         resp = await client.post("/api/game/svn/sync")
     assert resp.status_code == 409
+    assert resp.json()["detail"]["disabled"] is True
 
 
 @pytest.mark.asyncio
-async def test_sync_requires_configured(app, client):
+async def test_sync_returns_frozen_error_for_unconfigured(app, client):
     service = _make_service(configured=False)
     app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
     async with client:
         resp = await client.post("/api/game/svn/sync")
-    assert resp.status_code == 400
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["disabled"] is True
 
 
 @pytest.mark.asyncio
-async def test_sync_triggers_watcher(app, client):
-    cs = ChangeSet(from_rev=1, to_rev=2, added=[], modified=["Tables/Hero.csv"], deleted=[])
-    watcher = SimpleNamespace(trigger_now=AsyncMock(return_value=cs))
+async def test_sync_does_not_trigger_watcher(app, client):
+    watcher = SimpleNamespace(trigger_now=AsyncMock())
     service = _make_service(watcher=watcher)
     app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
     async with client:
         resp = await client.post("/api/game/svn/sync")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["to_rev"] == 2
-    assert body["modified"] == ["Tables/Hero.csv"]
-    watcher.trigger_now.assert_awaited_once()
+    assert resp.status_code == 409
+    watcher.trigger_now.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -166,3 +160,13 @@ async def test_changes_recent_empty(app, client):
     body = resp.json()
     assert body["source"] == "empty"
     assert body["count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_stream_logs_returns_disabled_event(app, client):
+    service = _make_service()
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+    async with client:
+        resp = await client.get("/api/game/svn/log/stream")
+    assert resp.status_code == 200
+    assert "disabled" in resp.text

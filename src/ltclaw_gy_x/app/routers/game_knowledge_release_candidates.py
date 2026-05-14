@@ -50,8 +50,8 @@ def _project_root_or_400(game_service) -> Path:
 
 @router.post('', response_model=ReleaseCandidate)
 async def create_release_candidate(request: Request, body: ReleaseCandidate) -> ReleaseCandidate:
-    require_capability(request, 'knowledge.candidate.write')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.candidate.write')
     game_service = _game_service_or_404(workspace)
     try:
         return append_release_candidate(_project_root_or_400(game_service), body)
@@ -66,8 +66,8 @@ async def get_release_candidates(
     selected: bool | None = Query(default=None),
     test_plan_id: str | None = Query(default=None),
 ) -> list[ReleaseCandidate]:
-    require_capability(request, 'knowledge.candidate.read')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.candidate.read')
     game_service = _game_service_or_404(workspace)
     try:
         return list_release_candidates(

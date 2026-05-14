@@ -88,14 +88,204 @@ def get_legacy_index_dir(svn_root: Path) -> Path:
     return svn_root / ".ltclaw_index"
 
 
+def get_project_key(project_root: Path) -> str:
+    return _project_store_name(Path(project_root))
+
+
+def get_project_bundle_root(project_root: Path) -> Path:
+    return _get_project_store_root() / get_project_key(project_root)
+
+
+def get_project_bundle_project_dir(project_root: Path) -> Path:
+    """Current compatibility location for project-level artifacts."""
+    return get_project_bundle_root(project_root) / "project"
+
+
 def get_project_store_dir(svn_root: Path) -> Path:
     """??????: <game-data>/projects/<project-key>"""
-    return _get_project_store_root() / _project_store_name(svn_root)
+    return get_project_bundle_root(svn_root)
 
 
 def get_project_data_dir(svn_root: Path) -> Path:
     """??????: <project-store>/project"""
-    return get_project_store_dir(svn_root) / "project"
+    return get_project_bundle_project_dir(svn_root)
+
+
+def get_project_manifest_path(project_root: Path) -> Path:
+    return get_project_bundle_project_dir(project_root) / "project.json"
+
+
+def get_project_source_config_path(project_root: Path) -> Path:
+    return get_project_bundle_project_dir(project_root) / "source_config.yaml"
+
+
+def get_project_sources_dir(project_root: Path) -> Path:
+    return get_project_bundle_project_dir(project_root) / "sources"
+
+
+def get_project_docs_source_path(project_root: Path) -> Path:
+    return get_project_sources_dir(project_root) / "docs.yaml"
+
+
+def get_project_tables_source_path(project_root: Path) -> Path:
+    return get_project_sources_dir(project_root) / "tables.yaml"
+
+
+def get_project_scripts_source_path(project_root: Path) -> Path:
+    return get_project_sources_dir(project_root) / "scripts.yaml"
+
+
+def get_project_indexes_dir(project_root: Path) -> Path:
+    return get_project_bundle_project_dir(project_root) / "indexes"
+
+
+def get_project_raw_indexes_dir(project_root: Path) -> Path:
+    return get_project_indexes_dir(project_root) / "raw"
+
+
+def get_project_raw_docs_dir(project_root: Path) -> Path:
+    return get_project_raw_indexes_dir(project_root) / "docs"
+
+
+def get_project_raw_tables_dir(project_root: Path) -> Path:
+    return get_project_raw_indexes_dir(project_root) / "tables"
+
+
+def get_project_raw_scripts_dir(project_root: Path) -> Path:
+    return get_project_raw_indexes_dir(project_root) / "scripts"
+
+
+def get_project_canonical_indexes_dir(project_root: Path) -> Path:
+    return get_project_indexes_dir(project_root) / "canonical"
+
+
+def get_project_canonical_docs_dir(project_root: Path) -> Path:
+    return get_project_canonical_indexes_dir(project_root) / "docs"
+
+
+def get_project_canonical_tables_dir(project_root: Path) -> Path:
+    return get_project_canonical_indexes_dir(project_root) / "tables"
+
+
+def get_project_canonical_scripts_dir(project_root: Path) -> Path:
+    return get_project_canonical_indexes_dir(project_root) / "scripts"
+
+
+def get_project_canonical_table_schema_path(project_root: Path, table_id: str) -> Path:
+    return get_project_canonical_tables_dir(project_root) / f"{_sanitize_path_component(table_id, 'table')}.json"
+
+
+def get_project_canonical_doc_facts_path(project_root: Path, doc_id: str) -> Path:
+    return get_project_canonical_docs_dir(project_root) / f"{_sanitize_path_component(doc_id, 'doc')}.json"
+
+
+def get_project_canonical_script_facts_path(project_root: Path, script_id: str) -> Path:
+    return get_project_canonical_scripts_dir(project_root) / f"{_sanitize_path_component(script_id, 'script')}.json"
+
+
+def get_project_maps_dir(project_root: Path) -> Path:
+    return get_project_bundle_project_dir(project_root) / "maps"
+
+
+def get_project_candidate_maps_dir(project_root: Path) -> Path:
+    return get_project_maps_dir(project_root) / "candidate"
+
+
+def get_project_candidate_map_path(project_root: Path) -> Path:
+    return get_project_candidate_maps_dir(project_root) / "latest.json"
+
+
+def get_project_candidate_map_history_dir(project_root: Path) -> Path:
+    return get_project_candidate_maps_dir(project_root) / "history"
+
+
+def get_project_formal_maps_dir(project_root: Path) -> Path:
+    return get_project_maps_dir(project_root) / "formal"
+
+
+def get_project_formal_map_canonical_path(project_root: Path) -> Path:
+    return get_project_formal_maps_dir(project_root) / "formal_map.json"
+
+
+def get_project_formal_map_history_path(project_root: Path) -> Path:
+    return get_project_formal_maps_dir(project_root) / "formal_map.history.jsonl"
+
+
+def get_project_map_diffs_dir(project_root: Path) -> Path:
+    return get_project_maps_dir(project_root) / "diffs"
+
+
+def get_project_latest_map_diff_path(project_root: Path) -> Path:
+    return get_project_map_diffs_dir(project_root) / "latest_diff.json"
+
+
+def get_project_releases_dir(project_root: Path) -> Path:
+    return get_project_bundle_project_dir(project_root) / "releases"
+
+
+def get_project_current_release_path(project_root: Path) -> Path:
+    return get_project_releases_dir(project_root) / "current.json"
+
+
+def get_project_release_dir(project_root: Path, release_id: str) -> Path:
+    release_name = _sanitize_path_component(str(release_id or ""), "release")
+    return get_project_releases_dir(project_root) / release_name
+
+
+def get_project_rag_dir(project_root: Path) -> Path:
+    return get_project_bundle_project_dir(project_root) / "rag"
+
+
+def get_project_current_rag_dir(project_root: Path) -> Path:
+    return get_project_rag_dir(project_root) / "current"
+
+
+def get_project_rag_context_index_path(project_root: Path) -> Path:
+    return get_project_current_rag_dir(project_root) / "context_index.jsonl"
+
+
+def get_project_rag_citation_index_path(project_root: Path) -> Path:
+    return get_project_current_rag_dir(project_root) / "citation_index.jsonl"
+
+
+def get_project_rag_map_route_cache_path(project_root: Path) -> Path:
+    return get_project_current_rag_dir(project_root) / "map_route_cache.jsonl"
+
+
+def get_project_rag_vector_dir(project_root: Path) -> Path:
+    return get_project_rag_dir(project_root) / "vector"
+
+
+def get_project_rag_keyword_dir(project_root: Path) -> Path:
+    return get_project_rag_dir(project_root) / "keyword"
+
+
+def get_project_rag_status_path(project_root: Path) -> Path:
+    return get_project_rag_dir(project_root) / "status.json"
+
+
+def get_project_runtime_dir(project_root: Path) -> Path:
+    return get_project_bundle_project_dir(project_root) / "runtime"
+
+
+def get_project_runtime_llm_cache_dir(project_root: Path) -> Path:
+    return get_project_runtime_dir(project_root) / "llm_cache"
+
+
+def get_project_runtime_build_jobs_dir(project_root: Path) -> Path:
+    return get_project_runtime_dir(project_root) / "build_jobs"
+
+
+def get_project_runtime_temp_dir(project_root: Path) -> Path:
+    return get_project_runtime_dir(project_root) / "temp"
+
+
+def get_project_runtime_logs_dir(project_root: Path) -> Path:
+    return get_project_runtime_dir(project_root) / "logs"
+
+
+def get_project_admin_dir(project_root: Path) -> Path:
+    return get_project_bundle_root(project_root) / "admin"
 
 
 def get_project_config_dir(svn_root: Path) -> Path:
@@ -156,6 +346,21 @@ def get_agent_store_dir(workspace_dir: Path, svn_root: Path | None = None) -> Pa
     return get_game_data_root() / "agents" / agent_name
 
 
+def get_agent_profile_path(workspace_dir: Path, svn_root: Path | None = None) -> Path:
+    return get_agent_store_dir(workspace_dir, svn_root) / "profile.yaml"
+
+
+def get_agent_audit_dir(workspace_dir: Path, svn_root: Path | None = None) -> Path:
+    return get_agent_store_dir(workspace_dir, svn_root) / "audit"
+
+
+def get_agent_workbench_writeback_audit_path(
+    workspace_dir: Path,
+    svn_root: Path | None = None,
+) -> Path:
+    return get_agent_audit_dir(workspace_dir, svn_root) / "workbench_writeback.jsonl"
+
+
 def get_session_store_dir(
     workspace_dir: Path,
     svn_root: Path | None = None,
@@ -164,13 +369,45 @@ def get_session_store_dir(
     return get_agent_store_dir(workspace_dir, svn_root) / "sessions" / _resolve_session_name(session_id)
 
 
+def get_agent_session_dir(
+    workspace_dir: Path,
+    svn_root: Path | None = None,
+    session_id: str | None = None,
+) -> Path:
+    return get_session_store_dir(workspace_dir, svn_root, session_id)
+
+
+def get_agent_session_workbench_dir(
+    workspace_dir: Path,
+    svn_root: Path | None = None,
+    session_id: str | None = None,
+) -> Path:
+    return get_agent_session_dir(workspace_dir, svn_root, session_id) / "workbench"
+
+
+def get_agent_session_proposals_dir(
+    workspace_dir: Path,
+    svn_root: Path | None = None,
+    session_id: str | None = None,
+) -> Path:
+    return get_agent_session_dir(workspace_dir, svn_root, session_id) / "proposals"
+
+
+def get_agent_session_ui_state_path(
+    workspace_dir: Path,
+    svn_root: Path | None = None,
+    session_id: str | None = None,
+) -> Path:
+    return get_agent_session_dir(workspace_dir, svn_root, session_id) / "ui_state.json"
+
+
 def get_workspace_game_dir(
     workspace_dir: Path,
     svn_root: Path | None = None,
     session_id: str | None = None,
 ) -> Path:
     """?????????: .../sessions/<session>/workbench"""
-    return get_session_store_dir(workspace_dir, svn_root, session_id) / "workbench"
+    return get_agent_session_workbench_dir(workspace_dir, svn_root, session_id)
 
 
 def get_chroma_dir(
@@ -234,16 +471,15 @@ def get_knowledge_working_dir(project_root: Path) -> Path:
 
 
 def get_knowledge_releases_dir(project_root: Path) -> Path:
-    return get_project_data_dir(Path(project_root)) / "releases"
+    return get_project_releases_dir(Path(project_root))
 
 
 def get_current_release_path(project_root: Path) -> Path:
-    return get_knowledge_releases_dir(project_root) / "current.json"
+    return get_project_current_release_path(project_root)
 
 
 def get_release_dir(project_root: Path, release_id: str) -> Path:
-    release_name = _sanitize_path_component(str(release_id or ""), "release")
-    return get_knowledge_releases_dir(project_root) / release_name
+    return get_project_release_dir(project_root, release_id)
 
 
 def get_pending_test_plans_path(project_root: Path) -> Path:
@@ -271,12 +507,23 @@ def get_storage_summary(
         "user_config_path": str(get_user_config_path()),
         "legacy_user_config_path": str(get_legacy_user_config_path()),
         "svn_root": str(svn_root) if svn_root is not None else None,
+        "project_key": get_project_key(svn_root) if svn_root is not None else None,
         "project_store_dir": str(get_project_store_dir(svn_root)) if svn_root is not None else None,
+        "project_bundle_root": str(get_project_bundle_root(svn_root)) if svn_root is not None else None,
+        "project_data_dir": str(get_project_data_dir(svn_root)) if svn_root is not None else None,
+        "project_source_config_path": str(get_project_source_config_path(svn_root)) if svn_root is not None else None,
+        "legacy_index_dir": str(get_legacy_index_dir(svn_root)) if svn_root is not None else None,
         "project_config_path": str(get_project_config_path(svn_root)) if svn_root is not None else None,
         "project_index_dir": str(get_index_dir(svn_root)) if svn_root is not None else None,
+        "project_runtime_dir": str(get_project_runtime_dir(svn_root)) if svn_root is not None else None,
+        "project_admin_dir": str(get_project_admin_dir(svn_root)) if svn_root is not None else None,
         "agent_store_dir": str(get_agent_store_dir(workspace_dir, svn_root)),
+        "agent_profile_path": str(get_agent_profile_path(workspace_dir, svn_root)),
+        "agent_audit_dir": str(get_agent_audit_dir(workspace_dir, svn_root)),
         "session_store_dir": str(get_session_store_dir(workspace_dir, svn_root, session_id)),
         "workbench_dir": str(get_workspace_game_dir(workspace_dir, svn_root, session_id)),
+        "agent_session_proposals_dir": str(get_agent_session_proposals_dir(workspace_dir, svn_root, session_id)),
+        "agent_session_ui_state_path": str(get_agent_session_ui_state_path(workspace_dir, svn_root, session_id)),
         "chroma_dir": str(get_chroma_dir(workspace_dir, svn_root, session_id)),
         "llm_cache_dir": str(get_llm_cache_dir(workspace_dir, svn_root, session_id)),
         "svn_cache_dir": str(get_svn_cache_dir(workspace_dir, svn_root, session_id)),

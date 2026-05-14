@@ -15,8 +15,12 @@ export interface DirtyListProps {
   saveSessionDisabled?: boolean;
   onExportDraft?: () => void;
   exportDisabled?: boolean;
-    exportDisabledReason?: string;
+  exportDisabledReason?: string;
   exporting?: boolean;
+  onSourceWrite?: () => void;
+  sourceWriteDisabled?: boolean;
+  sourceWriteDisabledReason?: string;
+  sourceWriting?: boolean;
 }
 
 const formatVal = (v: unknown): string => {
@@ -38,6 +42,10 @@ export function DirtyList(props: DirtyListProps) {
     exportDisabled,
     exportDisabledReason,
     exporting,
+    onSourceWrite,
+    sourceWriteDisabled,
+    sourceWriteDisabledReason,
+    sourceWriting,
   } = props;
 
   return (
@@ -83,6 +91,22 @@ export function DirtyList(props: DirtyListProps) {
                   loading={exporting}
                 >
                   {t("gameWorkbench.exportDraft", { defaultValue: "导出草稿" })}
+                </Button>
+              </span>
+            </Tooltip>
+          )}
+          {onSourceWrite && (
+            <Tooltip title={sourceWriteDisabledReason || undefined}>
+              <span>
+                <Button
+                  size="small"
+                  danger
+                  icon={<SaveOutlined />}
+                  onClick={onSourceWrite}
+                  disabled={sourceWriteDisabled || items.length === 0}
+                  loading={sourceWriting}
+                >
+                  {t("gameWorkbench.sourceWrite", { defaultValue: "写回源表" })}
                 </Button>
               </span>
             </Tooltip>

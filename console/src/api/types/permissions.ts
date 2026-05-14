@@ -8,7 +8,8 @@ export type FrontendCapability =
   | "knowledge.candidate.write"
   | "workbench.read"
   | "workbench.test.write"
-  | "workbench.test.export";
+  | "workbench.test.export"
+  | "workbench.source.write";
 
 export type FrontendCapabilityToken = FrontendCapability | "*";
 

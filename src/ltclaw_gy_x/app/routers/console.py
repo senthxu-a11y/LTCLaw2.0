@@ -13,7 +13,7 @@ from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from starlette.responses import StreamingResponse
 
 from agentscope_runtime.engine.schemas.agent_schemas import AgentRequest
-from ...game.retrieval import build_chat_context_block, unified_search
+from ...game.knowledge_rag_context import build_current_release_context
 from ...utils.logging import LOG_FILE_PATH
 from ..agent_context import get_agent_for_request
 
@@ -165,6 +165,67 @@ def _extract_text_query(native_payload: dict) -> str:
     return "\n".join(texts).strip()
 
 
+def _project_root_for_chat(game_service) -> Path | None:
+    runtime_root = getattr(game_service, "_runtime_svn_root", None)
+    if callable(runtime_root):
+        root = runtime_root()
+        if root is not None:
+            return Path(root)
+
+    user_config = getattr(game_service, "user_config", None)
+    local_root = getattr(user_config, "svn_local_root", None)
+    if local_root:
+        return Path(local_root).expanduser()
+
+    project_config = getattr(game_service, "project_config", None)
+    svn_config = getattr(project_config, "svn", None)
+    project_root = getattr(svn_config, "root", None)
+    if project_root and "://" not in str(project_root):
+        return Path(project_root).expanduser()
+    return None
+
+
+def _record_formal_knowledge_status(native_payload: dict, context_payload: dict, *, status: str) -> None:
+    meta = native_payload.setdefault("meta", {})
+    meta["formal_knowledge"] = {
+        "source": "current_release",
+        "status": status,
+        "query": context_payload.get("query", ""),
+        "release_id": context_payload.get("release_id"),
+        "built_at": context_payload.get("built_at"),
+        "chunk_count": len(context_payload.get("chunks") or []),
+        "citation_count": len(context_payload.get("citations") or []),
+        "legacy_fallback_used": False,
+    }
+
+
+def _build_formal_chat_context_block(context_payload: dict, *, max_items: int) -> str:
+    chunks = list(context_payload.get("chunks") or [])[:max_items]
+    if not chunks:
+        return ""
+
+    citations_by_id = {
+        citation.get("citation_id"): citation
+        for citation in context_payload.get("citations") or []
+        if citation.get("citation_id")
+    }
+    lines = [
+        "[Formal Knowledge Context] Current-release evidence only. No legacy KB/retrieval fallback.",
+        f"release_id={context_payload.get('release_id') or 'unknown'}",
+    ]
+    for index, chunk in enumerate(chunks, start=1):
+        citation = citations_by_id.get(chunk.get("citation_id"), {})
+        title = citation.get("title") or chunk.get("source_type") or "context"
+        source_path = citation.get("source_path") or citation.get("artifact_path") or ""
+        text = str(chunk.get("text") or "").strip()
+        if len(text) > 280:
+            text = text[:280].rstrip() + "..."
+        lines.append(f"{index}. [{chunk.get('source_type')}] {title} :: {source_path}")
+        if text:
+            lines.append(text)
+    return "\n".join(lines)
+
+
 async def _augment_chat_mode_context(request: "Request", workspace, native_payload: dict) -> None:
     mode = (request.headers.get("X-Chat-Mode") or "").strip().lower()
     native_payload.setdefault("meta", {})["chat_mode"] = mode or "free"
@@ -172,22 +233,27 @@ async def _augment_chat_mode_context(request: "Request", workspace, native_paylo
         return
     game_service = workspace.service_manager.services.get("game_service")
     if game_service is None or not getattr(game_service, "configured", False):
+        _record_formal_knowledge_status(native_payload, {"query": _extract_text_query(native_payload)}, status="service_unavailable")
         return
     query = _extract_text_query(native_payload)
     if not query:
         return
-    retrieval_mode = "semantic" if mode == "doc" else "hybrid"
     top_k = 6 if mode == "numeric" else 8
-    payload = unified_search(game_service, query, top_k=top_k, mode=retrieval_mode)
-    context_block = build_chat_context_block(payload, max_items=top_k)
-    if not context_block:
+    project_root = _project_root_for_chat(game_service)
+    if project_root is None:
+        _record_formal_knowledge_status(native_payload, {"query": query}, status="no_project_root")
         return
-    native_payload["meta"]["retrieval"] = {
-        "query": payload.get("query", query),
-        "mode": payload.get("mode", retrieval_mode),
-        "status": payload.get("status", {}),
-        "results": payload.get("results", []),
-    }
+
+    payload = build_current_release_context(project_root, query, max_chunks=top_k, max_chars=12000)
+    if payload.get("mode") != "context":
+        _record_formal_knowledge_status(native_payload, payload, status=str(payload.get("mode") or "no_current_release"))
+        return
+
+    context_block = _build_formal_chat_context_block(payload, max_items=top_k)
+    if not context_block:
+        _record_formal_knowledge_status(native_payload, payload, status="insufficient_context")
+        return
+    _record_formal_knowledge_status(native_payload, payload, status="context")
     parts = native_payload.get("content_parts") or []
     for i, part in enumerate(parts):
         text = getattr(part, "text", None)

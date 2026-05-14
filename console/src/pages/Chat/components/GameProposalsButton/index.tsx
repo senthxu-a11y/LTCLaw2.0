@@ -30,17 +30,13 @@ type ActionKey =
   | "dry_run"
   | "approve"
   | "apply"
-  | "commit"
-  | "reject"
-  | "revert";
+  | "reject";
 
 const StatusColor: Record<string, string> = {
   draft: "blue",
   approved: "processing",
   applied: "gold",
-  committed: "success",
   rejected: "default",
-  reverted: "default",
 };
 
 const ProposalIcon = () => (
@@ -155,9 +151,7 @@ const GameProposalsButton: React.FC = () => {
         }
         if (action === "approve") await gameChangeApi.approve(selectedAgent, proposal.id);
         if (action === "apply") await gameChangeApi.apply(selectedAgent, proposal.id);
-        if (action === "commit") await gameChangeApi.commit(selectedAgent, proposal.id);
         if (action === "reject") await gameChangeApi.reject(selectedAgent, proposal.id);
-        if (action === "revert") await gameChangeApi.revert(selectedAgent, proposal.id);
         message.success(
           t(`gameProposal.actionSuccess.${action}`, {
             defaultValue: "Done",
@@ -189,19 +183,9 @@ const GameProposalsButton: React.FC = () => {
         disabled: p.status !== "approved",
       },
       {
-        key: "commit",
-        label: t("gameProposal.actions.commit", { defaultValue: "Commit" }),
-        disabled: p.status !== "applied",
-      },
-      {
         key: "reject",
         label: t("gameProposal.actions.reject", { defaultValue: "Reject" }),
         disabled: !["draft", "approved"].includes(p.status),
-      },
-      {
-        key: "revert",
-        label: t("gameProposal.actions.revert", { defaultValue: "Revert" }),
-        disabled: p.status !== "applied",
       },
     ],
     [t],

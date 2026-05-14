@@ -41,6 +41,57 @@ class TableIndex(BaseModel):
     indexer_model: str = Field(description='Indexer model')
 
 
+CanonicalSemanticType = Literal['id', 'reference', 'number', 'text', 'bool', 'list', 'unknown']
+CanonicalFactSource = Literal['raw_index_rule', 'manual', 'llm_draft']
+
+
+class CanonicalField(BaseModel):
+    raw_header: str = Field(description='Original header from raw index')
+    canonical_header: str = Field(description='Deterministic normalized header')
+    aliases: list[str] = Field(default_factory=list, description='Known header aliases including raw and canonical header')
+    semantic_type: CanonicalSemanticType = Field(default='unknown', description='Deterministic semantic type classification')
+    description: str = Field(default='', description='Field description inherited from raw index')
+    confidence: float = Field(default=0.0, description='Deterministic confidence score in range 0..1')
+    confirmed: bool = Field(default=False, description='Whether field semantics are confirmed')
+    source: CanonicalFactSource = Field(default='raw_index_rule', description='How the canonical field draft was produced')
+    raw_type: Optional[str] = Field(default=None, description='Original raw field type when available')
+
+
+class CanonicalTableSchema(BaseModel):
+    schema_version: Literal['canonical-table-schema.v1'] = Field(default='canonical-table-schema.v1')
+    table_id: str = Field(description='Canonical table identifier')
+    source_path: str = Field(description='Source path relative to project root')
+    source_hash: str = Field(description='Source hash copied from raw table index')
+    primary_key: str = Field(description='Primary key from raw table index')
+    fields: list[CanonicalField] = Field(default_factory=list, description='Canonical field drafts derived from raw fields')
+    updated_at: datetime = Field(description='Last update timestamp for this canonical schema draft')
+
+
+class CanonicalDocFacts(BaseModel):
+    schema_version: Literal['canonical-doc-facts.v1'] = Field(default='canonical-doc-facts.v1')
+    doc_id: str = Field(description='Canonical document identifier')
+    source_path: str = Field(description='Source path relative to project root')
+    source_hash: str = Field(description='Source hash copied from raw doc index')
+    title: str = Field(description='Document title')
+    summary: str = Field(default='', description='Deterministic summary draft')
+    semantic_tags: list[str] = Field(default_factory=list, description='Deterministic semantic tags')
+    related_refs: list[str] = Field(default_factory=list, description='Canonical references related to this document')
+    confidence: float = Field(default=0.0, description='Deterministic confidence score in range 0..1')
+    confirmed: bool = Field(default=False, description='Whether document facts are explicitly confirmed')
+
+
+class CanonicalScriptFacts(BaseModel):
+    schema_version: Literal['canonical-script-facts.v1'] = Field(default='canonical-script-facts.v1')
+    script_id: str = Field(description='Canonical script identifier')
+    source_path: str = Field(description='Source path relative to project root')
+    source_hash: str = Field(description='Source hash copied from raw code index')
+    symbols: list[str] = Field(default_factory=list, description='Top-level symbol names in deterministic order')
+    responsibilities: list[str] = Field(default_factory=list, description='Deterministic responsibility summaries')
+    related_refs: list[str] = Field(default_factory=list, description='Canonical references related to this script')
+    confidence: float = Field(default=0.0, description='Deterministic confidence score in range 0..1')
+    confirmed: bool = Field(default=False, description='Whether script facts are explicitly confirmed')
+
+
 class DocIndex(BaseModel):
     schema_version: Literal['doc-index.v1'] = Field(default='doc-index.v1')
     source_path: str = Field(description='Source path relative to svn_root')
@@ -157,6 +208,11 @@ class KnowledgeIndexArtifact(BaseModel):
 
 
 KnowledgeStatus = Literal['active', 'deprecated', 'ignored']
+ReleaseBuildMode = Literal['strict', 'bootstrap']
+ReleaseBuildStatus = Literal['ready', 'bootstrap_warning']
+ReleaseMapSource = Literal['provided', 'formal_map', 'current_release', 'bootstrap_current_indexes']
+KnowledgeMapCandidateSource = Literal['release_snapshot', 'source_canonical']
+MapDiffBaseSource = Literal['formal_map', 'current_release', 'none']
 
 
 class KnowledgeSystem(BaseModel):
@@ -215,6 +271,10 @@ class KnowledgeManifest(BaseModel):
     release_id: str = Field(description='Knowledge release id')
     created_at: datetime = Field(description='Creation time')
     created_by: Optional[str] = Field(default=None, description='Release creator')
+    build_mode: ReleaseBuildMode = Field(default='strict', description='Release build mode used for this snapshot')
+    status: ReleaseBuildStatus = Field(default='ready', description='Release build status marker')
+    map_source: ReleaseMapSource = Field(default='provided', description='Knowledge map source used for release snapshot')
+    warnings: list[str] = Field(default_factory=list, description='Build warnings that must be surfaced to callers')
     project_root_hash: Optional[str] = Field(default=None, description='Project root hash')
     source_snapshot: Optional[str] = Field(default=None, description='Legacy source snapshot')
     source_snapshot_hash: Optional[str] = Field(default=None, description='Stable source snapshot hash')
@@ -236,6 +296,28 @@ class KnowledgeMap(BaseModel):
     relationships: list[KnowledgeRelationship] = Field(default_factory=list, description='Relationships')
     deprecated: list[str] = Field(default_factory=list, description='Deprecated refs')
     source_hash: Optional[str] = Field(default=None, description='Optional source hash')
+
+
+class MapDiffReview(BaseModel):
+    base_map_source: MapDiffBaseSource = Field(description='Review base map source')
+    candidate_source: KnowledgeMapCandidateSource = Field(description='Candidate map source')
+    added_refs: list[str] = Field(default_factory=list, description='References present only in candidate map')
+    removed_refs: list[str] = Field(default_factory=list, description='References present only in base map')
+    changed_refs: list[str] = Field(default_factory=list, description='References present in both maps but with changed lightweight metadata')
+    unchanged_refs: list[str] = Field(default_factory=list, description='References present in both maps with unchanged lightweight metadata')
+    warnings: list[str] = Field(default_factory=list, description='Review warnings')
+
+
+class KnowledgeMapCandidateResult(BaseModel):
+    mode: str = Field(default='candidate_map', description='Candidate response mode')
+    map: KnowledgeMap | None = Field(default=None, description='Candidate knowledge map, if any')
+    release_id: str | None = Field(default=None, description='Candidate map release id when applicable')
+    candidate_source: KnowledgeMapCandidateSource = Field(description='Candidate map source marker')
+    is_formal_map: bool = Field(default=False, description='Candidate maps are never formal maps')
+    source_release_id: str | None = Field(default=None, description='Release id used for release snapshot candidates')
+    uses_existing_formal_map_as_hint: bool | None = Field(default=None, description='Whether an existing formal map was used only as a hint')
+    warnings: list[str] = Field(default_factory=list, description='Candidate build warnings')
+    diff_review: MapDiffReview | None = Field(default=None, description='Optional lightweight diff review summary')
 
 
 class KnowledgeReleasePointer(BaseModel):

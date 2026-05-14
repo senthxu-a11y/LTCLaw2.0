@@ -1,5 +1,6 @@
 """单元测试: DependencyResolver (规则层)。"""
 from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,7 +11,7 @@ from ltclaw_gy_x.game.config import (
     SvnConfig,
     TableConvention,
 )
-from ltclaw_gy_x.game.dependency_resolver import DependencyResolver
+from ltclaw_gy_x.game.dependency_resolver import DependencyResolver, get_dependency_graph_source_metadata
 from ltclaw_gy_x.game.models import FieldConfidence, FieldInfo, TableIndex
 
 
@@ -53,6 +54,19 @@ def _field(name, typ="int"):
 @pytest.fixture
 def resolver():
     return DependencyResolver(project=_make_project(), model_router=None)
+
+
+def test_dependency_graph_source_metadata_marks_technical_evidence():
+    metadata = get_dependency_graph_source_metadata()
+
+    assert metadata == {
+        "source_type": "dependency_graph",
+        "semantic_role": "technical_impact_evidence",
+        "is_formal_map_relationship": False,
+        "governs_release": False,
+        "governs_rag": False,
+        "governs_workbench_write": False,
+    }
 
 
 def test_extract_table_name_from_field_strips_suffix(resolver):
@@ -99,3 +113,29 @@ def test_skip_self_primary_key(resolver):
     hero = _table("Hero", [_field("ID")])
     cands = resolver._extract_foreign_key_candidates([hero])
     assert all(c["from_field"] != "ID" for c in cands)
+
+
+@pytest.mark.asyncio
+async def test_analyze_dependencies_with_llm_uses_dependency_analyzer_model_type(resolver):
+    calls = []
+    resolver.model_router = SimpleNamespace(
+        call_model=lambda prompt, model_type="default": _record_dependency_call(
+            calls,
+            model_type,
+            '{"dependencies": [{"from_table": "Hero", "from_field": "WeaponID", "to_table": "Weapon", "to_field": "ID", "confidence": 0.9, "reason": "matched"}]}'
+        )
+    )
+    weapon = _table("Weapon", [_field("ID")])
+    hero = _table("Hero", [_field("ID"), _field("WeaponID")])
+    candidates = [{'table': hero, 'field': hero.fields[1]}]
+
+    edges = await resolver._analyze_dependencies_with_llm(candidates, [hero, weapon])
+
+    assert calls == ["dependency_analyzer"]
+    assert len(edges) == 1
+    assert edges[0].to_table == "Weapon"
+
+
+async def _record_dependency_call(calls, model_type, response):
+    calls.append(model_type)
+    return response

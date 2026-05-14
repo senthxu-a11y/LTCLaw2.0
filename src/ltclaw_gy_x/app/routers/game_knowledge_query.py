@@ -80,8 +80,8 @@ def _project_root_or_400(game_service) -> Path:
 
 @router.post('/query', response_model=KnowledgeQueryResponse)
 async def query_knowledge(request: Request, body: KnowledgeQueryRequest) -> KnowledgeQueryResponse:
-    require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.read')
     game_service = _game_service_or_404(workspace)
     payload = query_current_release(
         _project_root_or_400(game_service),

@@ -52,6 +52,7 @@ import ModelSelector from "../Chat/ModelSelector";
 import {
   coerceCellValue,
   dirtyKeyOf,
+  parseRowId,
   useDirtyCells,
 } from "./hooks/useDirtyCells";
 import styles from "./NumericWorkbench.module.less";
@@ -123,6 +124,7 @@ export default function NumericWorkbench() {
   const canReadWorkbench = canUseGovernanceAction(capabilities, "workbench.read");
   const canWriteWorkbench = canUseGovernanceAction(capabilities, "workbench.test.write");
   const canExportWorkbench = canUseGovernanceAction(capabilities, "workbench.test.export");
+  const canSourceWrite = canUseGovernanceAction(capabilities, "workbench.source.write");
   const permissionDeniedMessage = t("gameProject.permissionDenied", {
     defaultValue: "You do not have permission to perform this action.",
   });
@@ -142,6 +144,12 @@ export default function NumericWorkbench() {
     hasExplicitCapabilityContext && !canExportWorkbench
       ? t("gameWorkbench.permissionExportRequired", {
           defaultValue: "Requires workbench.test.export permission.",
+        })
+      : null;
+  const workbenchSourceWriteReason =
+    hasExplicitCapabilityContext && !canSourceWrite
+      ? t("gameWorkbench.permissionSourceWriteRequired", {
+          defaultValue: "Requires workbench.source.write permission.",
         })
       : null;
 
@@ -262,6 +270,9 @@ export default function NumericWorkbench() {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDesc, setDraftDesc] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [sourceWriteOpen, setSourceWriteOpen] = useState(false);
+  const [sourceWriteReasonInput, setSourceWriteReasonInput] = useState("");
+  const [sourceWriting, setSourceWriting] = useState(false);
 
   // 上下分割（上区高度比例）
   const [topRatio, setTopRatio] = useState(0.55);
@@ -1092,6 +1103,10 @@ export default function NumericWorkbench() {
               })),
         ts: Date.now(),
         suggestions: sugs.length ? sugs : undefined,
+          suggestMeta: {
+            evidence_refs: resp.evidence_refs,
+            formal_context_status: resp.formal_context_status,
+          },
         acceptedKeys: [],
       };
       setChatMessages((prev) => [...prev, assistantMsg]);
@@ -1347,6 +1362,64 @@ export default function NumericWorkbench() {
     }
   };
 
+  const openSourceWrite = () => {
+    if (!canSourceWrite) {
+      return;
+    }
+    if (validChanges.length === 0) {
+      message.warning(t("gameWorkbench.noChangesToSubmit", { defaultValue: "没有可提交的修改" }));
+      return;
+    }
+    setSourceWriteReasonInput("");
+    setSourceWriteOpen(true);
+  };
+
+  const submitSourceWrite = async () => {
+    if (!selectedAgent) return;
+    if (!canSourceWrite) {
+      message.warning(workbenchSourceWriteReason || permissionDeniedMessage);
+      return;
+    }
+    if (validChanges.length === 0) {
+      message.warning(t("gameWorkbench.noChangesToSubmit", { defaultValue: "没有可提交的修改" }));
+      return;
+    }
+    setSourceWriting(true);
+    try {
+      const response = await gameWorkbenchApi.sourceWrite(
+        selectedAgent,
+        sourceWriteChanges.map((change) => ({
+          op: "update_cell",
+          table: change.table,
+          row_id: parseRowId(change.rowKey),
+          field: change.field,
+          new_value: change.newValue,
+          old_value: change.oldValue,
+        })),
+        sourceWriteReasonInput.trim() || "workbench_source_write",
+      );
+      message.success(
+        response.message ||
+          t("gameWorkbench.sourceWriteSuccess", { defaultValue: "已写回真实源表，未自动触发 Rebuild / Release / Publish。" }),
+      );
+      dirty.clearAll();
+      setPreview([]);
+      setImpacts([]);
+      setAffectedTables([]);
+      await Promise.all(openTables.map((tableName) => loadRowsForTable(tableName)));
+      setSourceWriteOpen(false);
+    } catch (err) {
+      message.error(
+        formatPermissionError(
+          err,
+          t("gameWorkbench.sourceWriteFailed", { defaultValue: "写回真实源表失败" }),
+        ),
+      );
+    } finally {
+      setSourceWriting(false);
+    }
+  };
+
   const saveSession = useCallback(() => {
     const sessionName = sessionStore.current?.name || t("gameWorkbench.defaultSessionName", {
       defaultValue: "当前会话",
@@ -1367,6 +1440,14 @@ export default function NumericWorkbench() {
 
   const draftPreviewChanges = useMemo(
     () => dirty.dirtyList.slice(0, 6),
+    [dirty.dirtyList],
+  );
+
+  const sourceWriteChanges = useMemo(
+    () =>
+      dirty.dirtyList.filter(
+        (change) => change.newValue !== "" && change.newValue !== undefined && change.newValue !== null,
+      ),
     [dirty.dirtyList],
   );
 
@@ -1918,6 +1999,10 @@ export default function NumericWorkbench() {
             exporting={submitting}
             exportDisabled={validChanges.length === 0 || !canExportWorkbench}
             exportDisabledReason={workbenchExportReason || undefined}
+            onSourceWrite={openSourceWrite}
+            sourceWriting={sourceWriting}
+            sourceWriteDisabled={validChanges.length === 0 || !canSourceWrite}
+            sourceWriteDisabledReason={workbenchSourceWriteReason || undefined}
           />
           <ImpactPanel
             preview={preview}
@@ -1990,6 +2075,66 @@ export default function NumericWorkbench() {
                   })}
                 </Text>
               )}
+            </Space>
+          </Card>
+        </Space>
+      </Modal>
+
+      <Modal
+        title={t("gameWorkbench.sourceWriteModalTitle", { defaultValue: "写回真实源表" })}
+        open={sourceWriteOpen}
+        onOk={submitSourceWrite}
+        onCancel={() => setSourceWriteOpen(false)}
+        confirmLoading={sourceWriting}
+        okButtonProps={{ danger: true, disabled: !canSourceWrite }}
+        okText={t("gameWorkbench.sourceWriteConfirm", { defaultValue: "确认写回" })}
+        cancelText={t("gameWorkbench.cancel", { defaultValue: "取消" })}
+      >
+        {workbenchSourceWriteReason ? (
+          <Alert type="info" showIcon message={workbenchSourceWriteReason} style={{ marginBottom: 16 }} />
+        ) : null}
+        <Space direction="vertical" style={{ width: "100%" }}>
+          <Alert
+            type="warning"
+            showIcon
+            message={t("gameWorkbench.sourceWriteManualSvnUpdate", {
+              defaultValue: "写回前请先在本地工作副本手动执行 SVN Update。后端不会自动执行 SVN update / commit / revert。",
+            })}
+          />
+          <Text type="secondary">
+            {t("gameWorkbench.sourceWriteBoundary", {
+              defaultValue: "该入口只写回真实源表，不会自动触发 Rebuild / Release / Publish。",
+            })}
+          </Text>
+          <Text>{t("gameWorkbench.sourceWriteReasonLabel", { defaultValue: "写回说明" })}</Text>
+          <Input.TextArea
+            value={sourceWriteReasonInput}
+            onChange={(e) => setSourceWriteReasonInput(e.target.value)}
+            rows={4}
+            placeholder={t("gameWorkbench.sourceWriteReasonPlaceholder", {
+              defaultValue: "例如：同步已经验证通过的 HP 调整到真实源表",
+            })}
+          />
+          <Text type="secondary">
+            {t("gameWorkbench.sourceWriteSummary", {
+              count: validChanges.length,
+              defaultValue: `共 ${validChanges.length} 项修改会写回真实源表`,
+            })}
+          </Text>
+          <Card size="small" title={t("gameWorkbench.sourceWritePreviewTitle", { defaultValue: "写回预览" })}>
+            <Space direction="vertical" size={8} style={{ width: "100%" }}>
+              <Space size={[6, 6]} wrap>
+                {draftPreviewTables.map((tableName) => (
+                  <Tag key={`source-write-${tableName}`} color="red">
+                    {tableName}
+                  </Tag>
+                ))}
+              </Space>
+              {draftPreviewChanges.map((change, index) => (
+                <Text key={`source-write-change-${index}`} type="secondary">
+                  {change.table} / {String(change.rowKey)} / {change.field}: {String(change.newValue ?? "")}
+                </Text>
+              ))}
             </Space>
           </Card>
         </Space>

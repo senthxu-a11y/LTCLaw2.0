@@ -24,7 +24,7 @@ interface GameProjectFormData {
   name: string;
   description?: string;
   is_maintainer: boolean;
-  svn_url: string;
+  svn_url?: string;
   svn_username?: string;
   svn_password?: string;
   svn_trust_cert?: boolean;
@@ -129,7 +129,7 @@ export default function GameProject() {
           title: t("gameProject.storageProjectTitle", { defaultValue: "项目级" }),
           items: [
             [
-              t("gameProject.storageSvnRoot", { defaultValue: "local project directory" }),
+              t("gameProject.storageProjectRoot", { defaultValue: "local project root" }),
               storageSummary.svn_root || "-",
             ],
             [t("gameProject.storageProjectStore", { defaultValue: "项目存储目录" }), storageSummary.project_store_dir || "-"],
@@ -152,7 +152,7 @@ export default function GameProject() {
           items: [
             [t("gameProject.storageChroma", { defaultValue: "Chroma 缓存" }), storageSummary.chroma_dir],
             [t("gameProject.storageLlmCache", { defaultValue: "LLM 缓存" }), storageSummary.llm_cache_dir],
-            [t("gameProject.storageSvnCache", { defaultValue: "SVN 缓存" }), storageSummary.svn_cache_dir],
+            [t("gameProject.storageSvnCacheLegacy", { defaultValue: "legacy project cache" }), storageSummary.svn_cache_dir],
             [t("gameProject.storageCodeIndex", { defaultValue: "代码索引库" }), storageSummary.code_index_dir],
             [t("gameProject.storageRetrieval", { defaultValue: "文档检索库" }), storageSummary.retrieval_dir],
             [t("gameProject.storageKnowledgeBase", { defaultValue: "知识库目录" }), storageSummary.knowledge_base_dir],
@@ -470,70 +470,87 @@ export default function GameProject() {
             </Form.Item>
           </Card>
 
-          {/* SVN Configuration Section */}
-          <Card title={t("gameProject.svnConfig")} className={styles.section}>
+          <Card
+            title={t("gameProject.projectAccessConfig", { defaultValue: "Project access" })}
+            className={styles.section}
+          >
             <Form.Item
-              label="我是维护者（允许维护项目索引）"
+              label={t("gameProject.maintainerModeLabel", { defaultValue: "Maintainer mode" })}
               name="is_maintainer"
               valuePropName="checked"
-              tooltip="开启=维护者 maintainer；关闭=使用者 consumer。此开关不改变现有接口行为。"
+              tooltip={t(
+                "gameProject.maintainerModeTooltip",
+                "This legacy role toggle is still kept for compatibility. It no longer enables built-in SVN runtime operations.",
+              )}
             >
               <Switch />
             </Form.Item>
             <Form.Item
-              label={t("gameProject.svnUrl")}
-              name="svn_url"
-              rules={[{ required: true, message: t("gameProject.svnUrlRequired") }]}
+              label={t("gameProject.svnWorkingCopyPath", { defaultValue: "Local project root" })}
+              name="svn_working_copy_path"
+              rules={[{ required: true, message: t("gameProject.svnWorkingCopyPathRequired") }]}
             >
-              <Input placeholder="svn://server/path/to/project" />
+              <Input
+                placeholder={t("gameProject.svnWorkingCopyPathPlaceholder", {
+                  defaultValue: LOCAL_PROJECT_DIRECTORY_LABEL,
+                })}
+              />
             </Form.Item>
 
-            <Form.Item label={t("gameProject.svnUsername")} name="svn_username">
-              <Input placeholder={t("gameProject.svnUsernamePlaceholder")} />
+            <div className={styles.projectIntroHint}>
+              {t(
+                "gameProject.projectRootHint",
+                "LTClaw currently uses this path only as the local project root. SVN URL, credentials, trust cert, update, commit, watcher, and polling are frozen and must stay in your external SVN workflow.",
+              )}
+            </div>
+
+            <div className={styles.storageHint}>
+              {t(
+                "gameProject.legacySvnConfigHint",
+                "Legacy config fields such as svn_local_root and svn.root are still read for compatibility, but they now only mean the local project path.",
+              )}
+            </div>
+          </Card>
+
+          <Card title={t("gameProject.sourceScopeConfig", { defaultValue: "Source scope and filters" })} className={styles.section}>
+            <div className={styles.storageHint}>
+              {t(
+                "gameProject.sourceScopeHint",
+                "These fields now describe which local project paths and file patterns LTClaw reads for indexing and analysis. They are not an active SVN watcher or polling runtime.",
+              )}
+            </div>
+            <Form.Item label={t("gameProject.sourcePaths", { defaultValue: "Project source paths" })} name="watch_paths">
+              <TextArea
+                rows={4}
+                placeholder={t("gameProject.sourcePathsPlaceholder", { defaultValue: "One relative path per line, for example:\nTables\nConfigs" })}
+              />
             </Form.Item>
 
-            <Form.Item label={t("gameProject.svnPassword")} name="svn_password">
-              <Input.Password placeholder={t("gameProject.svnPasswordPlaceholder")} />
+            <Form.Item label={t("gameProject.sourceIncludePatterns", { defaultValue: "Included file patterns" })} name="watch_patterns">
+              <TextArea
+                rows={4}
+                placeholder={t("gameProject.sourceIncludePatternsPlaceholder", { defaultValue: "One pattern per line, for example:\n.xlsx\n.csv\n.md" })}
+              />
             </Form.Item>
 
-            <Form.Item label={t("gameProject.svnWorkingCopyPath")} name="svn_working_copy_path">
-              <Input placeholder={t("gameProject.svnWorkingCopyPathPlaceholder", { defaultValue: LOCAL_PROJECT_DIRECTORY_LABEL })} />
-            </Form.Item>
-
-            <Form.Item name="svn_trust_cert" valuePropName="checked">
-              <Switch /> {t("gameProject.svnTrustCert")}
+            <Form.Item label={t("gameProject.sourceExcludePatterns", { defaultValue: "Excluded file patterns" })} name="watch_exclude_patterns">
+              <TextArea
+                rows={4}
+                placeholder={t("gameProject.sourceExcludePatternsPlaceholder", { defaultValue: "One exclude pattern per line, for example:\n**/temp/**\n**/.svn/**\n**/~$*" })}
+              />
             </Form.Item>
           </Card>
 
-          {/* Watch Configuration Section */}
-          <Card title={t("gameProject.watchConfig")} className={styles.section}>
-            <Form.Item label={t("gameProject.watchPaths")} name="watch_paths">
-              <TextArea
-                rows={4}
-                placeholder={t("gameProject.watchPathsPlaceholder")}
-              />
-            </Form.Item>
-
-            <Form.Item label={t("gameProject.watchPatterns")} name="watch_patterns">
-              <TextArea
-                rows={4}
-                placeholder={t("gameProject.watchPatternsPlaceholder")}
-              />
-            </Form.Item>
-
-            <Form.Item label={t("gameProject.watchExcludePatterns")} name="watch_exclude_patterns">
-              <TextArea
-                rows={4}
-                placeholder={t("gameProject.watchExcludePatternsPlaceholder")}
-              />
-            </Form.Item>
-          </Card>
-
-          {/* Workflow Configuration Section */}
-          <Card title={t("gameProject.workflowConfig")} className={styles.section}>
+          <Card title={t("gameProject.legacyFrozenRuntimeConfig", { defaultValue: "Legacy frozen runtime settings" })} className={styles.section}>
+            <div className={styles.storageHint}>
+              {t(
+                "gameProject.legacyFrozenRuntimeHint",
+                "These legacy fields are shown only to explain current compatibility boundaries. LTClaw no longer starts an SVN watcher, polling loop, or config commit flow from this page.",
+              )}
+            </div>
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
               <Form.Item name="auto_sync" valuePropName="checked">
-                <Switch /> {t("gameProject.autoSync")}
+                <Switch disabled /> {t("gameProject.autoSyncFrozen", { defaultValue: "SVN auto sync (frozen)" })}
               </Form.Item>
 
               <Form.Item name="auto_index" valuePropName="checked">
@@ -548,7 +565,12 @@ export default function GameProject() {
                 label={t("gameProject.indexCommitMessageTemplate")}
                 name="index_commit_message_template"
               >
-                <Input placeholder={t("gameProject.indexCommitMessageTemplatePlaceholder")} />
+                <Input
+                  disabled
+                  placeholder={t("gameProject.indexCommitMessageTemplateFrozen", {
+                    defaultValue: "Frozen with SVN runtime. Index commits are not part of the current LTClaw main flow.",
+                  })}
+                />
               </Form.Item>
             </Space>
           </Card>

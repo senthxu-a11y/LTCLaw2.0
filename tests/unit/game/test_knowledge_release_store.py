@@ -131,6 +131,8 @@ def test_create_release_writes_app_owned_assets(monkeypatch, tmp_path):
     assert not (release_dir / 'Docs' / 'Combat.md').exists()
     assert not (release_dir / 'Scripts' / 'CombatResolver.cs').exists()
     assert load_manifest(project_root, 'release-001').map_hash == manifest.map_hash
+    assert load_manifest(project_root, 'release-001').indexes['candidate_evidence'].path == 'indexes/candidate_evidence.jsonl'
+    assert load_manifest(project_root, 'release-001').indexes['candidate_evidence'].count == 0
 
 
 

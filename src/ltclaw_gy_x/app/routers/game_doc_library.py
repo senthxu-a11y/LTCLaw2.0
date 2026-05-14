@@ -15,6 +15,8 @@ from ...knowledge_base import get_kb_store
 
 router = APIRouter(prefix="/game-doc-library", tags=["game-doc-library"])
 
+LEGACY_DOC_LIBRARY_SYNC_MODE = "legacy_kb_migration_only"
+
 
 _DOC_EXTENSIONS = {
     ".md": "Markdown",
@@ -273,6 +275,10 @@ def _document_summary(content: str) -> str:
 
 
 def _sync_document_to_kb(workspace_dir: Path, document: dict[str, Any], content: str, meta: dict[str, Any]) -> str | None:
+    """Maintain a legacy KB mirror for migration/debug only.
+
+    This sync path does not participate in formal release, RAG, or workbench-suggest.
+    """
     if document.get("status") != "???":
         return meta.get("kb_entry_id") if isinstance(meta.get("kb_entry_id"), str) else None
 
@@ -374,7 +380,16 @@ async def list_documents(
 
     items = sorted(items, key=lambda item: (item["updated_at"], item["id"]), reverse=True)
     categories = sorted({item["category"] for item in items})
-    return {"items": items, "categories": categories, "count": len(items)}
+    return {
+        "items": items,
+        "categories": categories,
+        "count": len(items),
+        "scope": "legacy_doc_library",
+        "knowledge_sync": {
+            "mode": LEGACY_DOC_LIBRARY_SYNC_MODE,
+            "affects_release": False,
+        },
+    }
 
 
 @router.get("/status")
@@ -400,7 +415,11 @@ async def get_doc_library_status(
             "by_status": by_status,
             "categories": sorted({item["category"] for item in items}),
         },
-        "retrieval": retrieval_status,
+        "knowledge_sync": {
+            "mode": LEGACY_DOC_LIBRARY_SYNC_MODE,
+            "affects_release": False,
+        },
+        "legacy_retrieval": retrieval_status,
     }
 
 
@@ -420,6 +439,10 @@ async def get_document_detail(doc_id: str, workspace=Depends(get_agent_for_reque
         "content": content,
         "preview_kind": preview_kind,
         "truncated": truncated,
+        "knowledge_sync": {
+            "mode": LEGACY_DOC_LIBRARY_SYNC_MODE,
+            "affects_release": False,
+        },
     }
 
 
@@ -458,4 +481,9 @@ async def update_document(
         "preview_kind": preview_kind,
         "truncated": truncated,
         "kb_entry_id": kb_entry_id,
+        "legacy_kb_entry_id": kb_entry_id,
+        "knowledge_sync": {
+            "mode": LEGACY_DOC_LIBRARY_SYNC_MODE,
+            "affects_release": False,
+        },
     }

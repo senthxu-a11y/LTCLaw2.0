@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from ltclaw_gy_x.game import retrieval as retrieval_module
 from ltclaw_gy_x.game.knowledge_rag_context import (
     KnowledgeReleaseContextPathError,
     build_current_release_context,
@@ -130,6 +131,12 @@ def test_build_current_release_context_returns_no_current_release(monkeypatch, t
         'built_at': None,
         'chunks': [],
         'citations': [],
+        'allowed_refs': [],
+        'map_hash': None,
+        'map_source_hash': None,
+        'reason': 'no_current_release',
+        'requested_focus_refs': [],
+        'active_focus_refs': [],
     }
 
 
@@ -177,7 +184,7 @@ def test_build_current_release_context_reads_only_current_release_artifacts(monk
     assert payload['release_id'] == 'release-current'
     assert payload['chunks']
     assert {chunk['source_type'] for chunk in payload['chunks']}.issubset(
-        {'manifest', 'map', 'table_schema', 'doc_knowledge', 'script_evidence'}
+        {'table_schema', 'doc_knowledge', 'script_evidence'}
     )
     assert {'table_schema', 'doc_knowledge', 'script_evidence'}.issubset(
         {chunk['source_type'] for chunk in payload['chunks']}
@@ -272,8 +279,421 @@ def test_build_current_release_context_citations_include_release_and_reference(m
     for citation in payload['citations']:
         assert citation['release_id'] == 'release-citations'
         assert citation['artifact_path'] or citation['source_path']
+        assert citation['ref']
         if citation['source_type'] in {'table_schema', 'doc_knowledge', 'script_evidence'}:
             assert citation['source_path']
+
+
+def test_build_current_release_context_routes_through_map_router(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+    _create_release(project_root, 'release-routed')
+    set_current_release(project_root, 'release-routed')
+
+    import ltclaw_gy_x.game.knowledge_rag_context as context_module
+
+    captured = {}
+    original_route = context_module.route_release_map_refs
+
+    def _route(query, current_release, knowledge_map, *, focus_refs=None):
+        captured['query'] = query
+        captured['release_id'] = current_release.release_id
+        captured['focus_refs'] = list(focus_refs or [])
+        return original_route(query, current_release, knowledge_map, focus_refs=focus_refs)
+
+    monkeypatch.setattr(context_module, 'route_release_map_refs', _route)
+
+    payload = build_current_release_context(project_root, 'combat damage', focus_refs=['doc:combat-doc'])
+
+    assert payload['mode'] == 'context'
+    assert captured == {
+        'query': 'combat damage',
+        'release_id': 'release-routed',
+        'focus_refs': ['doc:combat-doc'],
+    }
+
+
+def test_build_current_release_context_reads_only_allowed_ref_artifacts(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+    _create_release(project_root, 'release-focus-doc')
+    set_current_release(project_root, 'release-focus-doc')
+
+    release_dir = get_release_dir(project_root, 'release-focus-doc')
+    opened_paths: list[Path] = []
+    original_open = Path.open
+
+    def _spy_open(self: Path, *args, **kwargs):
+        opened_paths.append(self.resolve(strict=False))
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'open', _spy_open)
+
+    payload = build_current_release_context(project_root, 'combat damage formula', focus_refs=['doc:combat-doc'])
+
+    assert payload['mode'] == 'context'
+    assert payload['allowed_refs'] == ['doc:combat-doc']
+    assert {chunk['source_type'] for chunk in payload['chunks']} == {'doc_knowledge'}
+
+    normalized = {path.resolve(strict=False) for path in opened_paths}
+    assert release_dir.resolve(strict=False) / 'indexes' / 'doc_knowledge.jsonl' in normalized
+    assert release_dir.resolve(strict=False) / 'indexes' / 'table_schema.jsonl' not in normalized
+    assert release_dir.resolve(strict=False) / 'indexes' / 'script_evidence.jsonl' not in normalized
+    assert release_dir.resolve(strict=False) / 'indexes' / 'candidate_evidence.jsonl' not in normalized
+
+
+def test_build_current_release_context_excludes_ignored_and_deprecated_refs(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+
+    knowledge_map = _knowledge_map('release-filtered').model_copy(
+        update={
+            'docs': [
+                KnowledgeDocRef(
+                    doc_id='combat-doc',
+                    title='Combat Overview',
+                    source_path='Docs/Combat.md',
+                    source_hash='sha256:doc',
+                    system_id='combat',
+                    status='ignored',
+                )
+            ],
+            'scripts': [
+                KnowledgeScriptRef(
+                    script_id='combat-script',
+                    title='CombatResolver',
+                    source_path='Scripts/CombatResolver.cs',
+                    source_hash='sha256:script',
+                    system_id='combat',
+                    status='active',
+                )
+            ],
+            'deprecated': ['script:combat-script'],
+        }
+    )
+    manifest = _manifest(project_root, 'release-filtered', knowledge_map)
+    create_release(
+        project_root,
+        manifest,
+        knowledge_map,
+        indexes={
+            'table_schema.jsonl': (
+                '{"table_name":"SkillTable","system":"combat","summary":"combat skill damage schema",'
+                '"source_path":"Tables/SkillTable.xlsx","source_hash":"sha256:table","primary_key":"ID",'
+                '"row_count":7,"fields":[{"name":"Damage","type":"int","description":"combat damage value"}]}'
+                '\n'
+            ),
+            'doc_knowledge.jsonl': (
+                '{"title":"Combat Overview","summary":"combat damage formula design",'
+                '"category":"design","tags":["combat"],"source_path":"Docs/Combat.md",'
+                '"related_tables":["SkillTable"],"source_hash":"sha256:doc"}'
+                '\n'
+            ),
+            'script_evidence.jsonl': (
+                '{"source_path":"Scripts/CombatResolver.cs","source_hash":"sha256:script","language":"csharp",'
+                '"kind":"code_index","summary":"combat damage resolver logic","symbols":[{"name":"CombatResolver"}],'
+                '"references":[{"target_symbol":"DamageFormula"},{"target_table":"SkillTable"}]}'
+                '\n'
+            ),
+        },
+    )
+    set_current_release(project_root, 'release-filtered')
+
+    payload = build_current_release_context(project_root, 'combat damage formula')
+
+    assert payload['mode'] == 'context'
+    assert payload['allowed_refs'] == ['table:SkillTable']
+    assert {chunk['source_type'] for chunk in payload['chunks']} == {'table_schema'}
+    assert all(citation['ref'] == 'table:SkillTable' for citation in payload['citations'])
+
+
+def test_build_current_release_context_returns_insufficient_context_when_no_allowed_refs(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+    _create_release(project_root, 'release-no-allowed')
+    set_current_release(project_root, 'release-no-allowed')
+
+    payload = build_current_release_context(project_root, 'completely unmatched signal')
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['reason'] == 'no_allowed_refs'
+    assert payload['allowed_refs'] == []
+    assert payload['requested_focus_refs'] == []
+    assert payload['active_focus_refs'] == []
+    assert payload['chunks'] == []
+    assert payload['citations'] == []
+
+
+def test_build_current_release_context_returns_insufficient_context_when_allowed_refs_have_no_evidence(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+    _create_release(project_root, 'release-no-evidence')
+    set_current_release(project_root, 'release-no-evidence')
+
+    doc_path = get_release_dir(project_root, 'release-no-evidence') / 'indexes' / 'doc_knowledge.jsonl'
+    doc_path.write_text(
+        '{"title":"Another Doc","summary":"something else","category":"design","tags":[],"source_path":"Docs/Other.md","related_tables":[],"source_hash":"sha256:other"}\n',
+        encoding='utf-8',
+    )
+
+    payload = build_current_release_context(project_root, 'combat damage formula', focus_refs=['doc:combat-doc'])
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['reason'] == 'allowed_refs_without_evidence'
+    assert payload['allowed_refs'] == ['doc:combat-doc']
+    assert payload['requested_focus_refs'] == ['doc:combat-doc']
+    assert payload['active_focus_refs'] == ['doc:combat-doc']
+    assert payload['chunks'] == []
+
+
+def test_build_current_release_context_unknown_focus_refs_fail_closed(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+    _create_release(project_root, 'release-unknown-focus')
+    set_current_release(project_root, 'release-unknown-focus')
+
+    opened_paths: list[Path] = []
+    original_open = Path.open
+
+    def _spy_open(self: Path, *args, **kwargs):
+        opened_paths.append(self.resolve(strict=False))
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'open', _spy_open)
+
+    payload = build_current_release_context(project_root, 'combat damage formula', focus_refs=['doc:unknown'])
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['reason'] == 'no_active_focus_refs'
+    assert payload['allowed_refs'] == []
+    assert payload['requested_focus_refs'] == ['doc:unknown']
+    assert payload['active_focus_refs'] == []
+    assert payload['chunks'] == []
+    assert payload['citations'] == []
+    assert all('indexes' not in path.as_posix() for path in opened_paths)
+
+
+def test_build_current_release_context_ignored_focus_refs_fail_closed(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+
+    knowledge_map = _knowledge_map('release-ignored-focus').model_copy(
+        update={
+            'docs': [
+                KnowledgeDocRef(
+                    doc_id='combat-doc',
+                    title='Combat Overview',
+                    source_path='Docs/Combat.md',
+                    source_hash='sha256:doc',
+                    system_id='combat',
+                    status='ignored',
+                )
+            ]
+        }
+    )
+    manifest = _manifest(project_root, 'release-ignored-focus', knowledge_map)
+    create_release(
+        project_root,
+        manifest,
+        knowledge_map,
+        indexes={
+            'table_schema.jsonl': (
+                '{"table_name":"SkillTable","system":"combat","summary":"combat skill damage schema",'
+                '"source_path":"Tables/SkillTable.xlsx","source_hash":"sha256:table","primary_key":"ID",'
+                '"row_count":7,"fields":[{"name":"Damage","type":"int","description":"combat damage value"}]}'
+                '\n'
+            ),
+            'doc_knowledge.jsonl': (
+                '{"title":"Combat Overview","summary":"combat damage formula design",'
+                '"category":"design","tags":["combat"],"source_path":"Docs/Combat.md",'
+                '"related_tables":["SkillTable"],"source_hash":"sha256:doc"}'
+                '\n'
+            ),
+            'script_evidence.jsonl': (
+                '{"source_path":"Scripts/CombatResolver.cs","source_hash":"sha256:script","language":"csharp",'
+                '"kind":"code_index","summary":"combat damage resolver logic","symbols":[{"name":"CombatResolver"}],'
+                '"references":[{"target_symbol":"DamageFormula"},{"target_table":"SkillTable"}]}'
+                '\n'
+            ),
+        },
+    )
+    set_current_release(project_root, 'release-ignored-focus')
+
+    opened_paths: list[Path] = []
+    original_open = Path.open
+
+    def _spy_open(self: Path, *args, **kwargs):
+        opened_paths.append(self.resolve(strict=False))
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'open', _spy_open)
+
+    payload = build_current_release_context(project_root, 'combat damage formula', focus_refs=['doc:combat-doc'])
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['reason'] == 'no_active_focus_refs'
+    assert payload['allowed_refs'] == []
+    assert payload['requested_focus_refs'] == ['doc:combat-doc']
+    assert payload['active_focus_refs'] == []
+    assert payload['chunks'] == []
+    assert payload['citations'] == []
+    assert all('indexes' not in path.as_posix() for path in opened_paths)
+
+
+def test_build_current_release_context_deprecated_focus_refs_fail_closed(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+
+    knowledge_map = _knowledge_map('release-deprecated-focus').model_copy(
+        update={
+            'deprecated': ['doc:combat-doc']
+        }
+    )
+    manifest = _manifest(project_root, 'release-deprecated-focus', knowledge_map)
+    create_release(
+        project_root,
+        manifest,
+        knowledge_map,
+        indexes={
+            'table_schema.jsonl': (
+                '{"table_name":"SkillTable","system":"combat","summary":"combat skill damage schema",'
+                '"source_path":"Tables/SkillTable.xlsx","source_hash":"sha256:table","primary_key":"ID",'
+                '"row_count":7,"fields":[{"name":"Damage","type":"int","description":"combat damage value"}]}'
+                '\n'
+            ),
+            'doc_knowledge.jsonl': (
+                '{"title":"Combat Overview","summary":"combat damage formula design",'
+                '"category":"design","tags":["combat"],"source_path":"Docs/Combat.md",'
+                '"related_tables":["SkillTable"],"source_hash":"sha256:doc"}'
+                '\n'
+            ),
+            'script_evidence.jsonl': (
+                '{"source_path":"Scripts/CombatResolver.cs","source_hash":"sha256:script","language":"csharp",'
+                '"kind":"code_index","summary":"combat damage resolver logic","symbols":[{"name":"CombatResolver"}],'
+                '"references":[{"target_symbol":"DamageFormula"},{"target_table":"SkillTable"}]}'
+                '\n'
+            ),
+        },
+    )
+    set_current_release(project_root, 'release-deprecated-focus')
+
+    opened_paths: list[Path] = []
+    original_open = Path.open
+
+    def _spy_open(self: Path, *args, **kwargs):
+        opened_paths.append(self.resolve(strict=False))
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'open', _spy_open)
+
+    payload = build_current_release_context(project_root, 'combat damage formula', focus_refs=['doc:combat-doc'])
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['reason'] == 'no_active_focus_refs'
+    assert payload['allowed_refs'] == []
+    assert payload['requested_focus_refs'] == ['doc:combat-doc']
+    assert payload['active_focus_refs'] == []
+    assert payload['chunks'] == []
+    assert payload['citations'] == []
+    assert all('indexes' not in path.as_posix() for path in opened_paths)
+
+
+def test_build_current_release_context_mixed_focus_refs_reads_only_active_focus(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+    _create_release(project_root, 'release-mixed-focus')
+    set_current_release(project_root, 'release-mixed-focus')
+
+    release_dir = get_release_dir(project_root, 'release-mixed-focus')
+    opened_paths: list[Path] = []
+    original_open = Path.open
+
+    def _spy_open(self: Path, *args, **kwargs):
+        opened_paths.append(self.resolve(strict=False))
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'open', _spy_open)
+
+    payload = build_current_release_context(
+        project_root,
+        'combat damage formula',
+        focus_refs=['doc:combat-doc', 'doc:unknown'],
+    )
+
+    assert payload['mode'] == 'context'
+    assert payload['allowed_refs'] == ['doc:combat-doc']
+    assert payload['requested_focus_refs'] == ['doc:combat-doc', 'doc:unknown']
+    assert payload['active_focus_refs'] == ['doc:combat-doc']
+    assert {chunk['source_type'] for chunk in payload['chunks']} == {'doc_knowledge'}
+    normalized = {path.resolve(strict=False) for path in opened_paths}
+    assert release_dir.resolve(strict=False) / 'indexes' / 'doc_knowledge.jsonl' in normalized
+    assert release_dir.resolve(strict=False) / 'indexes' / 'table_schema.jsonl' not in normalized
+    assert release_dir.resolve(strict=False) / 'indexes' / 'script_evidence.jsonl' not in normalized
+
+
+def test_build_current_release_context_does_not_call_legacy_retrieval_or_kb(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+    _create_release(project_root, 'release-no-retrieval')
+    set_current_release(project_root, 'release-no-retrieval')
+
+    monkeypatch.setattr(retrieval_module, 'get_kb_store', lambda *args, **kwargs: pytest.fail('formal RAG must not call KB'))
+    monkeypatch.setattr(retrieval_module, '_retrieval_dir', lambda *args, **kwargs: pytest.fail('formal RAG must not call retrieval'))
+
+    payload = build_current_release_context(project_root, 'combat damage formula')
+
+    assert payload['mode'] == 'context'
+    assert payload['chunks']
 
 
 def test_build_current_release_context_is_read_only_and_does_not_change_current_release(monkeypatch, tmp_path):
@@ -385,7 +805,8 @@ def test_build_current_release_context_uses_restored_current_release_after_rollb
     after_payload = build_current_release_context(project_root, 'zetaoldsignal', max_chunks=8, max_chars=12000)
 
     assert before_payload['release_id'] == 'release-current'
+    assert before_payload['mode'] == 'insufficient_context'
     assert before_payload['chunks'] == []
     assert after_payload['release_id'] == 'release-old'
-    assert after_payload['chunks']
-    assert any('zetaoldsignal' in chunk['text'] for chunk in after_payload['chunks'])
+    assert after_payload['mode'] == 'insufficient_context'
+    assert after_payload['chunks'] == []

@@ -3,14 +3,27 @@
 import type { ModelSlotConfig } from "./provider";
 import type { FrontendCapabilityToken } from "./permissions";
 
+export type LocalAgentRole = "viewer" | "planner" | "source_writer" | "admin";
+
+export interface LocalAgentProfileSummary {
+  agent_id: string;
+  display_name: string;
+  role: LocalAgentRole;
+  capabilities: FrontendCapabilityToken[];
+  note?: string;
+}
+
 export interface AgentSummary {
   id: string;
   name: string;
+  display_name?: string;
   description: string;
   workspace_dir: string;
   enabled: boolean;
+  role?: LocalAgentRole;
   active_model?: ModelSlotConfig | null;
   capabilities?: FrontendCapabilityToken[];
+  agent_profile?: LocalAgentProfileSummary;
 }
 
 export interface AgentListResponse {
@@ -25,9 +38,12 @@ export interface ReorderAgentsResponse {
 export interface AgentProfileConfig {
   id: string;
   name: string;
+  display_name?: string;
   description?: string;
   workspace_dir?: string;
+  role?: LocalAgentRole;
   capabilities?: FrontendCapabilityToken[];
+  agent_profile?: LocalAgentProfileSummary;
   approval_level?: string;
   active_model?: ModelSlotConfig | null;
   channels?: unknown;

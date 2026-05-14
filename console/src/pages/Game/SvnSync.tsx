@@ -20,7 +20,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
 import { gameApi } from "../../api/modules/game";
 import { gameChangeApi } from "../../api/modules/gameChange";
-import type { RecentSvnChangeItem, SvnStatusResponse } from "../../api/types/game";
+import type { ChangeSet, RecentSvnChangeItem, SvnStatusResponse } from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
 import styles from "./SvnSync.module.less";
 
@@ -60,6 +60,12 @@ interface ChangeProposalRecord {
   created_at: string;
   updated_at?: string;
   ops: Array<Record<string, any>>;
+}
+
+function isFrozenSyncResult(
+  result: ChangeSet | { disabled: true; reason: string; configured?: boolean },
+): result is { disabled: true; reason: string; configured?: boolean } {
+  return "disabled" in result && result.disabled === true;
 }
 
 export default function SvnSync() {
@@ -162,6 +168,11 @@ export default function SvnSync() {
     try {
       message.info(t("svnSync.syncStarted"));
       const result = await gameApi.triggerSync(selectedAgent);
+      if (isFrozenSyncResult(result)) {
+        message.info(result.reason || t("svnSync.syncFailed"));
+        await fetchSyncStatus();
+        return;
+      }
       message.success(t("svnSync.syncSuccess"));
       await fetchSyncStatus();
       const changedCount = result.added.length + result.modified.length + result.deleted.length;

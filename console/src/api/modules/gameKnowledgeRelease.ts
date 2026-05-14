@@ -32,6 +32,10 @@ export interface KnowledgeRagAnswerRequest {
   max_chars?: number;
 }
 
+export interface BuildSourceCandidateRequest {
+  use_existing_formal_map_as_hint?: boolean;
+}
+
 function isNoCurrentReleaseError(error: unknown): boolean {
   return error instanceof Error && error.message.includes(NO_CURRENT_RELEASE_DETAIL);
 }
@@ -82,6 +86,18 @@ export const gameKnowledgeReleaseApi = {
 
   async getMapCandidate(agentId: string): Promise<KnowledgeMapCandidateResponse> {
     return request<KnowledgeMapCandidateResponse>(`/agents/${agentId}/game/knowledge/map/candidate`);
+  },
+
+  async buildMapCandidateFromSource(
+    agentId: string,
+    payload: BuildSourceCandidateRequest = {},
+  ): Promise<KnowledgeMapCandidateResponse> {
+    return request<KnowledgeMapCandidateResponse>(`/agents/${agentId}/game/knowledge/map/candidate/from-source`, {
+      method: 'POST',
+      body: JSON.stringify({
+        use_existing_formal_map_as_hint: payload.use_existing_formal_map_as_hint ?? true,
+      }),
+    });
   },
 
   async getFormalMap(agentId: string): Promise<FormalKnowledgeMapResponse> {

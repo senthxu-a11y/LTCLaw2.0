@@ -2,9 +2,19 @@
 
 来源：总规划书 Phase 6、18.2、19.3.3、20 技术雷区 2。
 
+## 前置边界
+
+本任务必须遵循 P0-00《架构边界冻结》：这里只收口正式 RAG 的读取边界，不恢复 KB 为正式系统，不允许普通策划绕过 Map 或更新正式知识底座。
+
 ## 目标
 
 RAG 必须通过 Map Router 获取 allowed refs 后再读取 Release Artifacts，不允许自由扫描 artifacts，不允许读取 KB 作为并列正式知识源。
+
+## Capability 与 Legacy 兼容说明
+
+- [ ] 本任务只允许引用已有 capability 名称 `knowledge.read`；不新增与 RAG 查询相关的新 capability。
+- [ ] 本任务不赋予普通策划 `knowledge.build` 或 `knowledge.publish`。
+- [ ] legacy retrieval 仅允许作为 debug / fallback / migration 兼容层，不得回升为正式查询入口。
 
 ## Checklist
 

@@ -105,6 +105,39 @@ def _game_service_with_external_provider_config(tmp_path, **overrides):
     return service
 
 
+def _forbid_legacy_rag_path(monkeypatch):
+    monkeypatch.setattr(answer_module, 'get_rag_model_client', lambda *args, **kwargs: pytest.fail('GameService formal path must not call legacy rag registry'))
+    monkeypatch.setattr(answer_module, 'resolve_rag_model_provider_name', lambda *args, **kwargs: pytest.fail('GameService formal path must not resolve legacy rag provider'))
+
+
+def _router_result(*, ok, text='', error_code=None, message=None):
+    return builtins.type(
+        'RouterResult',
+        (),
+        {
+            'ok': ok,
+            'text': text,
+            'error_code': error_code,
+            'message': message,
+        },
+    )()
+
+
+def _install_static_router(service, *, ok, text='', error_code=None, message=None):
+    service._model_router = lambda: builtins.type(
+        'StaticRouter',
+        (),
+        {
+            'call_model_blocking': lambda self, prompt, model_type='default': _router_result(
+                ok=ok,
+                text=text,
+                error_code=error_code,
+                message=message,
+            )
+        },
+    )()
+
+
 def test_build_rag_answer_returns_no_current_release():
     payload = build_rag_answer('combat damage', _context(mode='no_current_release', release_id=None))
 
@@ -460,6 +493,82 @@ def test_build_rag_answer_with_service_config_reads_disabled_provider_from_servi
     assert payload['answer'] == ''
     assert payload['citations'] == []
     assert 'Model provider is disabled.' in payload['warnings']
+
+
+def test_build_rag_answer_with_service_config_uses_unified_router_for_game_service(monkeypatch):
+    captured = {}
+
+    class _Router:
+        def call_model_blocking(self, prompt, model_type='default'):
+            captured['model_type'] = model_type
+            captured['prompt'] = prompt
+            return builtins.type(
+                'RouterResult',
+                (),
+                {
+                    'ok': True,
+                    'text': '{"answer": "Grounded unified answer.", "citation_ids": ["citation-001"], "warnings": []}',
+                    'error_code': None,
+                    'message': None,
+                },
+            )()
+
+    service = builtins.type(
+        'FakeGameService',
+        (),
+        {
+            '_model_router': lambda self: _Router(),
+            'config_generation': 0,
+        },
+    )()
+
+    monkeypatch.setattr(answer_module, 'get_rag_model_client', lambda *args, **kwargs: pytest.fail('formal path must not call legacy rag registry'))
+
+    payload = build_rag_answer_with_service_config(
+        'How does combat damage work?',
+        _grounded_context(),
+        service,
+    )
+
+    assert payload['mode'] == 'answer'
+    assert payload['answer'] == 'Grounded unified answer.'
+    assert captured['model_type'] == 'rag_answer'
+    assert 'citation-001' in captured['prompt']
+
+
+def test_build_rag_answer_with_service_config_unified_router_fails_closed_for_no_active_model():
+    class _Router:
+        def call_model_blocking(self, prompt, model_type='default'):
+            return builtins.type(
+                'RouterResult',
+                (),
+                {
+                    'ok': False,
+                    'text': '',
+                    'error_code': 'no_active_model',
+                    'message': 'No active model is configured for the requested model type.',
+                },
+            )()
+
+    service = builtins.type(
+        'FakeGameService',
+        (),
+        {
+            '_model_router': lambda self: _Router(),
+            'config_generation': 0,
+        },
+    )()
+
+    payload = build_rag_answer_with_service_config(
+        'How does combat damage work?',
+        _grounded_context(),
+        service,
+    )
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert any('no_active_model' in warning for warning in payload['warnings'])
 
 
 def test_build_rag_answer_with_service_config_uses_backend_owned_external_disabled_config():
@@ -894,15 +1003,7 @@ def test_build_rag_answer_with_service_config_external_provider_does_not_initial
     }
 
 
-def test_build_rag_answer_with_service_config_reads_game_service_config_bridge(tmp_path):
-    class _ExternalProviderClient:
-        def generate_answer(self, payload):
-            return {
-                'answer': 'Grounded answer from service config bridge.',
-                'citation_ids': ['citation-001'],
-                'warnings': [],
-            }
-
+def test_build_rag_answer_with_service_config_game_service_external_provider_config_does_not_bridge_to_legacy_registry(monkeypatch, tmp_path):
     service = _game_service_with_external_provider_config(
         tmp_path,
         enabled=True,
@@ -910,20 +1011,20 @@ def test_build_rag_answer_with_service_config_reads_game_service_config_bridge(t
         allowed_models=['backend-model'],
         base_url='https://provider.example/v1/chat/completions',
     )
+    service._model_router = lambda: None
+
+    _forbid_legacy_rag_path(monkeypatch)
 
     payload = build_rag_answer_with_service_config(
         'How does combat damage work?',
         _grounded_context(),
         service,
-        factories={
-            RAG_MODEL_PROVIDER_FUTURE_EXTERNAL: lambda config: _ExternalProviderClient(),
-            RAG_MODEL_PROVIDER_DISABLED: DisabledRagModelClient,
-        },
     )
 
-    assert payload['mode'] == 'answer'
-    assert payload['answer'] == 'Grounded answer from service config bridge.'
-    assert [citation['citation_id'] for citation in payload['citations']] == ['citation-001']
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'Unified model router is not available for rag_answer.' in payload['warnings']
 
 
 def test_build_rag_answer_with_service_config_raises_when_generation_changes_before_provider_selection(monkeypatch, tmp_path):
@@ -950,95 +1051,54 @@ def test_build_rag_answer_with_service_config_raises_when_generation_changes_bef
         )
 
 
-def test_build_rag_answer_with_service_config_game_service_backend_owned_config_reaches_fake_http_boundary(monkeypatch, tmp_path):
+def test_build_rag_answer_with_service_config_game_service_provider_exception_fails_closed_without_legacy_registry(monkeypatch, tmp_path):
     service = _game_service_with_external_provider_config(
         tmp_path,
         enabled=True,
         transport_enabled=True,
         allowed_models=['backend-model'],
         base_url='https://provider.example/v1/chat/completions?token=secret',
-        max_output_tokens=256,
     )
-    captured = {}
-    placeholder_secret = 'PLACEHOLDER_SECRET_FOR_SMOKE'
+    service._model_router = lambda: builtins.type(
+        'FailingRouter',
+        (),
+        {
+            'call_model_blocking': lambda self, prompt, model_type='default': builtins.type(
+                'RouterResult',
+                (),
+                {
+                    'ok': False,
+                    'text': '',
+                    'error_code': 'provider_exception',
+                    'message': 'Provider invocation failed.',
+                },
+            )()
+        },
+    )()
 
-    class _FakeResponse:
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return {
-                'choices': [
-                    {
-                        'message': {
-                            'content': '{"answer": "Grounded answer from fake HTTP boundary.", "citation_ids": ["citation-001"], "warnings": []}'
-                        }
-                    }
-                ]
-            }
-
-    class _FakeClient:
-        def __init__(self, **kwargs):
-            captured['client_kwargs'] = kwargs
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def post(self, url, *, json, headers):
-            captured['url'] = url
-            captured['json'] = json
-            captured['headers'] = headers
-            return _FakeResponse()
-
-    monkeypatch.setattr(
-        'ltclaw_gy_x.game.knowledge_rag_external_model_client.os.environ.get',
-        lambda name, default=None: placeholder_secret,
-    )
-    monkeypatch.setattr(
-        'ltclaw_gy_x.game.knowledge_rag_external_model_client._create_http_transport_client',
-        lambda **kwargs: _FakeClient(**kwargs),
-    )
+    _forbid_legacy_rag_path(monkeypatch)
 
     payload = build_rag_answer_with_service_config(
         'How does combat damage work?',
         _grounded_context(),
         service,
     )
-    resolved_config = resolve_external_rag_model_client_config(service)
-    preview = ExternalRagModelHttpTransport().build_request_preview(
-        {
-            'query': 'How does combat damage work?',
-            'release_id': 'release-001',
-            'built_at': '2026-01-01T00:00:00Z',
-            'chunks': list(_grounded_context()['chunks']),
-            'citations': list(_grounded_context()['citations']),
-            'policy_hints': [],
-        },
-        config=resolved_config,
-        credentials=ExternalRagModelClientCredentials(api_key=placeholder_secret),
-    )
 
-    assert payload['mode'] == 'answer'
-    assert payload['answer'] == 'Grounded answer from fake HTTP boundary.'
-    assert [citation['citation_id'] for citation in payload['citations']] == ['citation-001']
-    assert captured['url'] == 'https://provider.example/v1/chat/completions?token=secret'
-    assert captured['json']['model'] == 'backend-model'
-    assert captured['json']['max_tokens'] == 256
-    assert captured['headers']['Authorization'] == f'Bearer {placeholder_secret}'
-    assert captured['client_kwargs'] == {'timeout_seconds': 15.0, 'proxy': None}
-    assert placeholder_secret not in str(payload)
-    assert placeholder_secret not in str(captured['json'])
-    assert placeholder_secret not in str(preview)
-    assert 'Authorization' not in str(payload)
-    assert 'Authorization' not in str(preview)
-    assert 'token=secret' not in str(preview)
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'Unified model router failed for rag_answer: provider_exception: Provider invocation failed.' in payload['warnings']
 
 
 def test_build_rag_answer_with_service_config_game_service_default_disabled_does_not_read_env_or_http(monkeypatch, tmp_path):
     service = _game_service_with_external_provider_config(tmp_path)
+    _install_static_router(
+        service,
+        ok=False,
+        error_code='no_active_model',
+        message='No active model is configured for the requested model type.',
+    )
+    _forbid_legacy_rag_path(monkeypatch)
 
     def _forbid_env_get(*args, **kwargs):
         raise AssertionError('default-disabled game service path must not read env')
@@ -1061,7 +1121,7 @@ def test_build_rag_answer_with_service_config_game_service_default_disabled_does
     assert payload['mode'] == 'insufficient_context'
     assert payload['answer'] == ''
     assert payload['citations'] == []
-    assert 'External provider adapter skeleton is disabled.' in payload['warnings']
+    assert any('no_active_model' in warning for warning in payload['warnings'])
 
 
 def test_build_rag_answer_with_service_config_game_service_transport_disabled_does_not_read_env_or_http(monkeypatch, tmp_path):
@@ -1072,6 +1132,13 @@ def test_build_rag_answer_with_service_config_game_service_transport_disabled_do
         allowed_models=['backend-model'],
         base_url='https://provider.example/v1/chat/completions',
     )
+    _install_static_router(
+        service,
+        ok=False,
+        error_code='no_active_model',
+        message='No active model is configured for the requested model type.',
+    )
+    _forbid_legacy_rag_path(monkeypatch)
 
     def _forbid_env_get(*args, **kwargs):
         raise AssertionError('transport-disabled game service path must not read env')
@@ -1094,7 +1161,7 @@ def test_build_rag_answer_with_service_config_game_service_transport_disabled_do
     assert payload['mode'] == 'insufficient_context'
     assert payload['answer'] == ''
     assert payload['citations'] == []
-    assert 'External provider adapter skeleton transport is not connected.' in payload['warnings']
+    assert any('no_active_model' in warning for warning in payload['warnings'])
 
 
 def test_build_rag_answer_with_service_config_game_service_missing_allowlist_does_not_read_env_or_http(monkeypatch, tmp_path):
@@ -1106,6 +1173,13 @@ def test_build_rag_answer_with_service_config_game_service_missing_allowlist_doe
         allowed_models=['backend-model'],
         base_url='https://provider.example/v1/chat/completions',
     )
+    _install_static_router(
+        service,
+        ok=False,
+        error_code='no_active_model',
+        message='No active model is configured for the requested model type.',
+    )
+    _forbid_legacy_rag_path(monkeypatch)
 
     def _forbid_env_get(*args, **kwargs):
         raise AssertionError('allowlist-blocked game service path must not read env')
@@ -1128,7 +1202,7 @@ def test_build_rag_answer_with_service_config_game_service_missing_allowlist_doe
     assert payload['mode'] == 'insufficient_context'
     assert payload['answer'] == ''
     assert payload['citations'] == []
-    assert 'External provider adapter skeleton provider is not allowed.' in payload['warnings']
+    assert any('no_active_model' in warning for warning in payload['warnings'])
 
 
 def test_build_rag_answer_with_service_config_game_service_missing_allowed_models_does_not_read_env_or_http(monkeypatch, tmp_path):
@@ -1139,6 +1213,13 @@ def test_build_rag_answer_with_service_config_game_service_missing_allowed_model
         allowed_models=[],
         base_url='https://provider.example/v1/chat/completions',
     )
+    _install_static_router(
+        service,
+        ok=False,
+        error_code='no_active_model',
+        message='No active model is configured for the requested model type.',
+    )
+    _forbid_legacy_rag_path(monkeypatch)
 
     def _forbid_env_get(*args, **kwargs):
         raise AssertionError('allowed-model-blocked game service path must not read env')
@@ -1161,7 +1242,7 @@ def test_build_rag_answer_with_service_config_game_service_missing_allowed_model
     assert payload['mode'] == 'insufficient_context'
     assert payload['answer'] == ''
     assert payload['citations'] == []
-    assert 'External provider adapter skeleton model is not allowed.' in payload['warnings']
+    assert any('no_active_model' in warning for warning in payload['warnings'])
 
 
 @pytest.mark.parametrize('base_url', [None, '   '])
@@ -1173,6 +1254,7 @@ def test_build_rag_answer_with_service_config_game_service_missing_or_blank_base
         allowed_models=['backend-model'],
         base_url=base_url,
     )
+    _forbid_legacy_rag_path(monkeypatch)
 
     def _forbid_http(*args, **kwargs):
         raise AssertionError('missing-base-url game service path must not create http client')
@@ -1195,7 +1277,7 @@ def test_build_rag_answer_with_service_config_game_service_missing_or_blank_base
     assert payload['mode'] == 'insufficient_context'
     assert payload['answer'] == ''
     assert payload['citations'] == []
-    assert 'External provider adapter skeleton is not configured.' in payload['warnings']
+    assert any('no_active_model' in warning for warning in payload['warnings'])
 
 
 @pytest.mark.parametrize('env_value', [None, '   '])
@@ -1207,6 +1289,7 @@ def test_build_rag_answer_with_service_config_game_service_missing_or_blank_env_
         allowed_models=['backend-model'],
         base_url='https://provider.example/v1/chat/completions',
     )
+    _forbid_legacy_rag_path(monkeypatch)
 
     def _forbid_http(*args, **kwargs):
         raise AssertionError('missing-env-value game service path must not create http client')
@@ -1229,7 +1312,7 @@ def test_build_rag_answer_with_service_config_game_service_missing_or_blank_env_
     assert payload['mode'] == 'insufficient_context'
     assert payload['answer'] == ''
     assert payload['citations'] == []
-    assert 'External provider adapter skeleton is not configured.' in payload['warnings']
+    assert any('no_active_model' in warning for warning in payload['warnings'])
 
 
 def test_build_rag_answer_with_service_config_game_service_resolver_exception_does_not_call_httpx_or_leak_raw_text(monkeypatch, tmp_path):
@@ -1240,6 +1323,13 @@ def test_build_rag_answer_with_service_config_game_service_resolver_exception_do
         allowed_models=['backend-model'],
         base_url='https://provider.example/v1/chat/completions',
     )
+    _install_static_router(
+        service,
+        ok=False,
+        error_code='provider_exception',
+        message='Provider invocation failed.',
+    )
+    _forbid_legacy_rag_path(monkeypatch)
 
     def _forbid_http(*args, **kwargs):
         raise AssertionError('resolver-exception game service path must not create http client')
@@ -1262,7 +1352,7 @@ def test_build_rag_answer_with_service_config_game_service_resolver_exception_do
     assert payload['mode'] == 'insufficient_context'
     assert payload['answer'] == ''
     assert payload['citations'] == []
-    assert 'External provider adapter skeleton is not configured.' in payload['warnings']
+    assert any('provider_exception' in warning for warning in payload['warnings'])
     assert 'RAW_PLACEHOLDER_SECRET_FAILURE' not in str(payload)
 
 
@@ -1413,7 +1503,7 @@ def test_build_rag_answer_with_service_config_external_provider_remains_no_write
     assert [citation['citation_id'] for citation in payload['citations']] == ['citation-001']
 
 
-def test_build_rag_answer_with_service_config_game_service_fake_http_path_remains_no_write(monkeypatch, tmp_path):
+def test_build_rag_answer_with_service_config_game_service_unified_router_unavailable_remains_no_write(monkeypatch, tmp_path):
     service = _game_service_with_external_provider_config(
         tmp_path,
         enabled=True,
@@ -1421,31 +1511,7 @@ def test_build_rag_answer_with_service_config_game_service_fake_http_path_remain
         allowed_models=['backend-model'],
         base_url='https://provider.example/v1/chat/completions?token=secret',
     )
-
-    class _FakeResponse:
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return {
-                'choices': [
-                    {
-                        'message': {
-                            'content': '{"answer": "Grounded answer from fake HTTP boundary.", "citation_ids": ["citation-001"], "warnings": []}'
-                        }
-                    }
-                ]
-            }
-
-    class _FakeClient:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def post(self, url, *, json, headers):
-            return _FakeResponse()
+    service._model_router = lambda: None
 
     def _forbid_open(*args, **kwargs):
         raise AssertionError('ordinary RAG Q&A must not open files for writing')
@@ -1459,11 +1525,12 @@ def test_build_rag_answer_with_service_config_game_service_fake_http_path_remain
     )
     monkeypatch.setattr(
         'ltclaw_gy_x.game.knowledge_rag_external_model_client._create_http_transport_client',
-        lambda **kwargs: _FakeClient(),
+        lambda **kwargs: pytest.fail('GameService formal path must not create http client'),
     )
     monkeypatch.setattr(builtins, 'open', _forbid_open)
     monkeypatch.setattr(Path, 'write_text', _forbid_path_write)
     monkeypatch.setattr(Path, 'write_bytes', _forbid_path_write)
+    _forbid_legacy_rag_path(monkeypatch)
 
     payload = build_rag_answer_with_service_config(
         'How does combat damage work?',
@@ -1471,6 +1538,7 @@ def test_build_rag_answer_with_service_config_game_service_fake_http_path_remain
         service,
     )
 
-    assert payload['mode'] == 'answer'
-    assert payload['answer'] == 'Grounded answer from fake HTTP boundary.'
-    assert [citation['citation_id'] for citation in payload['citations']] == ['citation-001']
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['answer'] == ''
+    assert payload['citations'] == []
+    assert 'Unified model router is not available for rag_answer.' in payload['warnings']

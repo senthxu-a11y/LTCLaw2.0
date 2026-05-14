@@ -163,6 +163,8 @@ def test_storage_summary_uses_unified_game_data_tree(monkeypatch, tmp_path):
     assert summary["game_data_root"] == str(working_root / "game_data")
     assert summary["project_store_dir"] is not None
     assert summary["project_store_dir"].startswith(str(working_root / "game_data" / "projects"))
+    assert summary["project_bundle_root"] == summary["project_store_dir"]
+    assert summary["project_source_config_path"].endswith("project/source_config.yaml")
     assert summary["agent_store_dir"].startswith(summary["project_store_dir"])
     assert Path(summary["session_store_dir"]).parts[-2:] == ("sessions", "chat-42")
     assert Path(summary["workbench_dir"]).parts[-3:] == ("sessions", "chat-42", "workbench")

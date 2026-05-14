@@ -35,12 +35,46 @@ export interface PreviewResponse {
   affected_tables?: string[];
 }
 
+export interface SourceWriteOp {
+  op: string;
+  table: string;
+  row_id: string | number;
+  field?: string | null;
+  new_value?: unknown;
+  old_value?: unknown;
+}
+
+export interface SourceWriteResponse {
+  success: boolean;
+  message: string;
+  svn_update_required: boolean;
+  svn_update_warning: string;
+  release_id_at_write?: string | null;
+  source_files: string[];
+  changes: Array<{
+    op: string;
+    table: string;
+    row_id: string | number;
+    field?: string | null;
+    old_value?: unknown;
+    new_value?: unknown;
+  }>;
+  audit_recorded: boolean;
+  audit_file: string;
+  summary?: string;
+}
+
 export interface SuggestChange {
   table: string;
   row_id: string | number;
   field: string;
   new_value: unknown;
   reason?: string;
+  confidence?: number | null;
+  uses_draft_overlay?: boolean;
+  source_release_id?: string | null;
+  validation_status?: string;
+  evidence_refs?: string[];
 }
 
 export interface ChatTurn {
@@ -58,6 +92,8 @@ export interface SuggestContextSummary {
 export interface SuggestResponse {
   message: string;
   changes: SuggestChange[];
+  evidence_refs: string[];
+  formal_context_status?: string;
   raw?: string;
   context_summary?: SuggestContextSummary;
 }
@@ -183,6 +219,15 @@ export const gameWorkbenchApi = {
       {
         method: "POST",
         body: JSON.stringify({ changes }),
+      },
+    );
+  },
+  sourceWrite(agentId: string, ops: SourceWriteOp[], reason: string) {
+    return request<SourceWriteResponse>(
+      `/agents/${agentId}/game/workbench/source-write`,
+      {
+        method: "POST",
+        body: JSON.stringify({ ops, reason }),
       },
     );
   },

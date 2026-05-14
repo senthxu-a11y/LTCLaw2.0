@@ -105,7 +105,15 @@ async def get_index_status(
     svc, _ = _get(workspace)
     if not getattr(svc, "configured", False):
         return {"configured": False}
-    return get_retrieval_status(svc, rebuild_doc_index=rebuild_doc_index)
+    return {
+        "configured": True,
+        "formal_knowledge": {
+            "source": "current_release",
+            "status_endpoint": "/game/knowledge/releases/status",
+            "legacy_retrieval_included": False,
+        },
+        "legacy_retrieval": get_retrieval_status(svc, rebuild_doc_index=rebuild_doc_index),
+    }
 
 @router.get("/tables/{name}/rows")
 async def get_table_rows(

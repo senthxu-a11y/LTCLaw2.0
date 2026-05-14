@@ -252,3 +252,27 @@ def test_create_release_candidate_allows_candidate_write_without_build_or_publis
     assert response.json()['candidate_id'] == 'candidate-002'
     assert captured['project_root'] == tmp_path / 'project-root'
     assert captured['candidate'].candidate_id == 'candidate-001'
+
+
+def test_create_release_candidate_requires_injected_viewer_capabilities(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(request):
+        request.state.capabilities = {'knowledge.candidate.read'}
+        return workspace
+
+    def _append(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('candidate append should be blocked by injected viewer capabilities')
+
+    monkeypatch.setattr(candidate_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(candidate_router_module, 'append_release_candidate', _append)
+
+    with TestClient(_build_app(workspace)) as client:
+        response = client.post('/api/game/knowledge/release-candidates', json=_candidate().model_dump(mode='json'))
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.candidate.write'
+    assert called is False

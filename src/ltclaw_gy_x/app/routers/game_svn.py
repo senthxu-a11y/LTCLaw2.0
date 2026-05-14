@@ -11,6 +11,10 @@ from ...app.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/game/svn", tags=["game-svn"])
 
+SVN_FROZEN_REASON = (
+    "SVN runtime is frozen in P0-01. Run update/commit/checks outside LTClaw and keep using the local project root here."
+)
+
 
 def _service(workspace: Workspace):
     svc = workspace.service_manager.services.get("game_service")
@@ -22,68 +26,31 @@ def _service(workspace: Workspace):
 @router.get("/status")
 async def get_svn_status(workspace: Workspace = Depends(get_agent_for_request)):
     game_service = _service(workspace)
-    if not game_service.configured:
-        return {
-            "configured": False,
-            "current_rev": None,
-            "last_polled_at": None,
-            "next_poll_at": None,
-            "running": False,
-            "my_role": game_service.user_config.my_role,
-        }
-
-    svn_watcher = getattr(game_service, "svn_watcher", None)
-    if svn_watcher is not None:
-        status = svn_watcher.get_status() if hasattr(svn_watcher, "get_status") else getattr(svn_watcher, "status", {})
-        if isinstance(status, dict):
-            status = dict(status)
-            status["configured"] = True
-            return status
-
-    svn_info = {}
-    if game_service.svn:
-        try:
-            svn_info = await game_service.svn.info()
-        except Exception:
-            pass
     return {
-        "configured": True,
-        "current_rev": svn_info.get("revision") if isinstance(svn_info, dict) else None,
+        "configured": bool(game_service.configured),
+        "disabled": True,
+        "reason": SVN_FROZEN_REASON,
+        "current_rev": None,
         "last_polled_at": None,
         "next_poll_at": None,
         "running": False,
         "my_role": game_service.user_config.my_role,
+        "watch_paths": [],
+        "stats": {"check_count": 0, "change_count": 0, "error_count": 0},
     }
 
 
 @router.post("/sync")
 async def trigger_sync(workspace: Workspace = Depends(get_agent_for_request)):
     game_service = _service(workspace)
-    if not game_service.configured:
-        raise HTTPException(status_code=400, detail="Game service not configured")
-    if game_service.user_config.my_role != "maintainer":
-        raise HTTPException(status_code=409, detail="not maintainer, sync skipped")
-
-    cli = getattr(game_service, "svn", None)
-    gui_only = False
-    if cli is not None:
-        try:
-            installed = await cli.check_installed()
-            gui_only = installed == "tortoise-gui-only"
-        except Exception:
-            gui_only = False
-
-    if gui_only:
-        result = await game_service.force_full_rescan()
-        return {"mode": "rescan", **result}
-
-    watcher = getattr(game_service, "svn_watcher", None)
-    if watcher is None:
-        raise HTTPException(status_code=400, detail="watcher not available")
-    cs = await watcher.trigger_now()
-    if hasattr(cs, "model_dump"):
-        return cs.model_dump(mode="json")
-    return cs
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "disabled": True,
+            "reason": SVN_FROZEN_REASON,
+            "configured": bool(game_service.configured),
+        },
+    )
 
 
 @router.get("/log/recent")
@@ -124,24 +91,16 @@ async def stream_logs(workspace: Workspace = Depends(get_agent_for_request)):
     game_service = _service(workspace)
 
     async def log_generator():
-        if not hasattr(game_service, "_log_bus_buffer"):
-            game_service._log_bus_buffer = []
-            game_service._log_subscribers = []
-        subscriber_queue: asyncio.Queue = asyncio.Queue()
-        game_service._log_subscribers.append(subscriber_queue)
         try:
-            for log_entry in (game_service._log_bus_buffer or [])[-50:]:
-                yield {"event": "log", "data": log_entry}
-            while True:
-                try:
-                    log_entry = await asyncio.wait_for(subscriber_queue.get(), timeout=30.0)
-                    yield {"event": "log", "data": log_entry}
-                except asyncio.TimeoutError:
-                    yield {"event": "ping", "data": {"ts": asyncio.get_event_loop().time()}}
+            yield {
+                "event": "disabled",
+                "data": {
+                    "disabled": True,
+                    "reason": SVN_FROZEN_REASON,
+                    "configured": bool(game_service.configured),
+                },
+            }
         except asyncio.CancelledError:
             pass
-        finally:
-            if subscriber_queue in game_service._log_subscribers:
-                game_service._log_subscribers.remove(subscriber_queue)
 
     return EventSourceResponse(log_generator())

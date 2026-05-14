@@ -14,7 +14,9 @@ from .models import (
     KnowledgeIndexArtifact,
     KnowledgeManifest,
     KnowledgeMap,
+    ReleaseBuildMode,
     ReleaseCandidate,
+    ReleaseMapSource,
     TableIndex,
 )
 
@@ -23,7 +25,6 @@ DEFAULT_RELEASE_INDEXES: dict[str, str] = {
     "doc_knowledge": "indexes/doc_knowledge.jsonl",
     "script_evidence": "indexes/script_evidence.jsonl",
     "candidate_evidence": "indexes/candidate_evidence.jsonl",
-    "table_facts": "indexes/table_facts.sqlite",
 }
 
 DOC_KNOWLEDGE_RECORD_SCHEMA_VERSION = "doc-knowledge-record.v1"
@@ -120,16 +121,24 @@ def build_minimal_manifest(
     source_paths: Iterable[str],
     created_by: str | None = None,
     created_at: datetime | None = None,
+    build_mode: ReleaseBuildMode = "strict",
+    map_source: ReleaseMapSource = "provided",
+    warnings: Iterable[str] = (),
     index_entries: Mapping[str, KnowledgeIndexArtifact | Mapping[str, Any]] | None = None,
 ) -> KnowledgeManifest:
     validated_release_id = validate_release_id(release_id)
     if knowledge_map.release_id != validated_release_id:
         raise ValueError("Manifest release id must match knowledge map release id")
 
+    warning_list = [str(warning) for warning in warnings if str(warning).strip()]
     manifest = KnowledgeManifest(
         release_id=validated_release_id,
         created_at=created_at or datetime.now(timezone.utc),
         created_by=created_by,
+        build_mode=build_mode,
+        status="bootstrap_warning" if build_mode == "bootstrap" else "ready",
+        map_source=map_source,
+        warnings=warning_list,
         project_root_hash=_hash_text(str(_canonical_project_root(project_root)).replace("\\", "/")),
         source_snapshot=None,
         source_snapshot_hash=compute_source_snapshot_hash(project_root, source_paths),
@@ -208,6 +217,13 @@ def validate_knowledge_manifest(manifest: KnowledgeManifest) -> None:
         value = getattr(manifest, field_name)
         if not value or not str(value).startswith("sha256:"):
             raise ValueError(f"Manifest field {field_name} must be a sha256 hash")
+    if manifest.build_mode == "strict" and manifest.status != "ready":
+        raise ValueError("Strict release manifests must use ready status")
+    if manifest.build_mode == "bootstrap":
+        if manifest.status != "bootstrap_warning":
+            raise ValueError("Bootstrap release manifests must use bootstrap_warning status")
+        if not manifest.warnings:
+            raise ValueError("Bootstrap release manifests must include warnings")
     if set(manifest.indexes.keys()) != set(DEFAULT_RELEASE_INDEXES.keys()):
         raise ValueError("Manifest indexes must represent all optional release indexes explicitly")
     for index_name, default_path in DEFAULT_RELEASE_INDEXES.items():

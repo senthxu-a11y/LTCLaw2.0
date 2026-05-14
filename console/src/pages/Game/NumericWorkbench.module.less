@@ -363,16 +363,33 @@
   .suggestionListHeader {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .suggestionSummaryBlock {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
   }
   .suggestionInlineCard {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
     padding: 6px 8px;
     background: var(--ant-color-bg-container);
     border-radius: 4px;
     border-left: 3px solid var(--ant-color-warning, #faad14);
+  }
+  .suggestionEvidenceBlock {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .suggestionEvidenceStrip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
   }
 
   // 单元格 dirty 高亮 + 编辑态

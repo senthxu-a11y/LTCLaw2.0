@@ -170,7 +170,44 @@ def test_build_minimal_manifest_uses_stable_snapshot_hash_and_explicit_indexes(t
     assert manifest_one.indexes["table_schema"].path == "indexes/table_schema.jsonl"
     assert manifest_one.indexes["table_schema"].hash == "sha256:table-schema"
     assert manifest_one.indexes["doc_knowledge"].hash is None
-    assert manifest_one.indexes["table_facts"].count == 0
+    assert manifest_one.build_mode == "strict"
+    assert manifest_one.status == "ready"
+    assert manifest_one.map_source == "provided"
+    assert manifest_one.warnings == []
+
+
+def test_build_minimal_manifest_marks_bootstrap_warnings(tmp_path):
+    project_root = tmp_path / "project-root"
+    _write_source(project_root, "Tables/SkillTable.xlsx", "value=1\n")
+
+    knowledge_map = build_minimal_map(
+        "release-bootstrap-001",
+        tables=[
+            KnowledgeTableRef(
+                table_id="SkillTable",
+                title="SkillTable",
+                source_path="Tables/SkillTable.xlsx",
+                source_hash="sha256:table",
+                system_id="combat",
+            )
+        ],
+    )
+
+    manifest = build_minimal_manifest(
+        project_root,
+        "release-bootstrap-001",
+        knowledge_map,
+        source_paths=["Tables/SkillTable.xlsx"],
+        build_mode="bootstrap",
+        map_source="bootstrap_current_indexes",
+        warnings=["Bootstrap release used current indexes."],
+    )
+
+    validate_knowledge_manifest(manifest)
+    assert manifest.build_mode == "bootstrap"
+    assert manifest.status == "bootstrap_warning"
+    assert manifest.map_source == "bootstrap_current_indexes"
+    assert manifest.warnings == ["Bootstrap release used current indexes."]
 
 
 def test_source_snapshot_entries_are_stably_sorted(tmp_path):

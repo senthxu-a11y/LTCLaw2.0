@@ -28,6 +28,8 @@ from ...config.config import (
     validate_agent_id,
 )
 from ...config.utils import load_config, save_config
+from ...game.config import load_user_config
+from ..capabilities import AgentCapabilityProfile, build_agent_capability_profile
 from ...agents.utils import copy_workspace_md_files, normalize_agent_language
 from ...agents.skills_manager import SkillPoolService, get_workspace_skills_dir
 from ..multi_agent_manager import MultiAgentManager
@@ -43,9 +45,13 @@ class AgentSummary(BaseModel):
 
     id: str
     name: str
+    display_name: str
     description: str
     workspace_dir: str
     enabled: bool
+    role: str
+    capabilities: list[str] = []
+    agent_profile: dict[str, object] | None = None
     active_model: ModelSlotConfig | None = None
 
 
@@ -53,6 +59,31 @@ class AgentListResponse(BaseModel):
     """Response for listing agents."""
 
     agents: list[AgentSummary]
+
+
+class AgentDetailResponse(BaseModel):
+    id: str
+    name: str
+    display_name: str
+    description: str = ''
+    workspace_dir: str = ''
+    role: str
+    capabilities: list[str] = []
+    agent_profile: dict[str, object] | None = None
+    template_id: str | None = None
+    language: str = 'zh'
+    approval_level: str = 'AUTO'
+    active_model: ModelSlotConfig | None = None
+    channels: object | None = None
+    mcp: object | None = None
+    heartbeat: object | None = None
+    running: object | None = None
+    llm_routing: object | None = None
+    system_prompt_files: list[str] = []
+    tools: object | None = None
+    security: object | None = None
+    acp: object | None = None
+    plan: object | None = None
 
 
 class ReorderAgentsRequest(BaseModel):
@@ -154,6 +185,26 @@ def _read_profile_description(workspace_dir: str) -> str:
         return ""
 
 
+def _build_local_agent_profile(agent_id: str, agent_config: AgentProfileConfig) -> AgentCapabilityProfile:
+    user_config = load_user_config()
+    return build_agent_capability_profile(
+        agent_id=agent_id,
+        display_name=agent_config.name,
+        local_profile=user_config.agent_profiles.get(agent_id),
+        legacy_my_role=user_config.my_role,
+    )
+
+
+def _serialize_agent_profile(profile: AgentCapabilityProfile) -> dict[str, object]:
+    return {
+        'agent_id': profile.agent_id,
+        'display_name': profile.display_name,
+        'role': profile.role,
+        'capabilities': list(profile.capabilities),
+        'note': 'Local capability boundary only; not a server security system.',
+    }
+
+
 @router.get(
     "",
     response_model=AgentListResponse,
@@ -180,25 +231,39 @@ async def list_agents() -> AgentListResponse:
                     description = profile_desc
 
             active_model = agent_config.active_model
+            capability_profile = _build_local_agent_profile(agent_id, agent_config)
 
             agents.append(
                 AgentSummary(
                     id=agent_id,
                     name=agent_config.name,
+                    display_name=capability_profile.display_name,
                     description=description,
                     workspace_dir=agent_ref.workspace_dir,
                     enabled=getattr(agent_ref, "enabled", True),
+                    role=capability_profile.role,
+                    capabilities=list(capability_profile.capabilities),
+                    agent_profile=_serialize_agent_profile(capability_profile),
                     active_model=active_model,
                 ),
             )
         except Exception:  # noqa: E722
+            capability_profile = build_agent_capability_profile(
+                agent_id=agent_id,
+                display_name=agent_id.title(),
+                legacy_my_role=load_user_config().my_role,
+            )
             agents.append(
                 AgentSummary(
                     id=agent_id,
                     name=agent_id.title(),
+                    display_name=capability_profile.display_name,
                     description="",
                     workspace_dir=agent_ref.workspace_dir,
                     enabled=getattr(agent_ref, "enabled", True),
+                    role=capability_profile.role,
+                    capabilities=list(capability_profile.capabilities),
+                    agent_profile=_serialize_agent_profile(capability_profile),
                 ),
             )
 
@@ -237,15 +302,39 @@ async def reorder_agents(
 
 @router.get(
     "/{agentId}",
-    response_model=AgentProfileConfig,
+    response_model=AgentDetailResponse,
     summary="Get agent details",
     description="Get complete configuration for a specific agent",
 )
-async def get_agent(agentId: str = PathParam(...)) -> AgentProfileConfig:
+async def get_agent(agentId: str = PathParam(...)) -> AgentDetailResponse:
     """Get agent configuration."""
     try:
         agent_config = load_agent_config(agentId)
-        return agent_config
+        capability_profile = _build_local_agent_profile(agentId, agent_config)
+        return AgentDetailResponse(
+            id=agent_config.id,
+            name=agent_config.name,
+            display_name=capability_profile.display_name,
+            description=agent_config.description,
+            workspace_dir=agent_config.workspace_dir,
+            role=capability_profile.role,
+            capabilities=list(capability_profile.capabilities),
+            agent_profile=_serialize_agent_profile(capability_profile),
+            template_id=agent_config.template_id,
+            language=agent_config.language,
+            approval_level=agent_config.approval_level,
+            active_model=agent_config.active_model,
+            channels=agent_config.channels,
+            mcp=agent_config.mcp,
+            heartbeat=agent_config.heartbeat,
+            running=agent_config.running,
+            llm_routing=agent_config.llm_routing,
+            system_prompt_files=agent_config.system_prompt_files,
+            tools=agent_config.tools,
+            security=agent_config.security,
+            acp=agent_config.acp,
+            plan=agent_config.plan,
+        )
     except (ValueError, AppBaseException) as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:

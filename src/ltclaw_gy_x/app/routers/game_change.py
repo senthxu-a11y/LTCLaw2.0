@@ -44,6 +44,10 @@ class ChangeProposalCreate(BaseModel):
 
 router = APIRouter(prefix="/game/change", tags=["game-change"])
 
+SVN_CHANGE_FROZEN_REASON = (
+    "SVN commit/revert is frozen in P0-01. Apply and dry-run remain available, but SVN operations must be handled outside LTClaw."
+)
+
 
 def _service(workspace: Workspace):
     svc = workspace.service_manager.services.get("game_service")
@@ -223,15 +227,9 @@ async def apply_proposal(
     await _maybe_request_apply_approval(workspace, proposal)
     try:
         result = await applier.apply(proposal)
-        revision = None
-        if svc.svn is not None:
-            try:
-                revision = (await svc.svn.info()).get("revision")
-            except Exception:
-                revision = None
         updated = await store.update(
             proposal.model_copy(
-                update={"status": "applied", "applied_revision": revision, "error": None}
+                update={"status": "applied", "applied_revision": None, "error": None}
             )
         )
     except InvalidProposalState as exc:
@@ -246,22 +244,10 @@ async def commit_proposal(
 ):
     svc = _service(workspace)
     _require_maintainer(svc)
-    store = _proposal_store(svc)
-    proposal = await _proposal_or_404(store, proposal_id)
-    committer = getattr(svc, "svn_committer", None)
-    if committer is None:
-        raise HTTPException(status_code=412, detail="SVN committer not available")
-    try:
-        changed_files = _relative_changed_files(svc, proposal)
-        revision = await committer.commit_proposal(proposal, changed_files)
-        updated = await store.update(
-            proposal.model_copy(
-                update={"status": "committed", "commit_revision": revision, "error": None}
-            )
-        )
-    except InvalidProposalState as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return updated.model_dump(mode="json")
+    raise HTTPException(
+        status_code=409,
+        detail={"disabled": True, "reason": SVN_CHANGE_FROZEN_REASON, "proposal_id": proposal_id},
+    )
 
 
 @router.post("/proposals/{proposal_id}/reject")
@@ -287,15 +273,7 @@ async def revert_proposal(
 ):
     svc = _service(workspace)
     _require_maintainer(svc)
-    store = _proposal_store(svc)
-    proposal = await _proposal_or_404(store, proposal_id)
-    committer = getattr(svc, "svn_committer", None)
-    if committer is None:
-        raise HTTPException(status_code=412, detail="SVN committer not available")
-    try:
-        paths = [committer.svn_root / path for path in _relative_changed_files(svc, proposal)]
-        await committer.revert_local_changes(paths)
-        updated = await store.update(proposal.model_copy(update={"status": "reverted"}))
-    except InvalidProposalState as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return updated.model_dump(mode="json")
+    raise HTTPException(
+        status_code=409,
+        detail={"disabled": True, "reason": SVN_CHANGE_FROZEN_REASON, "proposal_id": proposal_id},
+    )

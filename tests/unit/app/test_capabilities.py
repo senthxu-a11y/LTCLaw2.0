@@ -6,7 +6,14 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from starlette.requests import Request
 
-from ltclaw_gy_x.app.capabilities import require_capability
+from ltclaw_gy_x.app.capabilities import (
+    LOCAL_CAPABILITY_CATALOG,
+    build_agent_capability_profile,
+    get_role_template_capabilities,
+    map_legacy_my_role,
+    require_capability,
+)
+from ltclaw_gy_x.game.config import LocalAgentProfile
 
 
 _UNSET = object()
@@ -116,3 +123,54 @@ def test_require_capability_prefers_user_over_app_when_request_state_absent():
         require_capability(request, 'knowledge.build')
 
     assert exc_info.value.status_code == 403
+
+
+def test_role_templates_include_source_write_capability():
+    assert 'workbench.source.write' in LOCAL_CAPABILITY_CATALOG
+    assert 'workbench.source.write' in get_role_template_capabilities('source_writer')
+    assert get_role_template_capabilities('admin') == ('*',)
+
+
+@pytest.mark.parametrize(
+    ('legacy_role', 'expected_role'),
+    [
+        ('maintainer', 'admin'),
+        ('planner', 'planner'),
+        ('consumer', 'viewer'),
+        ('', 'viewer'),
+    ],
+)
+def test_map_legacy_my_role(legacy_role, expected_role):
+    assert map_legacy_my_role(legacy_role) == expected_role
+
+
+def test_build_agent_capability_profile_uses_local_profile_override():
+    profile = LocalAgentProfile(
+        agent_id='agent-a',
+        display_name='Agent A',
+        role='source_writer',
+        capabilities=['knowledge.read', 'workbench.source.write'],
+    )
+
+    normalized = build_agent_capability_profile(
+        agent_id='agent-a',
+        display_name='Fallback Name',
+        local_profile=profile,
+        legacy_my_role='consumer',
+    )
+
+    assert normalized.agent_id == 'agent-a'
+    assert normalized.display_name == 'Agent A'
+    assert normalized.role == 'source_writer'
+    assert normalized.capabilities == ('knowledge.read', 'workbench.source.write')
+
+
+def test_build_agent_capability_profile_falls_back_to_legacy_role_template():
+    normalized = build_agent_capability_profile(
+        agent_id='agent-b',
+        display_name='Agent B',
+        legacy_my_role='maintainer',
+    )
+
+    assert normalized.role == 'admin'
+    assert normalized.capabilities == ('*',)

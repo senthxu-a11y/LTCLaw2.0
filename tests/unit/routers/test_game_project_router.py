@@ -218,3 +218,24 @@ external_provider_config:
     }
     assert release_response.status_code == 200
     assert release_response.json()['current']['release_id'] == 'release-001'
+
+
+@pytest.mark.asyncio
+async def test_project_config_commit_returns_frozen_without_touching_svn(app, client, tmp_path):
+    svn_root = tmp_path / 'svn-root'
+    svn_root.mkdir()
+    service = _Service(svn_root)
+    service.svn = SimpleNamespace(add=pytest.fail, commit=pytest.fail)
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    config_path = get_project_config_path(svn_root)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text('schema_version: project-config.v1\n', encoding='utf-8')
+
+    async with client:
+        response = await client.post('/api/game/project/config/commit', json={'message': 'should not commit'})
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body['detail']['disabled'] is True
+    assert body['detail']['config_exists'] is True

@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Legacy compatibility registry for non-formal RAG model client tests and adapters.
+
+Formal RAG answer requests should resolve through the unified game model router
+with model_type=rag_answer.
+"""
+
 from dataclasses import dataclass
 from typing import Callable, Mapping
 

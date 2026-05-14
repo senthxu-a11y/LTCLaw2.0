@@ -18,7 +18,7 @@ export default function MapEditorPage() {
         <Paragraph type="secondary" style={{ marginBottom: 0, maxWidth: 720 }}>
           {t(
             "gameProject.mapEditorLandingHint",
-            "Map Editor now owns formal map review, save-as-formal-map, status-only edits, and relationship warnings. Table index and dependency browsing remain a separate secondary route and are not the target of this lane.",
+            "Map Editor now owns source Candidate Map review, Diff Review, explicit Save as Formal Map, release snapshot comparison, status-only edits, and relationship warnings. Candidate Map is suggested only, Formal Map is saved only after admin confirmation, and Release Map remains a review snapshot rather than the editing source.",
           )}
         </Paragraph>
         <FormalMapWorkspace mode="full" />

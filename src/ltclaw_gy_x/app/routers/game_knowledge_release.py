@@ -54,10 +54,15 @@ class BuildKnowledgeReleaseResponse(BaseModel):
     manifest: KnowledgeManifest
     knowledge_map: KnowledgeMap
     artifacts: dict[str, KnowledgeIndexArtifact]
+    build_mode: str
+    status: str
+    map_source: str
+    warnings: list[str] = Field(default_factory=list)
 
 
 class BuildKnowledgeReleaseFromCurrentIndexesRequest(BaseModel):
     release_id: str = Field(description='Knowledge release id')
+    bootstrap: bool = Field(default=False, description='Explicitly allow bootstrap build when no saved formal map exists')
     release_notes: str = Field(default='')
     candidate_ids: list[str] = Field(default_factory=list)
     created_by: str | None = Field(default=None)
@@ -156,8 +161,8 @@ def _build_release_status(project_root: Path) -> KnowledgeReleaseStatusResponse:
 
 @router.post('/build', response_model=BuildKnowledgeReleaseResponse)
 async def build_release(request: Request, body: BuildKnowledgeReleaseRequest) -> BuildKnowledgeReleaseResponse:
-    require_capability(request, 'knowledge.build')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.build')
     game_service = _game_service_or_404(workspace)
     project_root = _project_root_or_400(game_service)
 
@@ -186,6 +191,10 @@ async def build_release(request: Request, body: BuildKnowledgeReleaseRequest) ->
         manifest=result.manifest,
         knowledge_map=result.knowledge_map,
         artifacts=result.artifacts,
+        build_mode=result.build_mode,
+        status=result.status,
+        map_source=result.map_source,
+        warnings=list(result.warnings),
     )
 
 
@@ -194,8 +203,8 @@ async def build_release_from_current_indexes(
     request: Request,
     body: BuildKnowledgeReleaseFromCurrentIndexesRequest,
 ) -> BuildKnowledgeReleaseResponse:
-    require_capability(request, 'knowledge.build')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.build')
     game_service = _game_service_or_404(workspace)
     project_root = _project_root_or_400(game_service)
 
@@ -204,6 +213,7 @@ async def build_release_from_current_indexes(
             project_root,
             getattr(workspace, 'workspace_dir', None) or project_root,
             body.release_id,
+            bootstrap=body.bootstrap,
             candidate_ids=body.candidate_ids,
             created_by=body.created_by,
             created_at=body.created_at,
@@ -221,21 +231,25 @@ async def build_release_from_current_indexes(
         manifest=result.manifest,
         knowledge_map=result.knowledge_map,
         artifacts=result.artifacts,
+        build_mode=result.build_mode,
+        status=result.status,
+        map_source=result.map_source,
+        warnings=list(result.warnings),
     )
 
 
 @router.get('', response_model=list[KnowledgeManifest])
 async def list_release_manifests(request: Request) -> list[KnowledgeManifest]:
-    require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.read')
     game_service = _game_service_or_404(workspace)
     return list_releases(_project_root_or_400(game_service))
 
 
 @router.get('/current', response_model=KnowledgeManifest)
 async def get_current_release_manifest(request: Request) -> KnowledgeManifest:
-    require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.read')
     game_service = _game_service_or_404(workspace)
     try:
         return get_current_release(_project_root_or_400(game_service))
@@ -249,8 +263,8 @@ async def get_current_release_manifest(request: Request) -> KnowledgeManifest:
 
 @router.get('/status', response_model=KnowledgeReleaseStatusResponse)
 async def get_release_status(request: Request) -> KnowledgeReleaseStatusResponse:
-    require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.read')
     game_service = _game_service_or_404(workspace)
     try:
         return _build_release_status(_project_root_or_400(game_service))
@@ -262,8 +276,8 @@ async def get_release_status(request: Request) -> KnowledgeReleaseStatusResponse
 
 @router.post('/{release_id}/current', response_model=KnowledgeReleasePointer)
 async def set_current_release_manifest(release_id: str, request: Request) -> KnowledgeReleasePointer:
-    require_capability(request, 'knowledge.publish')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.publish')
     game_service = _game_service_or_404(workspace)
     try:
         return set_current_release(_project_root_or_400(game_service), release_id)
@@ -277,8 +291,8 @@ async def set_current_release_manifest(release_id: str, request: Request) -> Kno
 
 @router.get('/{release_id}/manifest', response_model=KnowledgeManifest)
 async def get_release_manifest(release_id: str, request: Request) -> KnowledgeManifest:
-    require_capability(request, 'knowledge.read')
     workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.read')
     game_service = _game_service_or_404(workspace)
     try:
         return load_manifest(_project_root_or_400(game_service), release_id)

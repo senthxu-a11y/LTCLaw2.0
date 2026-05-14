@@ -93,10 +93,14 @@ def test_build_release_forwards_project_root_and_payload(monkeypatch, tmp_path):
             artifacts={
                 'doc_knowledge': KnowledgeIndexArtifact(
                     path='indexes/doc_knowledge.jsonl',
-                    sha256='sha256:index',
+                    hash='sha256:index',
                     count=1,
                 )
             },
+            build_mode='strict',
+            status='ready',
+            map_source='provided',
+            warnings=(),
         )
 
     monkeypatch.setattr(release_router_module, 'build_knowledge_release', _build)
@@ -118,6 +122,10 @@ def test_build_release_forwards_project_root_and_payload(monkeypatch, tmp_path):
     assert captured['release_id'] == 'release-001'
     assert captured['knowledge_map'].release_id == 'release-001'
     assert captured['kwargs']['release_notes'] == '# note\n'
+    assert response.json()['build_mode'] == 'strict'
+    assert response.json()['status'] == 'ready'
+    assert response.json()['map_source'] == 'provided'
+    assert response.json()['warnings'] == []
 
 
 def test_release_listing_and_lookup_endpoints_use_store(monkeypatch, tmp_path):
@@ -236,10 +244,14 @@ def test_build_release_from_current_indexes_forwards_project_root_and_workspace(
             artifacts={
                 'doc_knowledge': KnowledgeIndexArtifact(
                     path='indexes/doc_knowledge.jsonl',
-                    sha256='sha256:index',
+                    hash='sha256:index',
                     count=2,
                 )
             },
+            build_mode='bootstrap',
+            status='bootstrap_warning',
+            map_source='bootstrap_current_indexes',
+            warnings=('Bootstrap release used current indexes.',),
         )
 
     monkeypatch.setattr(release_router_module, 'build_knowledge_release_from_current_indexes', _build)
@@ -250,6 +262,7 @@ def test_build_release_from_current_indexes_forwards_project_root_and_workspace(
             '/api/game/knowledge/releases/build-from-current-indexes',
             json={
                 'release_id': 'release-safe-001',
+                'bootstrap': True,
                 'release_notes': '# safe build\n',
                 'candidate_ids': ['combat-doc'],
             },
@@ -259,8 +272,13 @@ def test_build_release_from_current_indexes_forwards_project_root_and_workspace(
     assert captured['project_root'] == tmp_path / 'project-root'
     assert captured['workspace_dir'] == tmp_path / 'workspace-root'
     assert captured['release_id'] == 'release-safe-001'
+    assert captured['kwargs']['bootstrap'] is True
     assert captured['kwargs']['candidate_ids'] == ['combat-doc']
     assert captured['kwargs']['release_notes'] == '# safe build\n'
+    assert response.json()['build_mode'] == 'bootstrap'
+    assert response.json()['status'] == 'bootstrap_warning'
+    assert response.json()['map_source'] == 'bootstrap_current_indexes'
+    assert response.json()['warnings'] == ['Bootstrap release used current indexes.']
 
 
 def test_build_release_from_current_indexes_returns_prerequisite_detail(monkeypatch, tmp_path):
@@ -316,6 +334,36 @@ def test_build_release_requires_knowledge_build_when_capabilities_present(monkey
     assert called is False
 
 
+def test_build_release_requires_injected_viewer_capabilities(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(request):
+        request.state.capabilities = {'knowledge.read'}
+        return workspace
+
+    def _build(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('build should be blocked by injected viewer capabilities')
+
+    monkeypatch.setattr(release_router_module, 'build_knowledge_release', _build)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace)) as client:
+        response = client.post(
+            '/api/game/knowledge/releases/build',
+            json={
+                'release_id': 'release-viewer-001',
+                'knowledge_map': _knowledge_map('release-viewer-001').model_dump(mode='json'),
+            },
+        )
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.build'
+    assert called is False
+
+
 def test_build_release_allows_knowledge_build_when_capabilities_present(monkeypatch, tmp_path):
     workspace = _workspace(_service(tmp_path / 'project-root'))
     captured = {}
@@ -332,6 +380,10 @@ def test_build_release_allows_knowledge_build_when_capabilities_present(monkeypa
             manifest=_manifest('release-guarded-001'),
             knowledge_map=knowledge_map,
             artifacts={},
+            build_mode='strict',
+            status='ready',
+            map_source='provided',
+            warnings=(),
         )
 
     monkeypatch.setattr(release_router_module, 'build_knowledge_release', _build)
@@ -393,6 +445,10 @@ def test_build_release_from_current_indexes_allows_knowledge_build_when_capabili
             manifest=_manifest('release-safe-guarded-001'),
             knowledge_map=_knowledge_map('release-safe-guarded-001'),
             artifacts={},
+            build_mode='strict',
+            status='ready',
+            map_source='formal_map',
+            warnings=(),
         )
 
     monkeypatch.setattr(release_router_module, 'build_knowledge_release_from_current_indexes', _build)
@@ -526,6 +582,33 @@ def test_set_current_release_allows_knowledge_publish_when_capabilities_present(
 
     assert response.status_code == 200
     assert captured == {'project_root': tmp_path / 'project-root', 'release_id': 'release-002'}
+
+
+def test_set_current_release_allows_injected_wildcard_capabilities(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {}
+    pointer = KnowledgeReleasePointer(
+        release_id='release-003',
+        updated_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
+    )
+
+    async def _get_agent(request):
+        request.state.capabilities = {'*'}
+        return workspace
+
+    def _set_current(project_root, release_id):
+        captured['project_root'] = project_root
+        captured['release_id'] = release_id
+        return pointer
+
+    monkeypatch.setattr(release_router_module, 'set_current_release', _set_current)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace)) as client:
+        response = client.post('/api/game/knowledge/releases/release-003/current')
+
+    assert response.status_code == 200
+    assert captured == {'project_root': tmp_path / 'project-root', 'release_id': 'release-003'}
 
 
 def test_release_status_endpoint_returns_current_previous_and_history(monkeypatch, tmp_path):

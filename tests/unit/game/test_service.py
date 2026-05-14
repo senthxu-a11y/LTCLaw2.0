@@ -1,6 +1,9 @@
 """单元测试: GameService 启停与未配置态。"""
+import gc
+import warnings
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,6 +19,7 @@ from ltclaw_gy_x.game.config import (
 )
 from ltclaw_gy_x.game.models import ChangeSet, DependencyGraph, TableIndex
 from ltclaw_gy_x.game.service import GameService, SimpleModelRouter
+from ltclaw_gy_x.game.config import ModelSlotRef
 
 
 @pytest.fixture
@@ -193,7 +197,7 @@ async def test_start_with_consumer_config_creates_proposal_store_and_change_appl
 
 
 @pytest.mark.asyncio
-async def test_start_with_maintainer_config_creates_svn_committer(tmp_path, isolated_home):
+async def test_start_with_maintainer_config_keeps_svn_runtime_frozen(tmp_path, isolated_home):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     svn_root = tmp_path / "svn"
@@ -201,13 +205,16 @@ async def test_start_with_maintainer_config_creates_svn_committer(tmp_path, isol
     service = GameService(workspace_dir=workspace, runner=None, channel_manager=None)
 
     with patch("ltclaw_gy_x.game.service.load_user_config", return_value=UserGameConfig(my_role="maintainer", svn_local_root=str(svn_root))), \
-         patch("ltclaw_gy_x.game.service.load_project_config", return_value=_project_config(svn_root)), \
-         patch("ltclaw_gy_x.game.service.SvnClient.check_installed", AsyncMock(return_value="svn")):
+         patch("ltclaw_gy_x.game.service.load_project_config", return_value=_project_config(svn_root)):
         await service.start()
 
     assert service.proposal_store is not None
     assert service.change_applier is not None
-    assert service.svn_committer is not None
+    assert service.svn_committer is None
+    assert service.svn_watcher is None
+    assert await service.start_svn_monitoring() is False
+    assert await service.stop_svn_monitoring() is False
+    assert service.get_svn_monitoring_status()["disabled"] is True
     await service.stop()
 
 
@@ -217,7 +224,64 @@ def test_model_router_falls_back_to_simple_router(service):
 
 
 @pytest.mark.asyncio
-async def test_start_with_watcher_starts_polling(tmp_path, isolated_home):
+async def test_model_router_uses_project_model_slot_for_requested_model_type(service):
+    provider = SimpleNamespace(base_url="https://provider.example/v1", api_key="secret")
+    active_model = SimpleNamespace(provider_id="provider-default", model_id="model-default")
+    provider_manager = SimpleNamespace(
+        active_model=active_model,
+        get_provider=lambda provider_id: provider if provider_id == "provider-slot" else provider,
+    )
+    service._project_config = _project_config(Path("/tmp/svn"))
+    service._project_config.models = {
+        "rag_answer": ModelSlotRef(provider_id="provider-slot", model_id="rag-model")
+    }
+
+    with patch("ltclaw_gy_x.providers.provider_manager.ProviderManager.get_instance", return_value=provider_manager), \
+         patch("ltclaw_gy_x.game.unified_model_router._invoke_provider", AsyncMock(return_value="ok")) as invoke_provider:
+        router = service._model_router()
+        result = await router.call_model_result("prompt", model_type="rag_answer")
+
+    assert result.ok is True
+    assert result.model_id == "rag-model"
+    invoke_provider.assert_awaited_once()
+    assert invoke_provider.await_args.args[1] == "rag-model"
+
+
+@pytest.mark.asyncio
+async def test_model_router_returns_structured_no_active_model_error(service):
+    provider_manager = SimpleNamespace(active_model=None, get_active_model=lambda: None)
+    with patch("ltclaw_gy_x.providers.provider_manager.ProviderManager.get_instance", return_value=provider_manager):
+        router = service._model_router()
+        result = await router.call_model_result("prompt", model_type="rag_answer")
+
+    assert result.ok is False
+    assert result.error_code == "no_active_model"
+    assert await router.call_model("prompt", model_type="rag_answer") == ""
+
+
+@pytest.mark.asyncio
+async def test_model_router_call_model_blocking_inside_running_loop_emits_no_runtime_warnings(service):
+    provider = SimpleNamespace(base_url="https://provider.example/v1", api_key="secret")
+    active_model = SimpleNamespace(provider_id="provider-default", model_id="model-default")
+    provider_manager = SimpleNamespace(
+        active_model=active_model,
+        get_provider=lambda provider_id: provider,
+    )
+
+    with patch("ltclaw_gy_x.providers.provider_manager.ProviderManager.get_instance", return_value=provider_manager), \
+         patch("ltclaw_gy_x.game.unified_model_router._invoke_provider", AsyncMock(return_value="ok")):
+        router = service._model_router()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = router.call_model_blocking("prompt", model_type="rag_answer")
+            gc.collect()
+
+    assert result.ok is True
+    assert [warning for warning in caught if issubclass(warning.category, RuntimeWarning)] == []
+
+
+@pytest.mark.asyncio
+async def test_start_with_watcher_patch_does_not_start_polling_when_runtime_frozen(tmp_path, isolated_home):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     svn_root = tmp_path / "svn"
@@ -229,11 +293,11 @@ async def test_start_with_watcher_starts_polling(tmp_path, isolated_home):
 
     with patch("ltclaw_gy_x.game.service.load_user_config", return_value=UserGameConfig(my_role="maintainer", svn_local_root=str(svn_root))), \
          patch("ltclaw_gy_x.game.service.load_project_config", return_value=_project_config(svn_root)), \
-         patch("ltclaw_gy_x.game.service.SvnClient.check_installed", AsyncMock(return_value="svn")), \
          patch("ltclaw_gy_x.game.service.SvnWatcher", return_value=watcher):
         await service.start()
 
-    watcher.start.assert_awaited_once()
+    watcher.start.assert_not_called()
+    assert service.svn_watcher is None
     await service.stop()
 
 

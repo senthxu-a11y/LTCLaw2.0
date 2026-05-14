@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import codecs
 import csv
 import json
 from pathlib import Path
@@ -24,6 +25,7 @@ class ApplyError(Exception):
 
 # Suffixes treated as table sources we can edit.
 _TABLE_SUFFIXES = {".csv", ".xlsx", ".xls", ".txt"}
+_TXT_HEADER_METADATA_SEPARATORS = ("\u2507", "\u2503")
 
 
 class ChangeApplier:
@@ -42,6 +44,9 @@ class ChangeApplier:
 
     async def apply(self, proposal: ChangeProposal) -> dict:
         return await asyncio.to_thread(self._apply_sync, proposal)
+
+    def get_source_file(self, table_name: str) -> Path:
+        return self._resolve_source_file(table_name)
 
     def read_rows(
         self, table_name: str, offset: int = 0, limit: int = 100
@@ -240,12 +245,13 @@ class ChangeApplier:
                 "rows": rows,
             }
         if suffix == ".txt":
-            encoding, rows = self._read_txt_with_metadata(source)
+            encoding, rows, header_metadata_line = self._read_txt_with_metadata(source)
             return {
                 "kind": "txt",
                 "source": source,
                 "encoding": encoding,
                 "rows": rows,
+                "header_metadata_line": header_metadata_line,
             }
         raise ValueError(f"unsupported file type: {suffix}")
 
@@ -269,14 +275,18 @@ class ChangeApplier:
         rows = list(csv.reader(content.splitlines(), delimiter=delimiter))
         return used_encoding, delimiter, rows
 
-    def _read_txt_with_metadata(self, source: Path) -> tuple[str, list[list[Any]]]:
+    def _read_txt_with_metadata(self, source: Path) -> tuple[str, list[list[Any]], str | None]:
         encodings = ["utf-8-sig", "utf-8", "gbk", "gb2312"]
         content = None
         used_encoding = "utf-8"
+        has_utf8_bom = source.read_bytes().startswith(codecs.BOM_UTF8)
         for encoding in encodings:
             try:
                 content = source.read_text(encoding=encoding)
-                used_encoding = encoding
+                if encoding == "utf-8-sig" and not has_utf8_bom:
+                    used_encoding = "utf-8"
+                else:
+                    used_encoding = encoding
                 break
             except UnicodeDecodeError:
                 continue
@@ -285,16 +295,22 @@ class ChangeApplier:
         # Tab-delimited rows. The header cell may carry inline type/doc
         # annotations like ``Name\u2507Type=string;Doc=...``; we strip those.
         rows: list[list[Any]] = []
-        for raw_line in content.splitlines():
+        header_metadata_line: str | None = None
+        header_index = max(self.project.table_convention.header_row - 1, 0)
+        for row_index, raw_line in enumerate(content.splitlines()):
             cells = raw_line.split("\t")
             cleaned: list[Any] = []
             for cell in cells:
                 # Drop annotation suffix on header cells; keep value otherwise.
-                if "\u2507" in cell:
-                    cell = cell.split("\u2507", 1)[0]
+                for separator in _TXT_HEADER_METADATA_SEPARATORS:
+                    if separator in cell:
+                        cell = cell.split(separator, 1)[0]
+                        break
                 cleaned.append(cell)
             rows.append(cleaned)
-        return used_encoding, rows
+            if row_index == header_index and any(separator in raw_line for separator in _TXT_HEADER_METADATA_SEPARATORS):
+                header_metadata_line = raw_line
+        return used_encoding, rows, header_metadata_line
 
     def _write_pending(self, workbook: dict, source: Path, pending: Path) -> None:
         if workbook["kind"] == "csv":
@@ -307,7 +323,11 @@ class ChangeApplier:
             return
         if workbook["kind"] == "txt":
             lines: list[str] = []
-            for row in workbook["rows"]:
+            header_index = max(self.project.table_convention.header_row - 1, 0)
+            for row_index, row in enumerate(workbook["rows"]):
+                if row_index == header_index and workbook.get("header_metadata_line"):
+                    lines.append(str(workbook["header_metadata_line"]))
+                    continue
                 cells = ["" if v is None else str(v) for v in row]
                 lines.append("\t".join(cells))
             text = "\n".join(lines)

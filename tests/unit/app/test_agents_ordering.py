@@ -11,6 +11,7 @@ from ltclaw_gy_x.config.config import (
     AgentProfileRef,
     Config,
 )
+from ltclaw_gy_x.game.config import LocalAgentProfile, UserGameConfig
 from ltclaw_gy_x.app.routers import agents as agents_router
 
 
@@ -54,6 +55,7 @@ async def test_list_agents_uses_persisted_order(monkeypatch):
         "load_agent_config",
         _agent_config,
     )
+    monkeypatch.setattr(agents_router, 'load_user_config', lambda: UserGameConfig(my_role='consumer'))
 
     response = await agents_router.list_agents()
 
@@ -62,6 +64,8 @@ async def test_list_agents_uses_persisted_order(monkeypatch):
         "alpha",
         "beta",
     ]
+    assert response.agents[0].role == 'viewer'
+    assert 'workbench.read' in response.agents[0].capabilities
 
 
 @pytest.mark.asyncio
@@ -78,6 +82,7 @@ async def test_list_agents_appends_missing_ids(monkeypatch):
         "load_agent_config",
         _agent_config,
     )
+    monkeypatch.setattr(agents_router, 'load_user_config', lambda: UserGameConfig(my_role='consumer'))
 
     response = await agents_router.list_agents()
 
@@ -86,6 +91,54 @@ async def test_list_agents_appends_missing_ids(monkeypatch):
         "beta",
         "alpha",
     ]
+
+
+@pytest.mark.asyncio
+async def test_list_agents_uses_local_agent_profile_when_available(monkeypatch):
+    config = _build_config(['default'])
+
+    monkeypatch.setattr(agents_router, 'load_config', lambda: config)
+    monkeypatch.setattr(agents_router, 'load_agent_config', _agent_config)
+    monkeypatch.setattr(
+        agents_router,
+        'load_user_config',
+        lambda: UserGameConfig(
+            my_role='consumer',
+            agent_profiles={
+                'default': LocalAgentProfile(
+                    agent_id='default',
+                    display_name='Primary Planner',
+                    role='planner',
+                    capabilities=[],
+                )
+            },
+        ),
+    )
+
+    response = await agents_router.list_agents()
+
+    assert response.agents[0].display_name == 'Primary Planner'
+    assert response.agents[0].role == 'planner'
+    assert response.agents[0].agent_profile['agent_id'] == 'default'
+    assert 'workbench.test.write' in response.agents[0].capabilities
+
+
+@pytest.mark.asyncio
+async def test_get_agent_returns_normalized_profile_fields(monkeypatch):
+    monkeypatch.setattr(agents_router, 'load_agent_config', _agent_config)
+    monkeypatch.setattr(
+        agents_router,
+        'load_user_config',
+        lambda: UserGameConfig(my_role='maintainer'),
+    )
+
+    response = await agents_router.get_agent('default')
+
+    assert response.id == 'default'
+    assert response.display_name == 'DEFAULT'
+    assert response.role == 'admin'
+    assert response.capabilities == ['*']
+    assert response.agent_profile['role'] == 'admin'
 
 
 @pytest.mark.asyncio

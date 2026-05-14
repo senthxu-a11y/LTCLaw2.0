@@ -2,9 +2,18 @@
 
 来源：总规划书 Phase 3、18.7、19.3.5。
 
+## 前置边界
+
+本任务必须遵循 P0-00《架构边界冻结》：这里只定义本地 Agent Profile 与 capability gate，不引入服务端账号系统，不把普通策划提升为知识发布者，也不扩大为审批系统。
+
 ## 目标
 
 在不做服务端账号系统的前提下，用本地 Agent Profile 管理角色边界和能力开关，并把 capability gate 真正接入后端 request context。
+
+## Legacy 兼容说明
+
+- [ ] `my_role` 仅保留为 legacy shortcut 和兼容映射。
+- [ ] 旧权限入口如暂时保留，只能映射到 Agent Profile capabilities，不得继续作为长期权限标准。
 
 ## Checklist
 

@@ -2,9 +2,19 @@
 
 来源：总规划书 P0、Phase 8、9.2-9.5、19.3.2、19.3.3。
 
+## 前置边界
+
+本任务必须遵循 P0-00《架构边界冻结》：这里只补齐 Workbench Suggest 的后端上下文合同和证据边界，不做前端体验增强，不让普通策划借建议链路更新 Formal Map、Current Release 或正式 RAG。
+
 ## 目标
 
 先在 P0 补齐工作台 AI 建议的后端合同：Workbench Suggest 必须消费 Current Map/RAG 正式知识上下文、工作台运行上下文和 Draft Overlay，并返回可校验的 `evidence_refs`。前端展示增强放到 P3。
+
+## Capability 与 Legacy 兼容说明
+
+- [ ] 本任务只允许引用已有 capability 名称 `workbench.read`、`knowledge.read`；不新增 capability。
+- [ ] 本任务不赋予普通策划 `knowledge.publish` 或 `workbench.source.write` 的额外范围。
+- [ ] 如存在 legacy KB / legacy retrieval / 旧 Suggest 上下文拼装逻辑，只能兼容迁移到 Map-gated RAG + Draft Overlay 新合同，不得继续作为正式 evidence 主链路。
 
 ## Checklist
 

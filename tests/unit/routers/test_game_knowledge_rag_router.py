@@ -50,11 +50,12 @@ def test_rag_context_router_forwards_project_root_and_payload(monkeypatch, tmp_p
     async def _get_agent(_request):
         return workspace
 
-    def _build_context(project_root, query, *, max_chunks, max_chars):
+    def _build_context(project_root, query, *, max_chunks, max_chars, focus_refs=None):
         captured['project_root'] = project_root
         captured['query'] = query
         captured['max_chunks'] = max_chunks
         captured['max_chars'] = max_chars
+        captured['focus_refs'] = focus_refs
         return {
             'mode': 'context',
             'query': query,
@@ -82,6 +83,10 @@ def test_rag_context_router_forwards_project_root_and_payload(monkeypatch, tmp_p
                     'source_hash': 'sha256:doc',
                 }
             ],
+            'allowed_refs': ['doc:combat-doc'],
+            'map_hash': 'sha256:map',
+            'map_source_hash': 'sha256:map-source',
+            'reason': None,
         }
 
     monkeypatch.setattr(rag_router_module, 'get_agent_for_request', _get_agent)
@@ -90,7 +95,7 @@ def test_rag_context_router_forwards_project_root_and_payload(monkeypatch, tmp_p
     with TestClient(_build_app()) as client:
         response = client.post(
             '/api/game/knowledge/rag/context',
-            json={'query': 'damage', 'max_chunks': 5, 'max_chars': 4096},
+            json={'query': 'damage', 'max_chunks': 5, 'max_chars': 4096, 'focus_refs': ['doc:combat-doc']},
         )
 
     assert response.status_code == 200
@@ -101,6 +106,7 @@ def test_rag_context_router_forwards_project_root_and_payload(monkeypatch, tmp_p
         'query': 'damage',
         'max_chunks': 5,
         'max_chars': 4096,
+        'focus_refs': ['doc:combat-doc'],
     }
 
 
@@ -122,6 +128,10 @@ def test_rag_context_router_returns_no_current_release_payload(monkeypatch, tmp_
             'built_at': None,
             'chunks': [],
             'citations': [],
+            'allowed_refs': [],
+            'map_hash': None,
+            'map_source_hash': None,
+            'reason': 'no_current_release',
         },
     )
 
@@ -132,6 +142,77 @@ def test_rag_context_router_returns_no_current_release_payload(monkeypatch, tmp_
     assert response.json()['mode'] == 'no_current_release'
     assert response.json()['chunks'] == []
     assert response.json()['citations'] == []
+
+
+def test_rag_answer_router_still_builds_answer_only_from_context(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {'context_calls': 0, 'answer_calls': 0}
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _build_context(project_root, query, *, max_chunks, max_chars, focus_refs=None):
+        captured['context_calls'] += 1
+        captured['focus_refs'] = focus_refs
+        return {
+            'mode': 'context',
+            'query': query,
+            'release_id': 'release-001',
+            'built_at': datetime(2026, 1, 1, tzinfo=timezone.utc),
+            'chunks': [
+                {
+                    'chunk_id': 'chunk-001',
+                    'source_type': 'doc_knowledge',
+                    'text': 'combat damage formula',
+                    'score': 3.0,
+                    'rank': 1,
+                    'citation_id': 'citation-001',
+                }
+            ],
+            'citations': [
+                {
+                    'citation_id': 'citation-001',
+                    'release_id': 'release-001',
+                    'source_type': 'doc_knowledge',
+                    'artifact_path': 'indexes/doc_knowledge.jsonl',
+                    'source_path': 'Docs/Combat.md',
+                    'title': 'Combat Overview',
+                    'row': 1,
+                    'field': None,
+                    'source_hash': 'sha256:doc',
+                    'ref': 'doc:combat-doc',
+                }
+            ],
+        }
+
+    def _build_answer(query, context, service_config, **kwargs):
+        captured['answer_calls'] += 1
+        captured['answer_context'] = context
+        return {
+            'mode': 'answer',
+            'answer': 'grounded answer',
+            'release_id': 'release-001',
+            'citations': context['citations'],
+            'warnings': [],
+        }
+
+    def _forbid_read(*args, **kwargs):
+        raise AssertionError('rag answer router must not read artifacts directly')
+
+    monkeypatch.setattr(rag_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(rag_router_module, 'build_current_release_context', _build_context)
+    monkeypatch.setattr(rag_router_module, 'build_rag_answer_with_service_config', _build_answer)
+    monkeypatch.setattr(Path, 'read_text', _forbid_read)
+
+    with TestClient(_build_app()) as client:
+        response = client.post('/api/game/knowledge/rag/answer', json={'query': 'damage', 'focus_refs': ['doc:combat-doc']})
+
+    assert response.status_code == 200
+    assert response.json()['mode'] == 'answer'
+    assert captured['context_calls'] == 1
+    assert captured['answer_calls'] == 1
+    assert captured['focus_refs'] == ['doc:combat-doc']
+    assert captured['answer_context']['citations'][0]['ref'] == 'doc:combat-doc'
 
 
 
@@ -180,6 +261,30 @@ def test_rag_context_router_requires_project_root(monkeypatch):
 
     assert response.status_code == 400
     assert response.json()['detail'] == 'Local project directory not configured'
+
+
+def test_rag_context_router_requires_injected_read_capabilities(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(request):
+        request.state.capabilities = set()
+        return workspace
+
+    def _build_context(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('rag context should be blocked by injected capabilities')
+
+    monkeypatch.setattr(rag_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(rag_router_module, 'build_current_release_context', _build_context)
+
+    with TestClient(_build_app()) as client:
+        response = client.post('/api/game/knowledge/rag/context', json={'query': 'damage'})
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.read'
+    assert called is False
 
 
 

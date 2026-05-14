@@ -2,9 +2,19 @@
 
 来源：总规划书 Phase 9、Phase 10、19.3.2、19.3.6、20 技术雷区 7-10。
 
+## 前置边界
+
+本任务必须遵循 P0-00《架构边界冻结》：这里只定义真实源表写回边界、审计和限制，不实现 SVN 流程，不让普通策划更新 Formal Map、Current Release 或正式 RAG。
+
 ## 目标
 
 让普通策划在具备 `workbench.source.write` 时，把 Draft Change 直接写回真实源表；所有真实写回必须经过 wrapper、op allowlist、后端硬校验和 agent audit。
+
+## Capability 与 Legacy 兼容说明
+
+- [ ] 本任务只允许引用已有 capability 名称 `workbench.source.write`；不新增新的写回 capability。
+- [ ] `workbench.test.write` / `workbench.test.export` 仍只代表测试写入或导出，不等于真实源表写回。
+- [ ] 如存在 legacy 写回入口，只能兼容到 wrapper / audit 新边界，不得继续直连底层写回主链路。
 
 ## Checklist
 

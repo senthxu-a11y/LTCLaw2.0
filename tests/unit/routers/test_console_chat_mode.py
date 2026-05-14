@@ -12,8 +12,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from ltclaw_gy_x.app.routers import console as console_router_module
 from ltclaw_gy_x.app.routers.console import (
     _CHAT_MODE_PREFIX,
+    _augment_chat_mode_context,
     _inject_chat_mode_prefix,
 )
 
@@ -95,3 +97,100 @@ def test_mode_header_is_case_insensitive():
     assert payload["content_parts"][0]["text"].startswith(
         _CHAT_MODE_PREFIX["kb"]
     )
+
+
+@pytest.mark.asyncio
+async def test_augment_chat_mode_context_uses_current_release_and_not_unified_search(monkeypatch, tmp_path):
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    service = SimpleNamespace(
+        configured=True,
+        _runtime_svn_root=lambda: project_root,
+        user_config=SimpleNamespace(svn_local_root=None),
+        project_config=SimpleNamespace(svn=SimpleNamespace(root=None)),
+    )
+    workspace = SimpleNamespace(
+        service_manager=SimpleNamespace(services={"game_service": service})
+    )
+    payload = {"content_parts": [{"text": "damage formula"}], "meta": {}}
+
+    monkeypatch.setattr(
+        console_router_module,
+        "unified_search",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not call unified_search")),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        console_router_module,
+        "build_current_release_context",
+        lambda project_root_arg, query, *, max_chunks, max_chars: {
+            "mode": "context",
+            "query": query,
+            "release_id": "release-001",
+            "built_at": None,
+            "chunks": [
+                {
+                    "chunk_id": "chunk-001",
+                    "source_type": "doc_knowledge",
+                    "text": "Combat damage formula release evidence",
+                    "citation_id": "citation-001",
+                }
+            ],
+            "citations": [
+                {
+                    "citation_id": "citation-001",
+                    "title": "Combat Overview",
+                    "source_path": "Docs/Combat.md",
+                    "artifact_path": "indexes/doc_knowledge.jsonl",
+                }
+            ],
+        },
+    )
+
+    await _augment_chat_mode_context(_FakeRequest("kb"), workspace, payload)
+
+    assert payload["meta"]["formal_knowledge"]["status"] == "context"
+    assert payload["meta"]["formal_knowledge"]["legacy_fallback_used"] is False
+    assert payload["content_parts"][0]["text"].startswith("[Formal Knowledge Context]")
+    assert "damage formula" in payload["content_parts"][0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_augment_chat_mode_context_records_no_current_release_without_injecting_context(monkeypatch, tmp_path):
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    service = SimpleNamespace(
+        configured=True,
+        _runtime_svn_root=lambda: project_root,
+        user_config=SimpleNamespace(svn_local_root=None),
+        project_config=SimpleNamespace(svn=SimpleNamespace(root=None)),
+    )
+    workspace = SimpleNamespace(
+        service_manager=SimpleNamespace(services={"game_service": service})
+    )
+    payload = {"content_parts": [{"text": "damage formula"}], "meta": {}}
+
+    monkeypatch.setattr(
+        console_router_module,
+        "unified_search",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not call unified_search")),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        console_router_module,
+        "build_current_release_context",
+        lambda *args, **kwargs: {
+            "mode": "no_current_release",
+            "query": "damage formula",
+            "release_id": None,
+            "built_at": None,
+            "chunks": [],
+            "citations": [],
+        },
+    )
+
+    await _augment_chat_mode_context(_FakeRequest("doc"), workspace, payload)
+
+    assert payload["meta"]["formal_knowledge"]["status"] == "no_current_release"
+    assert payload["meta"]["formal_knowledge"]["legacy_fallback_used"] is False
+    assert payload["content_parts"][0]["text"] == "damage formula"

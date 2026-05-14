@@ -2,9 +2,19 @@
 
 来源：总规划书 Phase 0.5、18.8、20 关键原则。
 
+## 前置边界
+
+本任务必须遵循 P0-00《架构边界冻结》：这里只冻结和隐藏 LTClaw 内的 SVN 暴露面，不恢复 SVN runtime 为主流程能力，不把 SVN、服务端账号、审批流、文件锁、自动备份重新纳入当前阶段。
+
 ## 目标
 
 将 SVN 从 LTClaw 当前版本的功能面中移除。SVN 仍由团队外部流程负责同步、恢复、冲突处理，但不再由 LTClaw 执行 update、commit、watch、权限管理或状态轮询。
+
+## Legacy 兼容说明
+
+- [ ] `svn_root` 仅作为旧字段兼容输入，不再代表产品能力边界。
+- [ ] SVN 模块如暂时保留，仅允许作为被冻结的 legacy 依赖，不允许继续扩展成当前阶段功能。
+- [ ] LTClaw 文案、入口和主流程都必须转向普通 filesystem root / project root 语义。
 
 ## Checklist
 

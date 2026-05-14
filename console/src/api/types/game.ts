@@ -39,6 +39,15 @@ export interface ModelSlotRef {
   model_id: string;
 }
 
+type GameLocalAgentRole = "viewer" | "planner" | "source_writer" | "admin";
+
+export interface LocalAgentProfile {
+  agent_id: string;
+  display_name: string;
+  role: GameLocalAgentRole;
+  capabilities: string[];
+}
+
 export interface ProjectConfig {
   schema_version?: "project-config.v1";
   project: ProjectMeta;
@@ -51,7 +60,8 @@ export interface ProjectConfig {
 }
 
 export interface UserGameConfig {
-  my_role: "maintainer" | "consumer";
+  my_role: "maintainer" | "planner" | "consumer";
+  agent_profiles?: Record<string, LocalAgentProfile>;
   svn_local_root?: string | null;
   svn_url?: string | null;
   svn_username?: string | null;
@@ -67,6 +77,8 @@ export interface GameStorageSummary {
   legacy_user_config_path: string;
   svn_root?: string | null;
   project_store_dir?: string | null;
+  project_bundle_root?: string | null;
+  project_source_config_path?: string | null;
   project_config_path?: string | null;
   project_index_dir?: string | null;
   agent_store_dir: string;
@@ -199,11 +211,33 @@ export interface KnowledgeMap {
   source_hash?: string | null;
 }
 
-export interface KnowledgeMapCandidateResponse {
-  mode: "candidate_map";
+export type KnowledgeMapCandidateSource = "release_snapshot" | "source_canonical";
+
+export type MapDiffBaseSource = "formal_map" | "current_release" | "none";
+
+export interface MapDiffReview {
+  base_map_source: MapDiffBaseSource;
+  candidate_source: KnowledgeMapCandidateSource;
+  added_refs: string[];
+  removed_refs: string[];
+  changed_refs: string[];
+  unchanged_refs: string[];
+  warnings: string[];
+}
+
+export interface KnowledgeMapCandidateResult {
+  mode: string;
   map: KnowledgeMap | null;
   release_id: string | null;
+  candidate_source: KnowledgeMapCandidateSource;
+  is_formal_map: boolean;
+  source_release_id: string | null;
+  uses_existing_formal_map_as_hint: boolean | null;
+  warnings: string[];
+  diff_review: MapDiffReview | null;
 }
+
+export type KnowledgeMapCandidateResponse = KnowledgeMapCandidateResult;
 
 export interface FormalKnowledgeMapResponse {
   mode: "no_formal_map" | "formal_map" | "formal_map_saved";
@@ -345,6 +379,8 @@ export interface SvnWatcherStats {
 export interface SvnStatusResponse {
   configured: boolean;
   running: boolean;
+  disabled?: boolean;
+  reason?: string | null;
   poll_interval?: number;
   watch_paths?: string[];
   last_checked_revision?: number | null;
