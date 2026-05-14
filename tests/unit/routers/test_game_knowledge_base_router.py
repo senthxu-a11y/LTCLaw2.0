@@ -34,6 +34,20 @@ class _FakeEntry:
 
 
 class _FakeStore:
+    size = 1
+
+    def list_entries(self):
+        return [_FakeEntry()]
+
+    def add(self, **_kwargs):
+        return _FakeEntry()
+
+    def update(self, _entry_id, **_kwargs):
+        return _FakeEntry()
+
+    def delete(self, _entry_id):
+        return True
+
     def search(self, query, *, top_k, category=None):
         assert query == "combat"
         assert top_k == 5
@@ -81,4 +95,49 @@ def test_kb_search_is_legacy_only_and_does_not_call_unified_search(monkeypatch):
     assert body["semantic_role"] == "debug_migration_only"
     assert body["affects_release"] is False
     assert body["affects_rag"] is False
+    assert body["affects_workbench_suggest"] is False
     assert body["items"][0]["source_type"] == "kb_entry"
+
+
+def test_kb_list_entries_returns_legacy_metadata(monkeypatch):
+    workspace = SimpleNamespace(workspace_dir="/tmp/workspace")
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(kb_router_module, "get_agent_for_request", _get_agent)
+    monkeypatch.setattr(kb_router_module, "get_kb_store", lambda _path: _FakeStore())
+
+    with TestClient(_build_app(workspace)) as client:
+        response = client.get("/api/game-knowledge-base/entries")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "legacy_kb_entries"
+    assert body["scope"] == "legacy"
+    assert body["semantic_role"] == "debug_migration_only"
+    assert body["affects_release"] is False
+    assert body["affects_rag"] is False
+    assert body["affects_workbench_suggest"] is False
+
+
+def test_kb_stats_returns_legacy_metadata(monkeypatch):
+    workspace = SimpleNamespace(workspace_dir="/tmp/workspace")
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(kb_router_module, "get_agent_for_request", _get_agent)
+    monkeypatch.setattr(kb_router_module, "get_kb_store", lambda _path: _FakeStore())
+
+    with TestClient(_build_app(workspace)) as client:
+        response = client.get("/api/game-knowledge-base/stats")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "legacy_kb_stats"
+    assert body["scope"] == "legacy"
+    assert body["semantic_role"] == "debug_migration_only"
+    assert body["affects_release"] is False
+    assert body["affects_rag"] is False
+    assert body["affects_workbench_suggest"] is False

@@ -80,7 +80,9 @@ def test_rag_context_router_forwards_project_root_and_payload(monkeypatch, tmp_p
                     'source_path': 'Docs/Combat.md',
                     'title': 'Combat Overview',
                     'row': 1,
+                    'field': None,
                     'source_hash': 'sha256:doc',
+                    'ref': 'doc:combat-doc',
                 }
             ],
             'allowed_refs': ['doc:combat-doc'],
@@ -101,6 +103,8 @@ def test_rag_context_router_forwards_project_root_and_payload(monkeypatch, tmp_p
     assert response.status_code == 200
     assert response.json()['mode'] == 'context'
     assert response.json()['chunks'][0]['source_type'] == 'doc_knowledge'
+    assert response.json()['citations'][0]['field'] is None
+    assert response.json()['citations'][0]['ref'] == 'doc:combat-doc'
     assert captured == {
         'project_root': tmp_path / 'project-root',
         'query': 'damage',
@@ -142,6 +146,72 @@ def test_rag_context_router_returns_no_current_release_payload(monkeypatch, tmp_
     assert response.json()['mode'] == 'no_current_release'
     assert response.json()['chunks'] == []
     assert response.json()['citations'] == []
+
+
+def test_rag_context_router_preserves_citation_locator_fields(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+
+    async def _get_agent(_request):
+        return workspace
+
+    monkeypatch.setattr(rag_router_module, 'get_agent_for_request', _get_agent)
+    monkeypatch.setattr(
+        rag_router_module,
+        'build_current_release_context',
+        lambda *args, **kwargs: {
+            'mode': 'context',
+            'query': 'damage',
+            'release_id': 'release-001',
+            'built_at': datetime(2026, 1, 1, tzinfo=timezone.utc),
+            'chunks': [
+                {
+                    'chunk_id': 'chunk-001',
+                    'source_type': 'table_schema',
+                    'text': 'combat damage schema',
+                    'score': 3.0,
+                    'rank': 1,
+                    'citation_id': 'citation-001',
+                }
+            ],
+            'citations': [
+                {
+                    'citation_id': 'citation-001',
+                    'release_id': 'release-001',
+                    'source_type': 'table_schema',
+                    'artifact_path': 'indexes/table_schema.jsonl',
+                    'source_path': 'Tables/SkillTable.xlsx',
+                    'title': 'SkillTable',
+                    'row': 1,
+                    'field': 'Damage',
+                    'source_hash': 'sha256:table',
+                    'ref': 'table:SkillTable',
+                }
+            ],
+            'allowed_refs': ['table:SkillTable'],
+            'map_hash': 'sha256:map',
+            'map_source_hash': 'sha256:map-source',
+            'reason': None,
+        },
+    )
+
+    with TestClient(_build_app()) as client:
+        response = client.post('/api/game/knowledge/rag/context', json={'query': 'damage'})
+
+    assert response.status_code == 200
+    assert response.json()['citations'] == [
+        {
+            'citation_id': 'citation-001',
+            'release_id': 'release-001',
+            'source_type': 'table_schema',
+            'artifact_path': 'indexes/table_schema.jsonl',
+            'source_path': 'Tables/SkillTable.xlsx',
+            'title': 'SkillTable',
+            'row': 1,
+            'field': 'Damage',
+            'source_hash': 'sha256:table',
+            'ref': 'table:SkillTable',
+        }
+    ]
 
 
 def test_rag_answer_router_still_builds_answer_only_from_context(monkeypatch, tmp_path):

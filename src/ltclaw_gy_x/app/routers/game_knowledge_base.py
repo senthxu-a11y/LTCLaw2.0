@@ -14,6 +14,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/game-knowledge-base", tags=["game-knowledge-base"])
 
 
+def _legacy_kb_metadata(*, mode: str) -> dict[str, Any]:
+    return {
+        "mode": mode,
+        "scope": "legacy",
+        "semantic_role": "debug_migration_only",
+        "affects_release": False,
+        "affects_rag": False,
+        "affects_workbench_suggest": False,
+    }
+
+
 class KbEntryIn(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     summary: str = Field(default="", max_length=4000)
@@ -42,7 +53,11 @@ async def list_entries(request: Request) -> dict[str, Any]:
     workspace = await get_agent_for_request(request)
     store = get_kb_store(workspace.workspace_dir)
     items = [_serialize(e) for e in store.list_entries()]
-    return {"items": items, "count": len(items)}
+    return {
+        "items": items,
+        "count": len(items),
+        **_legacy_kb_metadata(mode="legacy_kb_entries"),
+    }
 
 
 @router.post("/entries")
@@ -57,7 +72,10 @@ async def create_entry(request: Request, body: KbEntryIn = Body(...)) -> dict[st
         tags=body.tags,
         extra=body.extra or {},
     )
-    return {"item": _serialize(entry)}
+    return {
+        "item": _serialize(entry),
+        **_legacy_kb_metadata(mode="legacy_kb_entry_created"),
+    }
 
 
 @router.patch("/entries/{entry_id}")
@@ -72,7 +90,10 @@ async def update_entry(
     entry = store.update(entry_id, **payload)
     if entry is None:
         raise HTTPException(status_code=404, detail="entry not found")
-    return {"item": _serialize(entry)}
+    return {
+        "item": _serialize(entry),
+        **_legacy_kb_metadata(mode="legacy_kb_entry_updated"),
+    }
 
 
 @router.delete("/entries/{entry_id}")
@@ -82,7 +103,10 @@ async def delete_entry(entry_id: str, request: Request) -> dict[str, Any]:
     ok = store.delete(entry_id)
     if not ok:
         raise HTTPException(status_code=404, detail="entry not found")
-    return {"deleted": entry_id}
+    return {
+        "deleted": entry_id,
+        **_legacy_kb_metadata(mode="legacy_kb_entry_deleted"),
+    }
 
 
 @router.post("/search")
@@ -95,17 +119,12 @@ async def search_entries(
     query = str(body.get("query") or "").strip()
     top_k = int(body.get("top_k") or 10)
     category = body.get("category") or None
-    mode = "legacy_kb_search"
     if not query:
         return {
             "items": [],
             "count": 0,
             "query": query,
-            "mode": mode,
-            "scope": "legacy",
-            "semantic_role": "debug_migration_only",
-            "affects_release": False,
-            "affects_rag": False,
+            **_legacy_kb_metadata(mode="legacy_kb_search"),
         }
 
     hits = store.search(query, top_k=max(1, min(top_k, 50)), category=category)
@@ -124,11 +143,7 @@ async def search_entries(
         "items": items,
         "count": len(items),
         "query": query,
-        "mode": mode,
-        "scope": "legacy",
-        "semantic_role": "debug_migration_only",
-        "affects_release": False,
-        "affects_rag": False,
+        **_legacy_kb_metadata(mode="legacy_kb_search"),
     }
 
 
@@ -139,4 +154,8 @@ async def get_stats(request: Request) -> dict[str, Any]:
     cats: dict[str, int] = {}
     for e in store.list_entries():
         cats[e.category] = cats.get(e.category, 0) + 1
-    return {"size": store.size, "by_category": cats}
+    return {
+        "size": store.size,
+        "by_category": cats,
+        **_legacy_kb_metadata(mode="legacy_kb_stats"),
+    }

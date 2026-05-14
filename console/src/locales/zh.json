@@ -60,8 +60,8 @@
     "gameAdvanced": "高级",
     "svnSync": "SVN 已冻结",
     "indexMap": "表索引",
-    "docLibrary": "文档库",
-    "knowledgeBase": "知识库",
+    "docLibrary": "Legacy 文档库",
+    "knowledgeBase": "Legacy 知识库",
     "gameWorkbench": "数值工作台",
     "agents": "智能体管理",
     "settings": "设置",
@@ -99,14 +99,14 @@
     }
   },
   "docLibrary": {
-    "title": "文档库",
-    "description": "查看当前项目中的策划案、数值说明和协作文档。",
-    "categoryTitle": "分类树",
-    "categoryHint": "按当前项目中的真实分类浏览文档。",
+    "title": "Legacy 文档库",
+    "description": "查看仅用于迁移和调试的 legacy 文档面。它不属于正式 Current Release 知识链路。",
+    "categoryTitle": "Legacy 分类",
+    "categoryHint": "这里只筛选 legacy 文档记录。正式知识只来自 Current Release + Formal Map + Map-gated artifacts。",
     "listTitle": "文档列表",
     "searchPlaceholder": "搜索标题、作者或标签",
     "empty": "当前筛选下暂无文档",
-    "mockFallback": "文档库加载失败，请检查项目配置或本地 SVN 工作副本。",
+    "mockFallback": "legacy 文档库加载失败，请检查项目配置或本地 SVN 工作副本。",
     "columns": {
       "title": "标题",
       "type": "类型",
@@ -116,14 +116,14 @@
     }
   },
   "knowledgeBase": {
-    "title": "知识库",
-    "description": "汇总机制、数值规律和历史决策的占位卡片，后续可接入真实知识条目。",
-    "categoryTitle": "分类树",
-    "categoryHint": "按当前 mock 分类筛选知识条目。",
-    "listTitle": "知识条目",
+    "title": "Legacy 知识库",
+    "description": "查看仅用于迁移和调试的 legacy KB 条目。它不参与正式 Release、RAG、Chat 或 Workbench Suggest。",
+    "categoryTitle": "Legacy 分类",
+    "categoryHint": "这里只筛选 legacy KB 条目。正式知识只来自 Current Release + Formal Map + Map-gated artifacts。",
+    "listTitle": "Legacy KB 条目",
     "searchPlaceholder": "搜索标题、摘要或标签",
     "empty": "当前筛选下暂无知识条目",
-    "mockFallback": "知识库接口暂未返回数据，已展示 mock 数据。",
+    "mockFallback": "legacy Knowledge Base 接口暂未返回数据。",
     "createdAt": "创建时间"
   },
   "workspace": {

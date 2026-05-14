@@ -69,6 +69,15 @@ class UnifiedModelRouter:
 
         provider, provider_id, model_id = self._resolve_model_binding(normalized_model_type)
         if provider is None:
+            if provider_id or model_id:
+                return UnifiedModelResult(
+                    ok=False,
+                    model_type=normalized_model_type,
+                    error_code="provider_not_configured",
+                    message="Resolved model binding does not include a configured provider.",
+                    provider_id=provider_id,
+                    model_id=model_id,
+                )
             return UnifiedModelResult(
                 ok=False,
                 model_type=normalized_model_type,
@@ -90,11 +99,15 @@ class UnifiedModelRouter:
         try:
             text = await _invoke_provider(provider, model_id, prompt)
         except Exception as exc:  # noqa: BLE001
+            error_code = "provider_exception"
+            message = str(exc) or exc.__class__.__name__
+            if isinstance(exc, RuntimeError) and "not configured" in message.lower():
+                error_code = "provider_not_configured"
             return UnifiedModelResult(
                 ok=False,
                 model_type=normalized_model_type,
-                error_code="provider_exception",
-                message=str(exc) or exc.__class__.__name__,
+                error_code=error_code,
+                message=message,
                 provider_id=provider_id,
                 model_id=model_id,
             )

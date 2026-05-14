@@ -38,6 +38,7 @@ export default function AdvancedPage() {
 
   const [storageSummary, setStorageSummary] = useState<GameStorageSummary | null>(null);
   const [currentRelease, setCurrentRelease] = useState<KnowledgeReleaseHistoryItem | null>(null);
+  const [previousRelease, setPreviousRelease] = useState<KnowledgeReleaseHistoryItem | null>(null);
   const [formalMap, setFormalMap] = useState<FormalKnowledgeMapResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -65,6 +66,7 @@ export default function AdvancedPage() {
 
       setStorageSummary(storageResult.status === "fulfilled" ? storageResult.value : null);
       setCurrentRelease(releaseResult.status === "fulfilled" ? releaseResult.value.current : null);
+      setPreviousRelease(releaseResult.status === "fulfilled" ? releaseResult.value.previous : null);
       setFormalMap(formalMapResult.status === "fulfilled" ? formalMapResult.value : null);
 
       const failures = [storageResult, releaseResult, formalMapResult].filter(
@@ -90,10 +92,11 @@ export default function AdvancedPage() {
       buildAdminStatusCards({
         storageSummary,
         currentRelease,
+        previousRelease,
         formalMap,
         ragStatus,
       }),
-    [currentRelease, formalMap, ragStatus, storageSummary],
+    [currentRelease, formalMap, previousRelease, ragStatus, storageSummary],
   );
 
   const adminActions = useMemo(

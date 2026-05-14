@@ -10,6 +10,7 @@ export interface AdminStatusCard {
     | "project_bundle_path"
     | "source_config_path"
     | "current_release_id"
+    | "previous_release_id"
     | "current_map_hash"
     | "formal_map_status"
     | "rag_status"
@@ -34,6 +35,7 @@ export interface AdminActionDescriptor {
 export interface AdminPanelStatusInput {
   storageSummary: GameStorageSummary | null;
   currentRelease: KnowledgeReleaseHistoryItem | null;
+  previousRelease: KnowledgeReleaseHistoryItem | null;
   formalMap: FormalKnowledgeMapResponse | null;
   ragStatus: string;
 }
@@ -112,6 +114,7 @@ export function buildAdminStatusCards(input: AdminPanelStatusInput): AdminStatus
   const bundlePath = input.storageSummary?.project_bundle_root || input.storageSummary?.project_store_dir || "-";
   const sourceConfigPath = input.storageSummary?.project_source_config_path || "-";
   const currentReleaseId = input.currentRelease?.release_id || "-";
+  const previousReleaseId = input.previousRelease?.release_id || "-";
   const formalMode = input.formalMap?.mode || "unavailable";
   const mapHash = input.formalMap?.map_hash || "-";
   const currentKnowledgeVersion = input.currentRelease?.release_id || "-";
@@ -134,6 +137,12 @@ export function buildAdminStatusCards(input: AdminPanelStatusInput): AdminStatus
       label: "Current Release ID",
       value: currentReleaseId,
       tone: currentReleaseId === "-" ? "warning" : "success",
+    },
+    {
+      key: "previous_release_id",
+      label: "Previous Release ID",
+      value: previousReleaseId,
+      tone: previousReleaseId === "-" ? "warning" : "default",
     },
     {
       key: "current_map_hash",

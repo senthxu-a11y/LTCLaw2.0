@@ -60,8 +60,8 @@
     "gameAdvanced": "Advanced",
     "svnSync": "SVN Frozen",
     "indexMap": "Index Map",
-    "docLibrary": "Doc Library",
-    "knowledgeBase": "Knowledge Base",
+    "docLibrary": "Legacy Doc Library",
+    "knowledgeBase": "Legacy Knowledge Base",
     "gameWorkbench": "Numeric Workbench",
     "agents": "Agent Management",
     "settings": "Settings",
@@ -99,14 +99,14 @@
     }
   },
   "docLibrary": {
-    "title": "Doc Library",
-    "description": "Browse planning docs, numeric notes, and collaboration files from the current project.",
-    "categoryTitle": "Categories",
-    "categoryHint": "Filter real project documents by category.",
+    "title": "Legacy Doc Library",
+    "description": "Browse legacy project documents for migration and debug. This surface is not part of the formal Current Release knowledge chain.",
+    "categoryTitle": "Legacy Categories",
+    "categoryHint": "Filter legacy document records only. Formal knowledge comes from Current Release + Formal Map + map-gated artifacts.",
     "listTitle": "Document List",
     "searchPlaceholder": "Search title, author, or tag",
     "empty": "No documents match the current filters",
-    "mockFallback": "Failed to load the document library. Check the project config or local SVN working copy.",
+    "mockFallback": "Failed to load the legacy Doc Library surface. Check the project config or local SVN working copy.",
     "columns": {
       "title": "Title",
       "type": "Type",
@@ -116,14 +116,14 @@
     }
   },
   "knowledgeBase": {
-    "title": "Knowledge Base",
-    "description": "Review placeholder entries for mechanics, numeric patterns, and past decisions until the real KB pipeline lands.",
-    "categoryTitle": "Categories",
-    "categoryHint": "Filter mock entries by the current category tree.",
-    "listTitle": "Knowledge Entries",
+    "title": "Legacy Knowledge Base",
+    "description": "Review legacy KB entries for migration and debug only. This surface does not participate in formal Release, RAG, Chat, or Workbench Suggest.",
+    "categoryTitle": "Legacy Categories",
+    "categoryHint": "Filter legacy KB entries only. Formal knowledge comes from Current Release + Formal Map + map-gated artifacts.",
+    "listTitle": "Legacy KB Entries",
     "searchPlaceholder": "Search title, summary, or tag",
     "empty": "No knowledge entries match the current filters",
-    "mockFallback": "The Knowledge Base API returned no data yet, showing mock content instead.",
+    "mockFallback": "The legacy Knowledge Base API returned no data yet.",
     "createdAt": "Created At"
   },
   "acp": {

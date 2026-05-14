@@ -15,6 +15,13 @@ from ltclaw_gy_x.game.config import (
     SvnConfig,
     TableConvention,
 )
+from ltclaw_gy_x.game.knowledge_release_store import (
+    create_release,
+    get_current_release,
+    set_current_release,
+)
+from ltclaw_gy_x.game.knowledge_release_builders import DEFAULT_RELEASE_INDEXES
+from ltclaw_gy_x.game.models import KnowledgeIndexArtifact, KnowledgeManifest, KnowledgeMap
 from ltclaw_gy_x.game.workbench_source_write_service import (
     WorkbenchSourceWriteOp,
     WorkbenchSourceWriteService,
@@ -258,6 +265,61 @@ async def test_xls_is_not_supported_for_source_write(sample_env):
     assert outcome.ok is False
     assert outcome.status_code == 400
     assert ".xls" in outcome.payload["message"]
+
+
+@pytest.mark.asyncio
+async def test_update_cell_unknown_field_is_blocked_and_failure_is_audited(sample_env):
+    service = _service(sample_env)
+
+    outcome = await service.write(
+        ops=[WorkbenchSourceWriteOp(op="update_cell", table="Hero", row_id=1, field="MP", new_value=1)],
+        reason="unknown field",
+    )
+
+    assert outcome.ok is False
+    assert outcome.status_code == 400
+    assert "Updating unknown fields is blocked" in outcome.payload["message"]
+    assert outcome.payload["audit_recorded"] is True
+    audit_record = _read_audit_lines(service)[0]
+    assert audit_record["success"] is False
+    assert "Updating unknown fields is blocked" in audit_record["failure"]
+
+
+@pytest.mark.asyncio
+async def test_source_write_does_not_change_current_release(sample_env):
+    service = _service(sample_env)
+    manifest = KnowledgeManifest(
+        schema_version="knowledge-manifest.v1",
+        release_id="release-h4-001",
+        created_at="2026-05-14T00:00:00Z",
+        project_root_hash="sha256:project-root",
+        source_snapshot_hash="sha256:source-snapshot",
+        map_hash="sha256:map-h4-001",
+        indexes={
+            name: KnowledgeIndexArtifact(path=path, hash="sha256:index", count=0)
+            for name, path in DEFAULT_RELEASE_INDEXES.items()
+        },
+    )
+    knowledge_map = KnowledgeMap(
+        schema_version="knowledge-map.v1",
+        release_id="release-h4-001",
+        relationships=[],
+    )
+    create_release(sample_env["svn_root"], manifest, knowledge_map, indexes={})
+    set_current_release(sample_env["svn_root"], "release-h4-001")
+
+    before = get_current_release(sample_env["svn_root"]).release_id
+
+    outcome = await service.write(
+        ops=[WorkbenchSourceWriteOp(op="update_cell", table="Hero", row_id=1, field="HP", new_value=150)],
+        reason="raise hp",
+    )
+
+    after = get_current_release(sample_env["svn_root"]).release_id
+    assert outcome.ok is True
+    assert outcome.payload["release_id_at_write"] == "release-h4-001"
+    assert before == "release-h4-001"
+    assert after == "release-h4-001"
 
 
 def test_append_audit_record_returns_false_when_parent_mkdir_fails(sample_env, monkeypatch):

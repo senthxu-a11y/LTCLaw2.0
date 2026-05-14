@@ -284,6 +284,58 @@ def test_build_current_release_context_citations_include_release_and_reference(m
             assert citation['source_path']
 
 
+def test_build_current_release_context_citations_preserve_locator_fields(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+    _create_release(project_root, 'release-citation-locators')
+    set_current_release(project_root, 'release-citation-locators')
+
+    payload = build_current_release_context(project_root, 'combat damage formula skilltable', max_chunks=8)
+
+    citations_by_ref = {citation['ref']: citation for citation in payload['citations']}
+    assert citations_by_ref['table:SkillTable'] == {
+        'citation_id': citations_by_ref['table:SkillTable']['citation_id'],
+        'release_id': 'release-citation-locators',
+        'source_type': 'table_schema',
+        'artifact_path': 'indexes/table_schema.jsonl',
+        'source_path': 'Tables/SkillTable.xlsx',
+        'title': 'SkillTable',
+        'row': 1,
+        'field': 'Damage',
+        'source_hash': 'sha256:table',
+        'ref': 'table:SkillTable',
+    }
+    assert citations_by_ref['doc:combat-doc'] == {
+        'citation_id': citations_by_ref['doc:combat-doc']['citation_id'],
+        'release_id': 'release-citation-locators',
+        'source_type': 'doc_knowledge',
+        'artifact_path': 'indexes/doc_knowledge.jsonl',
+        'source_path': 'Docs/Combat.md',
+        'title': 'Combat Overview',
+        'row': 1,
+        'field': None,
+        'source_hash': 'sha256:doc',
+        'ref': 'doc:combat-doc',
+    }
+    assert citations_by_ref['script:combat-script'] == {
+        'citation_id': citations_by_ref['script:combat-script']['citation_id'],
+        'release_id': 'release-citation-locators',
+        'source_type': 'script_evidence',
+        'artifact_path': 'indexes/script_evidence.jsonl',
+        'source_path': 'Scripts/CombatResolver.cs',
+        'title': 'CombatResolver.cs',
+        'row': 1,
+        'field': None,
+        'source_hash': 'sha256:script',
+        'ref': 'script:combat-script',
+    }
+
+
 def test_build_current_release_context_routes_through_map_router(monkeypatch, tmp_path):
     working_root = tmp_path / 'ltclaw-data'
     project_root = tmp_path / 'project-root'
@@ -350,6 +402,50 @@ def test_build_current_release_context_reads_only_allowed_ref_artifacts(monkeypa
     assert release_dir.resolve(strict=False) / 'indexes' / 'table_schema.jsonl' not in normalized
     assert release_dir.resolve(strict=False) / 'indexes' / 'script_evidence.jsonl' not in normalized
     assert release_dir.resolve(strict=False) / 'indexes' / 'candidate_evidence.jsonl' not in normalized
+
+
+def test_build_current_release_context_stops_reading_rows_after_allowed_refs_are_satisfied(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+    _create_release(project_root, 'release-row-stop')
+    set_current_release(project_root, 'release-row-stop')
+
+    doc_path = get_release_dir(project_root, 'release-row-stop') / 'indexes' / 'doc_knowledge.jsonl'
+    doc_path.write_text(
+        '\n'.join(
+            [
+                '{"title":"Combat Overview","summary":"combat damage formula design","category":"design","tags":["combat"],"source_path":"Docs/Combat.md","related_tables":["SkillTable"],"source_hash":"sha256:doc"}',
+                '{"title":"Noise 1","summary":"should never be read","category":"design","tags":[],"source_path":"Docs/Noise1.md","source_hash":"sha256:noise-1"}',
+                '{"title":"Noise 2","summary":"should never be read","category":"design","tags":[],"source_path":"Docs/Noise2.md","source_hash":"sha256:noise-2"}',
+            ]
+        )
+        + '\n',
+        encoding='utf-8',
+    )
+
+    import ltclaw_gy_x.game.knowledge_rag_context as context_module
+
+    original_loads = context_module.json.loads
+    seen_titles: list[str] = []
+
+    def _spy_loads(line: str, *args, **kwargs):
+        record = original_loads(line, *args, **kwargs)
+        if isinstance(record, dict) and record.get('title'):
+            seen_titles.append(str(record['title']))
+        return record
+
+    monkeypatch.setattr(context_module.json, 'loads', _spy_loads)
+
+    payload = build_current_release_context(project_root, 'combat damage formula', focus_refs=['doc:combat-doc'])
+
+    assert payload['mode'] == 'context'
+    assert payload['allowed_refs'] == ['doc:combat-doc']
+    assert seen_titles == ['Combat Overview']
 
 
 def test_build_current_release_context_excludes_ignored_and_deprecated_refs(monkeypatch, tmp_path):

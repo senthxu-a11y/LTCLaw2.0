@@ -766,13 +766,15 @@ async def suggest_workbench_changes(
             parsed = None
 
     if not isinstance(parsed, dict):
-        return {
-            "message": raw,
-            "changes": [],
-            "evidence_refs": [],
-            "formal_context_status": formal_context.get("status"),
-            "raw": raw,
-        }
+        logger.warning("game_workbench.suggest returned invalid JSON payload: %r", raw[:400])
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error_code": "invalid_model_output",
+                "message": "Workbench suggest model returned invalid JSON.",
+                "raw": raw,
+            },
+        )
 
     validated = validate_workbench_suggest_payload(
         parsed,

@@ -159,7 +159,7 @@ export default function DocLibrary() {
       await fetchDocuments();
       message.success(
         nextStatus === "已确认" && detail.kb_entry_id
-          ? `文档已更新为${nextStatus}，并已同步知识库`
+          ? `文档已更新为${nextStatus}，并已同步到 legacy KB 镜像`
           : `文档已更新为${nextStatus}`,
       );
     } catch (err) {

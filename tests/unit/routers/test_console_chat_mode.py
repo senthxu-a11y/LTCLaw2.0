@@ -151,6 +151,10 @@ async def test_augment_chat_mode_context_uses_current_release_and_not_unified_se
 
     assert payload["meta"]["formal_knowledge"]["status"] == "context"
     assert payload["meta"]["formal_knowledge"]["legacy_fallback_used"] is False
+    assert "provider" not in payload["meta"]["formal_knowledge"]
+    assert "model" not in payload["meta"]["formal_knowledge"]
+    assert "api_key" not in payload["meta"]["formal_knowledge"]
+    assert "base_url" not in payload["meta"]["formal_knowledge"]
     assert payload["content_parts"][0]["text"].startswith("[Formal Knowledge Context]")
     assert "damage formula" in payload["content_parts"][0]["text"]
 

@@ -260,6 +260,90 @@ async def test_model_router_returns_structured_no_active_model_error(service):
 
 
 @pytest.mark.asyncio
+async def test_model_router_returns_structured_provider_not_configured_when_provider_missing(service):
+    active_model = SimpleNamespace(provider_id="provider-default", model_id="model-default")
+    provider_manager = SimpleNamespace(
+        active_model=active_model,
+        get_provider=lambda provider_id: None,
+    )
+    project_config = _project_config(Path("/tmp/svn"))
+    project_config.models = {
+        "rag_answer": ModelSlotRef(provider_id="provider-missing", model_id="model-default")
+    }
+
+    router = SimpleModelRouter(provider_manager, project_config=project_config)
+    result = await router.call_model_result("prompt", model_type="rag_answer")
+
+    assert result.ok is False
+    assert result.error_code == "provider_not_configured"
+    assert result.provider_id == "provider-missing"
+    assert result.model_id == "model-default"
+
+
+@pytest.mark.asyncio
+async def test_model_router_returns_structured_provider_exception(service):
+    provider = SimpleNamespace(base_url="https://provider.example/v1", api_key="secret")
+    active_model = SimpleNamespace(provider_id="provider-default", model_id="model-default")
+    provider_manager = SimpleNamespace(
+        active_model=active_model,
+        get_provider=lambda provider_id: provider,
+    )
+
+    with patch("ltclaw_gy_x.providers.provider_manager.ProviderManager.get_instance", return_value=provider_manager), \
+         patch("ltclaw_gy_x.game.unified_model_router._invoke_provider", AsyncMock(side_effect=RuntimeError("Provider invocation failed."))):
+        router = service._model_router()
+        result = await router.call_model_result("prompt", model_type="rag_answer")
+
+    assert result.ok is False
+    assert result.error_code == "provider_exception"
+    assert result.message == "Provider invocation failed."
+
+
+@pytest.mark.asyncio
+async def test_model_router_returns_structured_empty_response(service):
+    provider = SimpleNamespace(base_url="https://provider.example/v1", api_key="secret")
+    active_model = SimpleNamespace(provider_id="provider-default", model_id="model-default")
+    provider_manager = SimpleNamespace(
+        active_model=active_model,
+        get_provider=lambda provider_id: provider,
+    )
+
+    with patch("ltclaw_gy_x.providers.provider_manager.ProviderManager.get_instance", return_value=provider_manager), \
+         patch("ltclaw_gy_x.game.unified_model_router._invoke_provider", AsyncMock(return_value="   ")):
+        router = service._model_router()
+        result = await router.call_model_result("prompt", model_type="rag_answer")
+
+    assert result.ok is False
+    assert result.error_code == "empty_response"
+    assert await router.call_model("prompt", model_type="rag_answer") == ""
+
+
+@pytest.mark.asyncio
+async def test_model_router_unknown_model_type_falls_back_to_default_slot(service):
+    provider = SimpleNamespace(base_url="https://provider.example/v1", api_key="secret")
+    active_model = SimpleNamespace(provider_id="provider-default", model_id="model-default")
+    provider_manager = SimpleNamespace(
+        active_model=active_model,
+        get_provider=lambda provider_id: provider,
+    )
+    service._project_config = _project_config(Path("/tmp/svn"))
+    service._project_config.models = {
+        "default": ModelSlotRef(provider_id="provider-default", model_id="default-model")
+    }
+
+    with patch("ltclaw_gy_x.providers.provider_manager.ProviderManager.get_instance", return_value=provider_manager), \
+         patch("ltclaw_gy_x.game.unified_model_router._invoke_provider", AsyncMock(return_value="ok")) as invoke_provider:
+        router = service._model_router()
+        result = await router.call_model_result("prompt", model_type="unknown_model_type")
+
+    assert result.ok is True
+    assert result.model_type == "default"
+    assert result.model_id == "default-model"
+    invoke_provider.assert_awaited_once()
+    assert invoke_provider.await_args.args[1] == "default-model"
+
+
+@pytest.mark.asyncio
 async def test_model_router_call_model_blocking_inside_running_loop_emits_no_runtime_warnings(service):
     provider = SimpleNamespace(base_url="https://provider.example/v1", api_key="secret")
     active_model = SimpleNamespace(provider_id="provider-default", model_id="model-default")

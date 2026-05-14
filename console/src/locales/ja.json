@@ -168,14 +168,14 @@
     "addSkillsToAgent": "スキルを追加"
   },
   "docLibrary": {
-    "title": "Doc Library",
-    "description": "Browse placeholder planning docs, spreadsheets, and collaboration files until real indexing is wired in.",
-    "categoryTitle": "Categories",
-    "categoryHint": "Filter mock documents by the current category tree.",
+    "title": "Legacy Doc Library",
+    "description": "Browse the legacy document surface for migration and debug only. It is not part of the formal Current Release knowledge chain.",
+    "categoryTitle": "Legacy Categories",
+    "categoryHint": "Filter legacy document records only. Formal knowledge comes from Current Release + Formal Map + map-gated artifacts.",
     "listTitle": "Document List",
     "searchPlaceholder": "Search title, author, or tag",
     "empty": "No documents match the current filters",
-    "mockFallback": "The Doc Library API returned no data yet, showing mock content instead.",
+    "mockFallback": "The legacy Doc Library surface returned no data.",
     "columns": {
       "title": "Title",
       "type": "Type",
@@ -185,14 +185,14 @@
     }
   },
   "knowledgeBase": {
-    "title": "Knowledge Base",
-    "description": "Review placeholder entries for mechanics, numeric patterns, and past decisions until the real KB pipeline lands.",
-    "categoryTitle": "Categories",
-    "categoryHint": "Filter mock entries by the current category tree.",
-    "listTitle": "Knowledge Entries",
+    "title": "Legacy Knowledge Base",
+    "description": "Review legacy KB entries for migration and debug only. This surface does not participate in formal Release, RAG, Chat, or Workbench Suggest.",
+    "categoryTitle": "Legacy Categories",
+    "categoryHint": "Filter legacy KB entries only. Formal knowledge comes from Current Release + Formal Map + map-gated artifacts.",
+    "listTitle": "Legacy KB Entries",
     "searchPlaceholder": "Search title, summary, or tag",
     "empty": "No knowledge entries match the current filters",
-    "mockFallback": "The Knowledge Base API returned no data yet, showing mock content instead.",
+    "mockFallback": "The legacy Knowledge Base API returned no data.",
     "createdAt": "Created At"
   },
   "workspace": {

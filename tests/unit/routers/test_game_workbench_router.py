@@ -296,6 +296,32 @@ def test_source_write_requires_workbench_source_write_capability(monkeypatch):
     assert called is False
 
 
+@pytest.mark.parametrize("capabilities", [{"workbench.read"}, {"workbench.read", "workbench.test.write"}])
+def test_source_write_viewer_and_planner_capabilities_return_403(monkeypatch, capabilities):
+    called = False
+
+    async def _write(self, *, ops, reason):
+        nonlocal called
+        called = True
+        return WorkbenchSourceWriteOutcome(ok=True, status_code=200, payload={"success": True})
+
+    monkeypatch.setattr(workbench_router_module.WorkbenchSourceWriteService, "write", _write)
+    workspace = _ws(SimpleNamespace(change_applier=SimpleNamespace()))
+
+    with TestClient(_build_app(workspace, capabilities=capabilities)) as client:
+        response = client.post(
+            "/api/game/workbench/source-write",
+            json={
+                "ops": [{"op": "update_cell", "table": "Hero", "row_id": 1, "field": "HP", "new_value": 120}],
+                "reason": "write source",
+            },
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Missing capability: workbench.source.write"
+    assert called is False
+
+
 def test_source_write_uses_injected_capabilities_and_calls_wrapper(monkeypatch):
     captured = {}
 
@@ -464,6 +490,34 @@ def test_workbench_suggest_surfaces_structured_router_failure(monkeypatch):
 
     assert response.status_code == 502
     assert response.json()["detail"]["error_code"] == "no_active_model"
+
+
+def test_workbench_suggest_invalid_model_output_returns_explicit_error(monkeypatch):
+    async def _call_model_result(prompt, model_type="default"):
+        return SimpleNamespace(
+            ok=True,
+            text='not valid json at all',
+            error_code=None,
+            message=None,
+        )
+
+    service = SimpleNamespace(
+        _model_router=lambda: SimpleNamespace(call_model_result=_call_model_result),
+    )
+    workspace = _ws(service)
+
+    with TestClient(_build_app(workspace)) as client:
+        response = client.post(
+            "/api/game/workbench/suggest",
+            json={"user_intent": "把 Hero 表 HP 提高", "context_tables": [], "current_pending": [], "chat_history": []},
+        )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == {
+        "error_code": "invalid_model_output",
+        "message": "Workbench suggest model returned invalid JSON.",
+        "raw": "not valid json at all",
+    }
 
 
 def test_workbench_suggest_no_current_release_keeps_formal_evidence_empty(monkeypatch):

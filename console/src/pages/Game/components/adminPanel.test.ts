@@ -45,6 +45,16 @@ function createRelease(): KnowledgeReleaseHistoryItem {
   };
 }
 
+function createPreviousRelease(): KnowledgeReleaseHistoryItem {
+  return {
+    release_id: "release-2026-05-13",
+    created_at: "2026-05-13T00:00:00Z",
+    label: "available",
+    is_current: false,
+    indexes: {},
+  };
+}
+
 function createFormalMap(): FormalKnowledgeMapResponse {
   return {
     mode: "formal_map",
@@ -60,6 +70,7 @@ describe("adminPanel helpers", () => {
     const cards = buildAdminStatusCards({
       storageSummary: createStorageSummary(),
       currentRelease: createRelease(),
+      previousRelease: createPreviousRelease(),
       formalMap: createFormalMap(),
       ragStatus: "ready",
     });
@@ -70,6 +81,7 @@ describe("adminPanel helpers", () => {
         ["project_bundle_path", "/workspace/game_data/projects/demo-project"],
         ["source_config_path", "/workspace/game_data/projects/demo-project/project/source_config.yaml"],
         ["current_release_id", "release-2026-05-14"],
+        ["previous_release_id", "release-2026-05-13"],
         ["current_map_hash", "hash-001"],
         ["formal_map_status", "formal_map"],
         ["rag_status", "ready"],
@@ -85,6 +97,7 @@ describe("adminPanel helpers", () => {
     const cards = buildAdminStatusCards({
       storageSummary,
       currentRelease: createRelease(),
+      previousRelease: createPreviousRelease(),
       formalMap: createFormalMap(),
       ragStatus: "ready",
     });
@@ -97,6 +110,19 @@ describe("adminPanel helpers", () => {
       cards.find((card) => card.key === "source_config_path")?.value,
       "/workspace/game_data/projects/demo-project/project/source_config.yaml",
     );
+  });
+
+  it("shows warning placeholder when previous release is unavailable", () => {
+    const cards = buildAdminStatusCards({
+      storageSummary: createStorageSummary(),
+      currentRelease: createRelease(),
+      previousRelease: null,
+      formalMap: createFormalMap(),
+      ragStatus: "ready",
+    });
+
+    assert.equal(cards.find((card) => card.key === "previous_release_id")?.value, "-");
+    assert.equal(cards.find((card) => card.key === "previous_release_id")?.tone, "warning");
   });
 
   it("hides admin operations from planner or viewer capability sets", () => {

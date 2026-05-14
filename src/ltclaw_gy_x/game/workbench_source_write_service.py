@@ -240,6 +240,8 @@ class WorkbenchSourceWriteService:
         if op.op == "update_cell":
             if not op.field:
                 raise ValueError("update_cell requires a target field")
+            if not _has_field(op.field):
+                raise ValueError(f"Updating unknown fields is blocked in workbench source write: {op.field}")
             if op.field.lower() == primary_key.lower():
                 raise ValueError("Changing the primary key is blocked in workbench source write")
             return
