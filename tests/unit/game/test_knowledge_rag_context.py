@@ -302,6 +302,7 @@ def test_build_current_release_context_citations_preserve_locator_fields(monkeyp
         'citation_id': citations_by_ref['table:SkillTable']['citation_id'],
         'release_id': 'release-citation-locators',
         'source_type': 'table_schema',
+        'table': 'SkillTable',
         'artifact_path': 'indexes/table_schema.jsonl',
         'source_path': 'Tables/SkillTable.xlsx',
         'title': 'SkillTable',
@@ -314,6 +315,7 @@ def test_build_current_release_context_citations_preserve_locator_fields(monkeyp
         'citation_id': citations_by_ref['doc:combat-doc']['citation_id'],
         'release_id': 'release-citation-locators',
         'source_type': 'doc_knowledge',
+        'table': None,
         'artifact_path': 'indexes/doc_knowledge.jsonl',
         'source_path': 'Docs/Combat.md',
         'title': 'Combat Overview',
@@ -326,6 +328,7 @@ def test_build_current_release_context_citations_preserve_locator_fields(monkeyp
         'citation_id': citations_by_ref['script:combat-script']['citation_id'],
         'release_id': 'release-citation-locators',
         'source_type': 'script_evidence',
+        'table': None,
         'artifact_path': 'indexes/script_evidence.jsonl',
         'source_path': 'Scripts/CombatResolver.cs',
         'title': 'CombatResolver.cs',
@@ -593,6 +596,38 @@ def test_build_current_release_context_unknown_focus_refs_fail_closed(monkeypatc
     assert payload['reason'] == 'no_active_focus_refs'
     assert payload['allowed_refs'] == []
     assert payload['requested_focus_refs'] == ['doc:unknown']
+    assert payload['active_focus_refs'] == []
+    assert payload['chunks'] == []
+    assert payload['citations'] == []
+    assert all('indexes' not in path.as_posix() for path in opened_paths)
+
+
+def test_build_current_release_context_unknown_prefix_focus_refs_fail_closed(monkeypatch, tmp_path):
+    working_root = tmp_path / 'ltclaw-data'
+    project_root = tmp_path / 'project-root'
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(working_root))
+
+    _write_source(project_root, 'Tables/SkillTable.xlsx', 'source-only table\n')
+    _write_source(project_root, 'Docs/Combat.md', 'source-only doc\n')
+    _write_source(project_root, 'Scripts/CombatResolver.cs', 'source-only code\n')
+    _create_release(project_root, 'release-unknown-prefix-focus')
+    set_current_release(project_root, 'release-unknown-prefix-focus')
+
+    opened_paths: list[Path] = []
+    original_open = Path.open
+
+    def _spy_open(self: Path, *args, **kwargs):
+        opened_paths.append(self.resolve(strict=False))
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'open', _spy_open)
+
+    payload = build_current_release_context(project_root, 'combat damage formula', focus_refs=['kb:combat-doc'])
+
+    assert payload['mode'] == 'insufficient_context'
+    assert payload['reason'] == 'no_active_focus_refs'
+    assert payload['allowed_refs'] == []
+    assert payload['requested_focus_refs'] == ['kb:combat-doc']
     assert payload['active_focus_refs'] == []
     assert payload['chunks'] == []
     assert payload['citations'] == []

@@ -18,7 +18,7 @@ from ltclaw_gy_x.game.config import (
     save_project_config,
 )
 from ltclaw_gy_x.game.models import ChangeSet, DependencyGraph, TableIndex
-from ltclaw_gy_x.game.service import GameService, SimpleModelRouter
+from ltclaw_gy_x.game.service import GameService, SimpleModelRouter, SVN_RUNTIME_DISABLED_REASON
 from ltclaw_gy_x.game.config import ModelSlotRef
 
 
@@ -214,8 +214,26 @@ async def test_start_with_maintainer_config_keeps_svn_runtime_frozen(tmp_path, i
     assert service.svn_watcher is None
     assert await service.start_svn_monitoring() is False
     assert await service.stop_svn_monitoring() is False
-    assert service.get_svn_monitoring_status()["disabled"] is True
+    assert service.get_svn_monitoring_status() == {
+        "disabled": True,
+        "running": False,
+        "configured": True,
+        "reason": SVN_RUNTIME_DISABLED_REASON,
+        "my_role": "maintainer",
+    }
     await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_start_and_stop_svn_monitoring_do_not_touch_watcher(service):
+    watcher = SimpleNamespace(start=AsyncMock(), stop=AsyncMock())
+    service._svn_watcher = watcher
+
+    assert await service.start_svn_monitoring() is False
+    assert await service.stop_svn_monitoring() is False
+
+    watcher.start.assert_not_called()
+    watcher.stop.assert_not_called()
 
 
 def test_model_router_falls_back_to_simple_router(service):
@@ -245,6 +263,39 @@ async def test_model_router_uses_project_model_slot_for_requested_model_type(ser
     assert result.model_id == "rag-model"
     invoke_provider.assert_awaited_once()
     assert invoke_provider.await_args.args[1] == "rag-model"
+
+
+@pytest.mark.parametrize(
+    ("model_type", "slot_model_id"),
+    [
+        ("field_describer", "field-model"),
+        ("table_summarizer", "summary-model"),
+        ("workbench_suggest", "suggest-model"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_model_router_uses_project_model_slot_for_supported_game_model_types(service, model_type, slot_model_id):
+    provider = SimpleNamespace(base_url="https://provider.example/v1", api_key="secret")
+    active_model = SimpleNamespace(provider_id="provider-default", model_id="model-default")
+    provider_manager = SimpleNamespace(
+        active_model=active_model,
+        get_provider=lambda provider_id: provider if provider_id == "provider-slot" else provider,
+    )
+    service._project_config = _project_config(Path("/tmp/svn"))
+    service._project_config.models = {
+        model_type: ModelSlotRef(provider_id="provider-slot", model_id=slot_model_id)
+    }
+
+    with patch("ltclaw_gy_x.providers.provider_manager.ProviderManager.get_instance", return_value=provider_manager), \
+         patch("ltclaw_gy_x.game.unified_model_router._invoke_provider", AsyncMock(return_value="ok")) as invoke_provider:
+        router = service._model_router()
+        result = await router.call_model_result("prompt", model_type=model_type)
+
+    assert result.ok is True
+    assert result.model_type == model_type
+    assert result.model_id == slot_model_id
+    invoke_provider.assert_awaited_once()
+    assert invoke_provider.await_args.args[1] == slot_model_id
 
 
 @pytest.mark.asyncio

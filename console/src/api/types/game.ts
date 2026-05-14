@@ -261,10 +261,14 @@ export interface KnowledgeRagCitation {
   citation_id: string;
   release_id?: string | null;
   source_type?: string | null;
+  table?: string | null;
   artifact_path?: string | null;
   source_path?: string | null;
   title?: string | null;
   row?: number | null;
+  field?: string | null;
+  source_hash?: string | null;
+  ref?: string | null;
 }
 
 export interface KnowledgeRagAnswerResponse {

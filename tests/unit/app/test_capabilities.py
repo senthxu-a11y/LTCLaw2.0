@@ -131,6 +131,33 @@ def test_role_templates_include_source_write_capability():
     assert get_role_template_capabilities('admin') == ('*',)
 
 
+def test_role_templates_match_expected_capability_matrix():
+    assert get_role_template_capabilities('viewer') == (
+        'knowledge.read',
+        'knowledge.map.read',
+        'knowledge.candidate.read',
+        'workbench.read',
+    )
+    assert get_role_template_capabilities('planner') == (
+        'knowledge.read',
+        'knowledge.map.read',
+        'knowledge.candidate.read',
+        'workbench.read',
+        'workbench.test.write',
+        'workbench.test.export',
+    )
+    assert get_role_template_capabilities('source_writer') == (
+        'knowledge.read',
+        'knowledge.map.read',
+        'knowledge.candidate.read',
+        'workbench.read',
+        'workbench.test.write',
+        'workbench.test.export',
+        'workbench.source.write',
+    )
+    assert get_role_template_capabilities('admin') == ('*',)
+
+
 @pytest.mark.parametrize(
     ('legacy_role', 'expected_role'),
     [
@@ -142,6 +169,10 @@ def test_role_templates_include_source_write_capability():
 )
 def test_map_legacy_my_role(legacy_role, expected_role):
     assert map_legacy_my_role(legacy_role) == expected_role
+
+
+def test_map_legacy_my_role_unknown_role_defaults_to_viewer():
+    assert map_legacy_my_role('operator') == 'viewer'
 
 
 def test_build_agent_capability_profile_uses_local_profile_override():

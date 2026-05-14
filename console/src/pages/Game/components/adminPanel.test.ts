@@ -129,6 +129,21 @@ describe("adminPanel helpers", () => {
     assert.deepEqual(buildAdminPanelActions(["knowledge.read", "workbench.read"], true), []);
   });
 
+  it("shows all admin write actions for admin or wildcard capability sets", () => {
+    const actions = buildAdminPanelActions(["*"], true);
+
+    assert.deepEqual(
+      actions.map((action) => action.key),
+      [
+        "candidate_map_review",
+        "save_formal_map",
+        "build_release",
+        "publish_set_current",
+      ],
+    );
+    assert.equal(actions.every((action) => action.enabled), true);
+  });
+
   it("distinguishes build release from publish and set current", () => {
     const actions = buildAdminPanelActions(["knowledge.build", "knowledge.publish"], true);
     const keys = actions.map((action) => action.key);

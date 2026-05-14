@@ -28,6 +28,7 @@ import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
+import { parseCitationRouteContext } from "./citationDeepLink";
 import type { FrontendCapabilityToken } from "@/api/types/permissions";
 import { canUseGovernanceAction, hasCapabilityContext, isPermissionDeniedError } from "@/utils/permissions";
 import { useAgentStore } from "../../stores/agentStore";
@@ -169,27 +170,7 @@ export default function NumericWorkbench() {
   const dlField = searchParams.get("field") || searchParams.get("fieldKey") || "";
   const sessionParam = searchParams.get("session") || "";
   const hasDeepLink = Boolean(dlTable || dlRow || dlField);
-  const citationContext = useMemo(() => {
-    if (searchParams.get("from") !== "rag-citation" || !hasDeepLink) {
-      return null;
-    }
-
-    const title = searchParams.get("citationTitle") || "";
-    const source = searchParams.get("citationSource") || "";
-    const citationId = searchParams.get("citationId") || "";
-    if (!title && !source && !citationId && !dlTable && !dlRow && !dlField) {
-      return null;
-    }
-
-    return {
-      citationId,
-      title,
-      source,
-      table: dlTable,
-      row: dlRow,
-      field: dlField,
-    };
-  }, [dlField, dlRow, dlTable, hasDeepLink, searchParams]);
+  const citationContext = useMemo(() => parseCitationRouteContext(searchParams), [searchParams]);
   const isWorkbenchView = Boolean(sessionParam || hasDeepLink);
 
   const sessionStore = useWorkbenchSessions();

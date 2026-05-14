@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import ltclaw_gy_x.game.table_indexer as table_indexer_module
 from ltclaw_gy_x.game.config import (
     FilterConfig,
     ProjectConfig,
@@ -91,6 +92,45 @@ async def test_generate_table_summary_uses_table_summarizer_model_type(indexer):
     assert calls == ["table_summarizer"]
     assert summary == "技能伤害配置表"
     assert confidence == 0.8
+
+
+@pytest.mark.asyncio
+async def test_describe_fields_logs_error_and_falls_back_when_model_fails(indexer, monkeypatch):
+    async def _raise(*_args, **_kwargs):
+        raise RuntimeError("provider boom")
+
+    indexer.model_router = SimpleNamespace(call_model=_raise)
+    logged = []
+
+    monkeypatch.setattr(table_indexer_module.logger, "error", lambda message: logged.append(message))
+
+    payload = await indexer._describe_fields_with_llm(
+        "SkillTable",
+        [{"name": "Damage", "type": "int", "sample_values": [100, 120]}],
+    )
+
+    assert payload == {
+        "Damage": {"description": "Damage字段", "confidence": 0.1}
+    }
+    assert any("LLM字段描述生成失败" in message for message in logged)
+
+
+@pytest.mark.asyncio
+async def test_generate_table_summary_logs_error_and_falls_back_on_empty_response(indexer, monkeypatch):
+    async def _empty(*_args, **_kwargs):
+        return "   "
+
+    indexer.model_router = SimpleNamespace(call_model=_empty)
+    fields = [SimpleNamespace(name="Damage", description="伤害")]
+    logged = []
+
+    monkeypatch.setattr(table_indexer_module.logger, "error", lambda message: logged.append(message))
+
+    summary, confidence = await indexer._generate_table_summary("SkillTable", fields, [{"Damage": 100}])
+
+    assert summary == "SkillTable数据配置表"
+    assert confidence == 0.1
+    assert any("生成表格摘要失败" in message for message in logged)
 
 
 async def _record_call(calls, prompt, model_type, response):

@@ -105,3 +105,68 @@ async def test_get_agent_for_request_prefers_local_agent_profile(monkeypatch):
     assert request.state.agent_profile['display_name'] == 'Source Writer'
     assert request.state.agent_profile['role'] == 'source_writer'
     assert 'workbench.source.write' in request.state.capabilities
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('legacy_role', 'expected_role', 'expected_capabilities'),
+    [
+        (
+            'planner',
+            'planner',
+            {
+                'knowledge.read',
+                'knowledge.map.read',
+                'knowledge.candidate.read',
+                'workbench.read',
+                'workbench.test.write',
+                'workbench.test.export',
+            },
+        ),
+        (
+            'operator',
+            'viewer',
+            {
+                'knowledge.read',
+                'knowledge.map.read',
+                'knowledge.candidate.read',
+                'workbench.read',
+            },
+        ),
+    ],
+)
+async def test_get_agent_for_request_injects_request_state_from_legacy_role(
+    monkeypatch,
+    legacy_role,
+    expected_role,
+    expected_capabilities,
+):
+    app = FastAPI()
+    workspace = SimpleNamespace(agent_id='default', workspace_dir='/tmp/default')
+    app.state.multi_agent_manager = _DummyManager(workspace)
+    request = _request(app)
+
+    config = SimpleNamespace(
+        agents=SimpleNamespace(
+            active_agent='default',
+            profiles={'default': SimpleNamespace(enabled=True, workspace_dir='/tmp/default')},
+        )
+    )
+    monkeypatch.setattr(agent_context_module, 'load_config', lambda: config)
+    monkeypatch.setattr(
+        agent_context_module,
+        'load_agent_config',
+        lambda agent_id: SimpleNamespace(name='Default Agent'),
+    )
+    monkeypatch.setattr(
+        agent_context_module,
+        'load_user_config',
+        lambda: SimpleNamespace(my_role=legacy_role, agent_profiles={}),
+    )
+
+    resolved = await agent_context_module.get_agent_for_request(request)
+
+    assert resolved is workspace
+    assert request.state.agent_profile['role'] == expected_role
+    assert request.state.capabilities == expected_capabilities
+    assert set(request.state.user['capabilities']) == expected_capabilities

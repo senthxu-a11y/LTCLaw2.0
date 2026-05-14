@@ -54,6 +54,24 @@ describe("workbenchSuggestEvidence helpers", () => {
     assert.equal(presentation.formalContextStatus, "grounded");
   });
 
+  it("keeps runtime-only draft suggestions separate from formal release evidence", () => {
+    const presentation = buildSuggestionEvidencePresentation(
+      createSuggestion({
+        evidence_refs: [],
+        uses_draft_overlay: true,
+        source_release_id: null,
+        validation_status: "validated_runtime_only",
+      }),
+      { formal_context_status: "no_current_release" },
+    );
+
+    assert.equal(presentation.evidenceKind, "runtime_only");
+    assert.equal(presentation.validationStatus, "validated_runtime_only");
+    assert.equal(presentation.sourceReleaseId, null);
+    assert.equal(presentation.usesDraftOverlay, true);
+    assert.equal(presentation.formalContextStatus, "no_current_release");
+  });
+
   it("keeps runtime-only suggestions distinct in message summary", () => {
     const summary = buildSuggestMessagePresentation(
       [

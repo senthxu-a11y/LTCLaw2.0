@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import openpyxl
 import pytest
@@ -82,6 +83,7 @@ def sample_env(tmp_path, monkeypatch):
     item_xlsx = tables_dir / "Item.xlsx"
     skill_txt = tables_dir / "Skill.txt"
     legacy_xls = tables_dir / "Legacy.xls"
+    unknown_json = tables_dir / "Weird.json"
 
     _write_csv(hero_csv, [["ID", "Name", "HP"], [1, "Knight", 100], [2, "Mage", 80]])
     _write_xlsx(item_xlsx, [["ID", "Name", "Price"], [10, "Potion", 5], [20, "Ether", 12]])
@@ -94,6 +96,7 @@ def sample_env(tmp_path, monkeypatch):
         ],
     )
     legacy_xls.write_text("legacy", encoding="utf-8")
+    unknown_json.write_text("{}\n", encoding="utf-8")
 
     return {
         "svn_root": svn_root,
@@ -102,6 +105,7 @@ def sample_env(tmp_path, monkeypatch):
         "item_xlsx": item_xlsx,
         "skill_txt": skill_txt,
         "legacy_xls": legacy_xls,
+        "unknown_json": unknown_json,
         "project": _project_config(svn_root),
     }
 
@@ -136,17 +140,65 @@ async def test_update_cell_can_write_csv_and_record_audit(sample_env):
     )
 
     assert outcome.ok is True
+    assert outcome.payload["svn_update_required"] is True
+    assert outcome.payload["svn_update_warning"] == service.SVN_UPDATE_WARNING
+    assert outcome.payload["release_id_at_write"] is None
     assert outcome.payload["source_files"] == ["tables/Hero.csv"]
+    assert outcome.payload["changes"] == [
+        {
+            "op": "update_cell",
+            "table": "Hero",
+            "row_id": 1,
+            "field": "HP",
+            "old_value": "100",
+            "new_value": 150,
+        }
+    ]
     assert outcome.payload["audit_recorded"] is True
     assert _read_csv(sample_env["hero_csv"])[1] == ["1", "Knight", "150"]
     audit_record = _read_audit_lines(service)[0]
     assert audit_record["event_type"] == "workbench.source.write"
     assert audit_record["agent_id"] == "agent-1"
     assert audit_record["session_id"] == "session-1"
+    assert audit_record["time"]
+    assert audit_record["release_id_at_write"] is None
     assert audit_record["reason"] == "raise hp"
+    assert audit_record["source_files"] == ["tables/Hero.csv"]
     assert audit_record["success"] is True
     assert audit_record["changes"][0]["old_value"] == "100"
     assert audit_record["changes"][0]["new_value"] == 150
+
+
+@pytest.mark.asyncio
+async def test_source_write_does_not_call_svn_update_commit_or_revert(sample_env):
+    service = _service(sample_env)
+    service.change_applier.svn_update = AsyncMock()
+    service.change_applier.svn_commit = AsyncMock()
+    service.change_applier.svn_revert = AsyncMock()
+    service.change_applier.update = AsyncMock()
+    service.change_applier.commit = AsyncMock()
+    service.change_applier.revert = AsyncMock()
+    service.change_applier.trigger_now = AsyncMock()
+    forbidden_committer = MagicMock()
+    forbidden_committer.commit = AsyncMock()
+    forbidden_committer.revert = AsyncMock()
+    service.change_applier.svn_committer = forbidden_committer
+
+    outcome = await service.write(
+        ops=[WorkbenchSourceWriteOp(op="update_cell", table="Hero", row_id=1, field="HP", new_value=150)],
+        reason="raise hp",
+    )
+
+    assert outcome.ok is True
+    service.change_applier.svn_update.assert_not_awaited()
+    service.change_applier.svn_commit.assert_not_awaited()
+    service.change_applier.svn_revert.assert_not_awaited()
+    service.change_applier.update.assert_not_awaited()
+    service.change_applier.commit.assert_not_awaited()
+    service.change_applier.revert.assert_not_awaited()
+    service.change_applier.trigger_now.assert_not_awaited()
+    forbidden_committer.commit.assert_not_awaited()
+    forbidden_committer.revert.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -166,6 +218,7 @@ async def test_insert_row_can_write_and_record_audit(sample_env):
     )
 
     assert outcome.ok is True
+    assert outcome.payload["svn_update_required"] is True
     assert _read_csv(sample_env["hero_csv"])[3 - 0] == ["3", "Archer", "90"]
     audit_record = _read_audit_lines(service)[0]
     assert audit_record["changes"][0]["op"] == "insert_row"
@@ -214,6 +267,9 @@ async def test_delete_row_is_blocked_and_failure_is_audited(sample_env):
     assert outcome.ok is False
     assert outcome.status_code == 400
     assert "delete_row is blocked" in outcome.payload["message"]
+    assert outcome.payload["svn_update_required"] is True
+    assert outcome.payload["source_files"] == []
+    assert outcome.payload["changes"] == []
     assert outcome.payload["audit_recorded"] is True
     audit_record = _read_audit_lines(service)[0]
     assert audit_record["success"] is False
@@ -265,6 +321,30 @@ async def test_xls_is_not_supported_for_source_write(sample_env):
     assert outcome.ok is False
     assert outcome.status_code == 400
     assert ".xls" in outcome.payload["message"]
+    assert outcome.payload["audit_recorded"] is True
+    audit_record = _read_audit_lines(service)[0]
+    assert audit_record["success"] is False
+    assert ".xls" in audit_record["failure"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_file_format_is_blocked_and_failure_is_audited(sample_env, monkeypatch):
+    service = _service(sample_env)
+
+    monkeypatch.setattr(service.change_applier, "get_source_file", lambda _table: sample_env["unknown_json"])
+
+    outcome = await service.write(
+        ops=[WorkbenchSourceWriteOp(op="update_cell", table="Weird", row_id=1, field="HP", new_value=1)],
+        reason="unknown format",
+    )
+
+    assert outcome.ok is False
+    assert outcome.status_code == 400
+    assert "only supports .csv, .xlsx, and .txt" in outcome.payload["message"]
+    assert outcome.payload["audit_recorded"] is True
+    audit_record = _read_audit_lines(service)[0]
+    assert audit_record["success"] is False
+    assert "only supports .csv, .xlsx, and .txt" in audit_record["failure"]
 
 
 @pytest.mark.asyncio
@@ -283,6 +363,78 @@ async def test_update_cell_unknown_field_is_blocked_and_failure_is_audited(sampl
     audit_record = _read_audit_lines(service)[0]
     assert audit_record["success"] is False
     assert "Updating unknown fields is blocked" in audit_record["failure"]
+
+
+@pytest.mark.asyncio
+async def test_update_cell_primary_key_is_blocked_and_failure_is_audited(sample_env):
+    service = _service(sample_env)
+
+    outcome = await service.write(
+        ops=[WorkbenchSourceWriteOp(op="update_cell", table="Hero", row_id=1, field="ID", new_value=9)],
+        reason="change primary key",
+    )
+
+    assert outcome.ok is False
+    assert outcome.status_code == 400
+    assert "Changing the primary key is blocked" in outcome.payload["message"]
+    assert outcome.payload["audit_recorded"] is True
+    audit_record = _read_audit_lines(service)[0]
+    assert audit_record["success"] is False
+    assert "Changing the primary key is blocked" in audit_record["failure"]
+
+
+@pytest.mark.asyncio
+async def test_insert_row_requires_object_new_value(sample_env):
+    service = _service(sample_env)
+
+    outcome = await service.write(
+        ops=[WorkbenchSourceWriteOp(op="insert_row", table="Hero", row_id=3, new_value=["bad"])],
+        reason="bad row payload",
+    )
+
+    assert outcome.ok is False
+    assert outcome.status_code == 400
+    assert "insert_row requires new_value to be an object" in outcome.payload["message"]
+    assert outcome.payload["audit_recorded"] is True
+    audit_record = _read_audit_lines(service)[0]
+    assert audit_record["success"] is False
+    assert "insert_row requires new_value to be an object" in audit_record["failure"]
+
+
+@pytest.mark.asyncio
+async def test_insert_row_primary_key_mismatch_is_blocked_and_failure_is_audited(sample_env):
+    service = _service(sample_env)
+
+    outcome = await service.write(
+        ops=[WorkbenchSourceWriteOp(op="insert_row", table="Hero", row_id=3, new_value={"ID": 4, "Name": "Archer", "HP": 90})],
+        reason="row id mismatch",
+    )
+
+    assert outcome.ok is False
+    assert outcome.status_code == 400
+    assert "Changing the primary key is blocked" in outcome.payload["message"]
+    assert outcome.payload["audit_recorded"] is True
+    audit_record = _read_audit_lines(service)[0]
+    assert audit_record["success"] is False
+    assert "Changing the primary key is blocked" in audit_record["failure"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_op_is_blocked_and_failure_is_audited(sample_env):
+    service = _service(sample_env)
+
+    outcome = await service.write(
+        ops=[WorkbenchSourceWriteOp(op="explode_world", table="Hero", row_id=1, field="HP", new_value=0)],
+        reason="unknown op",
+    )
+
+    assert outcome.ok is False
+    assert outcome.status_code == 400
+    assert "Schema and unsupported ops are blocked" in outcome.payload["message"]
+    assert outcome.payload["audit_recorded"] is True
+    audit_record = _read_audit_lines(service)[0]
+    assert audit_record["success"] is False
+    assert "explode_world" in audit_record["failure"]
 
 
 @pytest.mark.asyncio

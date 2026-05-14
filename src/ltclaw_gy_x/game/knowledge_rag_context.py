@@ -114,6 +114,7 @@ def build_current_release_context(
                 'citation_id': citation_id,
                 'release_id': manifest.release_id,
                 'source_type': candidate['source_type'],
+                'table': candidate['citation']['table'],
                 'artifact_path': candidate['citation']['artifact_path'],
                 'source_path': candidate['citation']['source_path'],
                 'title': candidate['citation']['title'],
@@ -237,6 +238,7 @@ def _collect_allowed_release_candidates(
                     'score': score,
                     'sort_ref': ref,
                     'citation': {
+                        'table': _record_citation_table(source_type, record, ref),
                         'artifact_path': artifact.path,
                         'source_path': str(record.get('source_path') or '') or None,
                         'title': _record_title(source_type, record),
@@ -497,6 +499,21 @@ def _record_title(source_type: str, record: dict[str, Any]) -> str | None:
         return str(record.get('title') or '') or None
     if source_type == 'script_evidence':
         return Path(str(record.get('source_path') or '')).name or None
+    return None
+
+
+def _record_citation_table(source_type: str, record: dict[str, Any], ref: str | None) -> str | None:
+    if source_type == 'table_schema':
+        table_name = str(record.get('table_name') or '').strip()
+        if table_name:
+            return table_name
+        source_path = str(record.get('source_path') or '').strip()
+        if source_path:
+            return Path(source_path).stem or None
+    if ref and ref.startswith('table:'):
+        table_name = ref.split(':', 1)[1].strip()
+        if table_name:
+            return table_name
     return None
 
 

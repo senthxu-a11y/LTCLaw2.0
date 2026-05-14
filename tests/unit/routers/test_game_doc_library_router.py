@@ -55,6 +55,41 @@ def test_doc_library_status_marks_sync_and_retrieval_as_legacy(monkeypatch, tmp_
     assert body["legacy_retrieval"]["scope"] == "legacy"
 
 
+def test_doc_library_list_returns_legacy_scope_metadata(tmp_path):
+    docs_dir = tmp_path / "Docs"
+    docs_dir.mkdir()
+    (docs_dir / "Combat.md").write_text("# Combat\n", encoding="utf-8")
+    workspace = _workspace(tmp_path)
+
+    with TestClient(_build_app(workspace)) as client:
+        response = client.get("/api/game-doc-library/documents")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["scope"] == "legacy_doc_library"
+    assert body["knowledge_sync"] == {
+        "mode": "legacy_kb_migration_only",
+        "affects_release": False,
+    }
+
+
+def test_doc_library_detail_returns_legacy_sync_metadata(tmp_path):
+    docs_dir = tmp_path / "Docs"
+    docs_dir.mkdir()
+    (docs_dir / "Combat.md").write_text("# Combat\n", encoding="utf-8")
+    workspace = _workspace(tmp_path)
+
+    with TestClient(_build_app(workspace)) as client:
+        response = client.get("/api/game-doc-library/documents/Docs/Combat.md")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["knowledge_sync"] == {
+        "mode": "legacy_kb_migration_only",
+        "affects_release": False,
+    }
+
+
 def test_doc_library_update_returns_legacy_sync_metadata(monkeypatch, tmp_path):
     docs_dir = tmp_path / "Docs"
     docs_dir.mkdir()

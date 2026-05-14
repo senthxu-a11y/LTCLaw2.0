@@ -230,7 +230,7 @@ export default function AdvancedPage() {
               <Paragraph type="secondary" style={{ marginBottom: 0 }}>
                 {t(
                   "gameWorkspaceSkeleton.advancedSvnFrozen",
-                  "SVN runtime is frozen in the current phase. Use LTClaw for local project loading only, and run update, commit, restore, and conflict handling in your external SVN workflow.",
+                  "SVN runtime is frozen in the current phase. Use LTClaw for local project loading only, and run SVN Update, Commit, Revert, and conflict handling in your external SVN workflow.",
                 )}
               </Paragraph>
             </Space>

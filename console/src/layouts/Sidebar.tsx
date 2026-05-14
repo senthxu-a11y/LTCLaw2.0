@@ -235,6 +235,18 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
       label: t("nav.gameWorkbench"),
     },
     {
+      key: "doc-library",
+      icon: <SparkBrowseLine size={18} />,
+      path: "/doc-library",
+      label: t("nav.docLibrary"),
+    },
+    {
+      key: "knowledge-base",
+      icon: <SparkSearchUserLine size={18} />,
+      path: "/knowledge-base",
+      label: t("nav.knowledgeBase"),
+    },
+    {
       key: "game-advanced",
       icon: <SparkDataLine size={18} />,
       path: "/game/advanced",
@@ -392,6 +404,16 @@ export default function Sidebar({ selectedKey }: SidebarProps) {
           key: "numeric-workbench",
           label: collapsed ? null : t("nav.gameWorkbench"),
           icon: <SparkModifyLine size={16} />,
+        },
+        {
+          key: "doc-library",
+          label: collapsed ? null : t("nav.docLibrary"),
+          icon: <SparkBrowseLine size={16} />,
+        },
+        {
+          key: "knowledge-base",
+          label: collapsed ? null : t("nav.knowledgeBase"),
+          icon: <SparkSearchUserLine size={16} />,
         },
         {
           key: "game-advanced",

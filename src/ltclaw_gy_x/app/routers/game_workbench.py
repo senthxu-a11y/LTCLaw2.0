@@ -753,6 +753,16 @@ async def suggest_workbench_changes(
         raise HTTPException(status_code=502, detail={"error_code": result.error_code, "message": result.message})
 
     raw = (result.text or "").strip()
+    if not raw:
+        logger.warning("game_workbench.suggest returned empty model output")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error_code": "empty_model_output",
+                "message": "Workbench suggest model returned empty output.",
+                "raw": raw,
+            },
+        )
 
     parsed: dict[str, Any] | None = None
     try:

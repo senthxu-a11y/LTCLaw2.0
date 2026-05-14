@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from ltclaw_gy_x.app.agent_context import get_agent_for_request
+from ltclaw_gy_x.app.capabilities import get_role_template_capabilities
 from ltclaw_gy_x.app.routers import game_knowledge_release as release_router_module
 from ltclaw_gy_x.app.routers.game_knowledge_release import router
 from ltclaw_gy_x.game.knowledge_release_service import KnowledgeReleaseBuildResult, KnowledgeReleasePrerequisiteError
@@ -264,7 +265,6 @@ def test_build_release_from_current_indexes_forwards_project_root_and_workspace(
                 'release_id': 'release-safe-001',
                 'bootstrap': True,
                 'release_notes': '# safe build\n',
-                'candidate_ids': ['combat-doc'],
             },
         )
 
@@ -273,12 +273,38 @@ def test_build_release_from_current_indexes_forwards_project_root_and_workspace(
     assert captured['workspace_dir'] == tmp_path / 'workspace-root'
     assert captured['release_id'] == 'release-safe-001'
     assert captured['kwargs']['bootstrap'] is True
-    assert captured['kwargs']['candidate_ids'] == ['combat-doc']
+    assert captured['kwargs']['candidate_ids'] == []
     assert captured['kwargs']['release_notes'] == '# safe build\n'
     assert response.json()['build_mode'] == 'bootstrap'
     assert response.json()['status'] == 'bootstrap_warning'
     assert response.json()['map_source'] == 'bootstrap_current_indexes'
     assert response.json()['warnings'] == ['Bootstrap release used current indexes.']
+
+
+def test_build_release_from_current_indexes_rejects_proposal_candidate_ids(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _build(*_args, **_kwargs):
+        raise KnowledgeReleasePrerequisiteError('Release build does not accept draft or proposal candidates')
+
+    monkeypatch.setattr(release_router_module, 'build_knowledge_release_from_current_indexes', _build)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace)) as client:
+        response = client.post(
+            '/api/game/knowledge/releases/build-from-current-indexes',
+            json={
+                'release_id': 'release-safe-001',
+                'bootstrap': True,
+                'candidate_ids': ['candidate-accepted'],
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json()['detail'] == 'Release build does not accept draft or proposal candidates'
 
 
 def test_build_release_from_current_indexes_returns_prerequisite_detail(monkeypatch, tmp_path):
@@ -356,6 +382,35 @@ def test_build_release_requires_injected_viewer_capabilities(monkeypatch, tmp_pa
             json={
                 'release_id': 'release-viewer-001',
                 'knowledge_map': _knowledge_map('release-viewer-001').model_dump(mode='json'),
+            },
+        )
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.build'
+    assert called is False
+
+
+def test_build_release_rejects_planner_role_template(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _build(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('planner should not be able to build release')
+
+    monkeypatch.setattr(release_router_module, 'build_knowledge_release', _build)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace, capabilities=set(get_role_template_capabilities('planner')))) as client:
+        response = client.post(
+            '/api/game/knowledge/releases/build',
+            json={
+                'release_id': 'release-planner-001',
+                'knowledge_map': _knowledge_map('release-planner-001').model_dump(mode='json'),
             },
         )
 
@@ -556,6 +611,55 @@ def test_set_current_release_requires_knowledge_publish_when_capabilities_presen
     assert response.status_code == 403
     assert response.json()['detail'] == 'Missing capability: knowledge.publish'
     assert called is False
+
+
+def test_set_current_release_rejects_source_writer_role_template(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    called = False
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _set_current(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('source_writer should not be able to publish release')
+
+    monkeypatch.setattr(release_router_module, 'set_current_release', _set_current)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace, capabilities=set(get_role_template_capabilities('source_writer')))) as client:
+        response = client.post('/api/game/knowledge/releases/release-source-writer/current')
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'Missing capability: knowledge.publish'
+    assert called is False
+
+
+def test_set_current_release_allows_admin_role_template(monkeypatch, tmp_path):
+    workspace = _workspace(_service(tmp_path / 'project-root'))
+    captured = {}
+    pointer = KnowledgeReleasePointer(
+        release_id='release-admin-001',
+        updated_at=datetime(2026, 1, 4, tzinfo=timezone.utc),
+    )
+
+    async def _get_agent(_request):
+        return workspace
+
+    def _set_current(project_root, release_id):
+        captured['project_root'] = project_root
+        captured['release_id'] = release_id
+        return pointer
+
+    monkeypatch.setattr(release_router_module, 'set_current_release', _set_current)
+    monkeypatch.setattr(release_router_module, 'get_agent_for_request', _get_agent)
+
+    with TestClient(_build_app(workspace, capabilities=set(get_role_template_capabilities('admin')))) as client:
+        response = client.post('/api/game/knowledge/releases/release-admin-001/current')
+
+    assert response.status_code == 200
+    assert captured == {'project_root': tmp_path / 'project-root', 'release_id': 'release-admin-001'}
 
 
 def test_set_current_release_allows_knowledge_publish_when_capabilities_present(monkeypatch, tmp_path):

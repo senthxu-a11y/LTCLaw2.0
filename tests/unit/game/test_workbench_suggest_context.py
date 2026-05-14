@@ -104,3 +104,122 @@ def test_validate_workbench_suggest_payload_filters_invalid_entities_and_refs():
     assert change['evidence_refs'] == ['doc:combat.formula']
     assert payload['evidence_refs'] == ['doc:combat.formula']
     assert 'outside context_tables' in payload['message']
+
+
+def test_validate_workbench_suggest_payload_accepts_legal_suggestion():
+    tables_meta = [
+        {
+            'table': 'Hero',
+            'primary_key': 'ID',
+            'fields': [
+                {'name': 'ID'},
+                {'name': 'HP'},
+            ],
+            'row_index': [
+                {'ID': 1, 'HP': 100},
+            ],
+        }
+    ]
+    formal_context = {
+        'status': 'grounded',
+        'release_id': 'release-001',
+        'allowed_evidence_refs': ['doc:combat.formula'],
+    }
+
+    payload = suggest_context_module.validate_workbench_suggest_payload(
+        {
+            'message': 'adjust hp',
+            'changes': [
+                {
+                    'table': 'Hero',
+                    'row_id': 1,
+                    'field': 'HP',
+                    'new_value': 120,
+                    'reason': 'Keep hero competitive.',
+                    'confidence': 0.88,
+                    'uses_draft_overlay': False,
+                    'evidence_refs': ['doc:combat.formula'],
+                }
+            ],
+        },
+        tables_meta=tables_meta,
+        formal_context=formal_context,
+        draft_overlay=[],
+    )
+
+    assert payload['message'] == 'adjust hp'
+    assert payload['evidence_refs'] == ['doc:combat.formula']
+    assert payload['formal_context_status'] == 'grounded'
+    assert payload['changes'] == [
+        {
+            'table': 'Hero',
+            'row_id': 1,
+            'field': 'HP',
+            'new_value': 120,
+            'reason': 'Keep hero competitive.',
+            'confidence': 0.88,
+            'uses_draft_overlay': False,
+            'source_release_id': 'release-001',
+            'validation_status': 'validated',
+            'evidence_refs': ['doc:combat.formula'],
+        }
+    ]
+
+
+def test_validate_workbench_suggest_payload_runtime_only_change_has_no_formal_release_id():
+    tables_meta = [
+        {
+            'table': 'Hero',
+            'primary_key': 'ID',
+            'fields': [
+                {'name': 'ID'},
+                {'name': 'HP'},
+            ],
+            'row_index': [
+                {'ID': 1, 'HP': 100},
+            ],
+        }
+    ]
+    formal_context = {
+        'status': 'no_current_release',
+        'release_id': None,
+        'allowed_evidence_refs': [],
+    }
+
+    payload = suggest_context_module.validate_workbench_suggest_payload(
+        {
+            'message': 'runtime only',
+            'changes': [
+                {
+                    'table': 'Hero',
+                    'row_id': 1,
+                    'field': 'HP',
+                    'new_value': 118,
+                    'reason': 'Use runtime table only.',
+                    'confidence': 0.6,
+                    'uses_draft_overlay': True,
+                    'evidence_refs': ['doc:fake'],
+                }
+            ],
+        },
+        tables_meta=tables_meta,
+        formal_context=formal_context,
+        draft_overlay=[{'table': 'Hero', 'row_id': 1, 'field': 'HP', 'new_value': 115}],
+    )
+
+    assert payload['evidence_refs'] == []
+    assert payload['formal_context_status'] == 'no_current_release'
+    assert payload['changes'] == [
+        {
+            'table': 'Hero',
+            'row_id': 1,
+            'field': 'HP',
+            'new_value': 118,
+            'reason': 'Use runtime table only.',
+            'confidence': 0.6,
+            'uses_draft_overlay': True,
+            'source_release_id': None,
+            'validation_status': 'validated_runtime_only',
+            'evidence_refs': [],
+        }
+    ]

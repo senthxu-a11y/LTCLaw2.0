@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 SVN_RUNTIME_DISABLED_REASON = (
-    "SVN runtime is frozen in P0-01. Use the local project root as a filesystem path and run SVN externally."
+    "SVN runtime is frozen in P0-01. Use the local project root as a filesystem path, and run SVN Update, Commit, and Revert externally."
 )
 
 

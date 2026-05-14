@@ -18,7 +18,6 @@ from .knowledge_release_builders import (
     export_table_schema_jsonl,
     validate_release_id,
 )
-from .knowledge_release_candidate_store import KnowledgeReleaseCandidateStoreError, list_release_candidates
 from .knowledge_release_store import CurrentKnowledgeReleaseNotSetError, create_release, get_current_release_map
 from .local_project_paths import normalize_local_project_relative_path
 from .models import (
@@ -187,6 +186,13 @@ def build_knowledge_release_from_current_indexes(
 
     workspace = Path(workspace_dir).expanduser().resolve(strict=False)
     validated_release_id = validate_release_id(release_id)
+    normalized_candidate_ids = [
+        str(candidate_id or '').strip()
+        for candidate_id in candidate_ids
+        if str(candidate_id or '').strip()
+    ]
+    if normalized_candidate_ids:
+        raise KnowledgeReleasePrerequisiteError('Release build does not accept draft or proposal candidates')
     table_index_inventory = _load_current_table_indexes(root)
     code_index_inventory = _load_current_code_indexes(workspace, root)
     resolved_map = _resolve_effective_map_for_safe_build(
@@ -196,7 +202,6 @@ def build_knowledge_release_from_current_indexes(
         code_index_inventory=code_index_inventory,
         bootstrap=bootstrap,
     )
-    selected_candidates = _resolve_release_candidates(root, candidate_ids)
 
     release_time = created_at or datetime.now(timezone.utc)
     table_indexes = _select_current_table_indexes(table_index_inventory, resolved_map.knowledge_map)
@@ -211,7 +216,7 @@ def build_knowledge_release_from_current_indexes(
         doc_indexes=doc_indexes,
         code_indexes=code_indexes,
         knowledge_docs=knowledge_docs,
-        release_candidates=selected_candidates,
+        release_candidates=(),
         created_by=created_by,
         created_at=release_time,
         release_notes=release_notes,
@@ -373,42 +378,6 @@ def _collect_source_paths(
     for script in knowledge_map.scripts:
         add(script.source_path)
     return ordered_paths
-
-
-def _resolve_release_candidates(project_root: Path, candidate_ids: Iterable[str]) -> list[ReleaseCandidate]:
-    normalized = [str(candidate_id or '').strip() for candidate_id in candidate_ids if str(candidate_id or '').strip()]
-    if not normalized:
-        return []
-
-    try:
-        available_candidates = {
-            candidate.candidate_id: candidate
-            for candidate in list_release_candidates(project_root)
-        }
-    except KnowledgeReleaseCandidateStoreError as exc:
-        raise KnowledgeReleasePrerequisiteError(str(exc)) from exc
-
-    selected_candidates: list[ReleaseCandidate] = []
-    seen: set[str] = set()
-    for candidate_id in normalized:
-        if candidate_id in seen:
-            continue
-        seen.add(candidate_id)
-
-        candidate = available_candidates.get(candidate_id)
-        if candidate is None:
-            raise KnowledgeReleasePrerequisiteError(f'Release candidate not found: {candidate_id}')
-        if candidate.status != 'accepted':
-            raise KnowledgeReleasePrerequisiteError(
-                f'Release candidate must be accepted: {candidate_id} ({candidate.status})'
-            )
-        if not candidate.selected:
-            raise KnowledgeReleasePrerequisiteError(
-                f'Release candidate must be selected for build: {candidate_id}'
-            )
-        selected_candidates.append(candidate)
-
-    return selected_candidates
 
 
 def _load_current_table_indexes(project_root: Path) -> list[TableIndex]:

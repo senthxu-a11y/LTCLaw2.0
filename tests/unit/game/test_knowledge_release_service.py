@@ -8,7 +8,6 @@ import pytest
 
 from ltclaw_gy_x.game.knowledge_formal_map_store import save_formal_knowledge_map
 from ltclaw_gy_x.game.knowledge_release_builders import build_minimal_map, compute_map_hash
-from ltclaw_gy_x.game.knowledge_release_candidate_store import append_release_candidate
 from ltclaw_gy_x.game.knowledge_release_service import (
     KnowledgeProjectRootNotFoundError,
     KnowledgeReleasePrerequisiteError,
@@ -33,7 +32,7 @@ from ltclaw_gy_x.game.models import (
 from ltclaw_gy_x.game.paths import (
     get_code_index_dir,
     get_formal_map_path,
-    get_project_store_dir,
+    get_release_candidates_path,
     get_release_dir,
     get_table_indexes_path,
 )
@@ -267,6 +266,10 @@ def test_build_knowledge_release_creates_release_from_existing_indexes(monkeypat
     assert result.status == 'ready'
     assert result.map_source == 'provided'
     assert result.warnings == ()
+    assert (result.release_dir / 'map.json').exists()
+    assert (result.release_dir / 'indexes' / 'table_schema.jsonl').exists()
+    assert (result.release_dir / 'indexes' / 'doc_knowledge.jsonl').exists()
+    assert (result.release_dir / 'indexes' / 'script_evidence.jsonl').exists()
 
 
 def test_build_knowledge_release_rejects_missing_project_root(tmp_path):
@@ -493,88 +496,51 @@ def test_build_knowledge_release_from_current_indexes_does_not_touch_svn(monkeyp
     assert original_read_text(svn_marker, encoding='utf-8') == 'svn metadata\n'
 
 
-def test_build_knowledge_release_from_current_indexes_includes_selected_candidates(monkeypatch, tmp_path):
-    working_root, workspace_dir, project_root = _prepare_safe_build(monkeypatch, tmp_path, 'release-baseline-candidate')
-    append_release_candidate(project_root, _release_candidate())
+def test_build_knowledge_release_from_current_indexes_rejects_proposal_candidate_ids(monkeypatch, tmp_path):
+    _, workspace_dir, project_root = _prepare_safe_build(monkeypatch, tmp_path, 'release-baseline-candidate')
+
+    with pytest.raises(KnowledgeReleasePrerequisiteError, match='Release build does not accept draft or proposal candidates'):
+        build_knowledge_release_from_current_indexes(
+            project_root,
+            workspace_dir,
+            'release-safe-with-candidate',
+            bootstrap=True,
+            candidate_ids=['candidate-accepted'],
+        )
+
+
+def test_build_knowledge_release_from_current_indexes_does_not_read_proposal_candidates(monkeypatch, tmp_path):
+    _, workspace_dir, project_root = _prepare_safe_build(monkeypatch, tmp_path, 'release-baseline-no-proposal-read')
+    release_candidates_path = get_release_candidates_path(project_root)
+    release_candidates_path.parent.mkdir(parents=True, exist_ok=True)
+    release_candidates_path.write_text('{"candidate_id":"candidate-accepted"}\n', encoding='utf-8')
+
+    original_read_text = Path.read_text
+    original_read_bytes = Path.read_bytes
+
+    def _guard_read_text(self: Path, *args, **kwargs):
+        if self.resolve(strict=False) == release_candidates_path.resolve(strict=False):
+            raise AssertionError('release build must not read draft/proposal candidates')
+        return original_read_text(self, *args, **kwargs)
+
+    def _guard_read_bytes(self: Path, *args, **kwargs):
+        if self.resolve(strict=False) == release_candidates_path.resolve(strict=False):
+            raise AssertionError('release build must not read draft/proposal candidates')
+        return original_read_bytes(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', _guard_read_text)
+    monkeypatch.setattr(Path, 'read_bytes', _guard_read_bytes)
 
     result = build_knowledge_release_from_current_indexes(
         project_root,
         workspace_dir,
-        'release-safe-with-candidate',
+        'release-safe-no-proposal-read',
         bootstrap=True,
-        candidate_ids=['candidate-accepted'],
     )
 
-    evidence_path = result.release_dir / 'indexes' / 'candidate_evidence.jsonl'
-    evidence_payload = [json.loads(line) for line in evidence_path.read_text(encoding='utf-8').splitlines() if line.strip()]
-    assert result.artifacts['candidate_evidence'].path == 'indexes/candidate_evidence.jsonl'
-    assert result.artifacts['candidate_evidence'].count == 1
-    assert evidence_payload == [
-        {
-            'candidate_id': 'candidate-accepted',
-            'created_at': '2026-01-02T12:00:00Z',
-            'project_key': get_project_store_dir(project_root).name,
-            'schema_version': 'candidate-evidence-record.v1',
-            'selected': True,
-            'source_hash': 'sha256:candidate-accepted',
-            'source_refs': ['KB/CombatApproved.md', 'Tables/SkillTable.xlsx'],
-            'status': 'accepted',
-            'test_plan_id': 'candidate-accepted-plan',
-            'title': 'candidate-accepted title',
-        }
-    ]
-    assert get_current_release(project_root).release_id == 'release-baseline-candidate'
-    assert not (result.release_dir / 'Tables' / 'SkillTable.xlsx').exists()
-    assert not (result.release_dir / 'KB' / 'CombatApproved.md').exists()
-
-
-@pytest.mark.parametrize(
-    ('candidate', 'candidate_ids', 'message'),
-    [
-        (None, ['missing-candidate'], 'Release candidate not found: missing-candidate'),
-        (_release_candidate(candidate_id='candidate-pending', status='pending'), ['candidate-pending'], r'Release candidate must be accepted: candidate-pending \(pending\)'),
-        (_release_candidate(candidate_id='candidate-rejected', status='rejected'), ['candidate-rejected'], r'Release candidate must be accepted: candidate-rejected \(rejected\)'),
-        (_release_candidate(candidate_id='candidate-unselected', selected=False), ['candidate-unselected'], 'Release candidate must be selected for build: candidate-unselected'),
-    ],
-)
-def test_build_knowledge_release_from_current_indexes_rejects_invalid_candidates(
-    monkeypatch,
-    tmp_path,
-    candidate,
-    candidate_ids,
-    message,
-):
-    _, workspace_dir, project_root = _prepare_safe_build(monkeypatch, tmp_path, 'release-baseline-invalid-candidate')
-    if candidate is not None:
-        append_release_candidate(project_root, candidate)
-
-    with pytest.raises(KnowledgeReleasePrerequisiteError, match=message):
-        build_knowledge_release_from_current_indexes(
-            project_root,
-            workspace_dir,
-            'release-safe-invalid-candidate',
-            bootstrap=True,
-            candidate_ids=candidate_ids,
-        )
-
-
-def test_build_knowledge_release_from_current_indexes_rejects_candidate_source_ref_escape(monkeypatch, tmp_path):
-    working_root, workspace_dir, project_root = _prepare_safe_build(monkeypatch, tmp_path, 'release-baseline-invalid-path')
-    release_candidates_path = working_root / 'game_data' / 'projects' / get_project_store_dir(project_root).name / 'project' / 'pending' / 'release_candidates.jsonl'
-    release_candidates_path.parent.mkdir(parents=True, exist_ok=True)
-    release_candidates_path.write_text(
-        json.dumps(_release_candidate(candidate_id='candidate-bad-path', source_refs=['../Secrets.txt']).model_dump(mode='json'), ensure_ascii=False) + '\n',
-        encoding='utf-8',
-    )
-
-    with pytest.raises(KnowledgeReleasePrerequisiteError, match=r"Invalid release candidate record at line 1: Invalid source path: '\.\./Secrets\.txt'"):
-        build_knowledge_release_from_current_indexes(
-            project_root,
-            workspace_dir,
-            'release-safe-invalid-path',
-            bootstrap=True,
-            candidate_ids=['candidate-bad-path'],
-        )
+    assert result.manifest.release_id == 'release-safe-no-proposal-read'
+    assert result.artifacts['candidate_evidence'].count == 0
+    assert not (result.release_dir / 'indexes' / 'candidate_evidence.jsonl').exists()
 
 
 def test_build_knowledge_release_from_current_indexes_uses_current_release_docs_without_kb(monkeypatch, tmp_path):

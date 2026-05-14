@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from ltclaw_gy_x.app.agent_context import get_agent_for_request
-from ltclaw_gy_x.app.routers.game_svn import router
+from ltclaw_gy_x.app.routers.game_svn import SVN_FROZEN_REASON, router
 from ltclaw_gy_x.game.models import ChangeSet
 def _workspace(service):
     return SimpleNamespace(
@@ -71,6 +71,20 @@ async def test_status_returns_frozen_shape_when_configured(app, client):
     assert body["disabled"] is True
     assert body["running"] is False
     assert body["current_rev"] is None
+    assert body["reason"] == SVN_FROZEN_REASON
+
+
+@pytest.mark.asyncio
+async def test_status_does_not_call_legacy_svn_info(app, client):
+    svn_info = AsyncMock(return_value={"revision": 999})
+    service = _make_service()
+    service.svn = SimpleNamespace(info=svn_info)
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+    async with client:
+        resp = await client.get("/api/game/svn/status")
+
+    assert resp.status_code == 200
+    svn_info.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -81,6 +95,7 @@ async def test_sync_returns_frozen_error_for_consumer(app, client):
         resp = await client.post("/api/game/svn/sync")
     assert resp.status_code == 409
     assert resp.json()["detail"]["disabled"] is True
+    assert resp.json()["detail"]["reason"] == SVN_FROZEN_REASON
 
 
 @pytest.mark.asyncio
@@ -170,3 +185,4 @@ async def test_stream_logs_returns_disabled_event(app, client):
         resp = await client.get("/api/game/svn/log/stream")
     assert resp.status_code == 200
     assert "disabled" in resp.text
+    assert SVN_FROZEN_REASON in resp.text

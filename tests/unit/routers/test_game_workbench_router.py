@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from ltclaw_gy_x.app.agent_context import get_agent_for_request
+from ltclaw_gy_x.app.capabilities import get_role_template_capabilities
 from ltclaw_gy_x.app.routers import game_workbench as workbench_router_module
 from ltclaw_gy_x.app.routers.game_workbench import router
 from ltclaw_gy_x.game.change_applier import ApplyError
@@ -337,7 +338,20 @@ def test_source_write_uses_injected_capabilities_and_calls_wrapper(monkeypatch):
             status_code=200,
             payload={
                 "success": True,
+                "svn_update_required": True,
+                "svn_update_warning": "manual svn update",
+                "release_id_at_write": "release-001",
                 "source_files": ["tables/Hero.csv"],
+                "changes": [
+                    {
+                        "op": "update_cell",
+                        "table": "Hero",
+                        "row_id": 1,
+                        "field": "HP",
+                        "old_value": 100,
+                        "new_value": 120,
+                    }
+                ],
                 "audit_recorded": True,
             },
         )
@@ -357,9 +371,105 @@ def test_source_write_uses_injected_capabilities_and_calls_wrapper(monkeypatch):
         )
 
     assert response.status_code == 200
-    assert response.json()["success"] is True
+    assert response.json() == {
+        "success": True,
+        "svn_update_required": True,
+        "svn_update_warning": "manual svn update",
+        "release_id_at_write": "release-001",
+        "source_files": ["tables/Hero.csv"],
+        "changes": [
+            {
+                "op": "update_cell",
+                "table": "Hero",
+                "row_id": 1,
+                "field": "HP",
+                "old_value": 100,
+                "new_value": 120,
+            }
+        ],
+        "audit_recorded": True,
+    }
     assert captured["reason"] == "write source"
     assert captured["ops"][0].op == "update_cell"
+
+
+def test_source_write_route_surfaces_manual_svn_boundary_copy(monkeypatch):
+    async def _override(request: Request):
+        request.state.capabilities = {"workbench.source.write"}
+        return _ws(SimpleNamespace(change_applier=SimpleNamespace()))
+
+    async def _write(self, *, ops, reason):
+        return WorkbenchSourceWriteOutcome(
+            ok=True,
+            status_code=200,
+            payload={
+                "success": True,
+                "svn_update_required": True,
+                "svn_update_warning": "Before source write, manually run SVN Update in your working copy. The server does not run SVN update, commit, or revert for you.",
+                "release_id_at_write": None,
+                "source_files": ["tables/Hero.csv"],
+                "changes": [],
+                "audit_recorded": True,
+            },
+        )
+
+    monkeypatch.setattr(workbench_router_module.WorkbenchSourceWriteService, "write", _write)
+    app = FastAPI()
+    app.include_router(router, prefix="/api")
+    app.dependency_overrides[get_agent_for_request] = _override
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/game/workbench/source-write",
+            json={
+                "ops": [{"op": "update_cell", "table": "Hero", "row_id": 1, "field": "HP", "new_value": 120}],
+                "reason": "write source",
+            },
+        )
+
+    assert response.status_code == 200
+    assert "SVN Update" in response.json()["svn_update_warning"]
+    assert "commit" in response.json()["svn_update_warning"]
+    assert "revert" in response.json()["svn_update_warning"]
+
+
+@pytest.mark.parametrize('role', ['source_writer', 'admin'])
+def test_source_write_allows_role_templates_with_write_capability(monkeypatch, role):
+    captured = {}
+
+    async def _write(self, *, ops, reason):
+        captured['ops'] = ops
+        captured['reason'] = reason
+        return WorkbenchSourceWriteOutcome(
+            ok=True,
+            status_code=200,
+            payload={
+                'success': True,
+                'svn_update_required': True,
+                'svn_update_warning': 'manual svn update',
+                'release_id_at_write': None,
+                'source_files': ['tables/Hero.csv'],
+                'changes': [],
+                'audit_recorded': True,
+            },
+        )
+
+    monkeypatch.setattr(workbench_router_module.WorkbenchSourceWriteService, 'write', _write)
+    workspace = _ws(SimpleNamespace(change_applier=SimpleNamespace()))
+
+    with TestClient(_build_app(workspace, capabilities=set(get_role_template_capabilities(role)))) as client:
+        response = client.post(
+            '/api/game/workbench/source-write',
+            json={
+                'ops': [{'op': 'update_cell', 'table': 'Hero', 'row_id': 1, 'field': 'HP', 'new_value': 120}],
+                'reason': 'write source',
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()['success'] is True
+    assert captured['reason'] == 'write source'
+    assert captured['ops'][0].op == 'update_cell'
 
 
 def test_source_write_surfaces_wrapper_failure_and_does_not_trigger_release_calls(monkeypatch):
@@ -369,6 +479,11 @@ def test_source_write_surfaces_wrapper_failure_and_does_not_trigger_release_call
             status_code=400,
             payload={
                 "message": "delete_row is blocked in workbench source write",
+                "svn_update_required": True,
+                "svn_update_warning": "manual svn update",
+                "release_id_at_write": None,
+                "source_files": [],
+                "changes": [],
                 "audit_recorded": True,
             },
         )
@@ -402,6 +517,68 @@ def test_source_write_surfaces_wrapper_failure_and_does_not_trigger_release_call
     assert response.status_code == 400
     assert response.json()["detail"]["message"] == "delete_row is blocked in workbench source write"
     assert response.json()["detail"]["audit_recorded"] is True
+
+
+def test_source_write_success_does_not_trigger_rebuild_release_publish_rag_or_svn(monkeypatch):
+    async def _write(self, *, ops, reason):
+        return WorkbenchSourceWriteOutcome(
+            ok=True,
+            status_code=200,
+            payload={
+                "success": True,
+                "svn_update_required": True,
+                "svn_update_warning": "manual svn update",
+                "release_id_at_write": None,
+                "source_files": ["tables/Hero.csv"],
+                "changes": [
+                    {
+                        "op": "update_cell",
+                        "table": "Hero",
+                        "row_id": 1,
+                        "field": "HP",
+                        "old_value": 100,
+                        "new_value": 120,
+                    }
+                ],
+                "audit_recorded": True,
+            },
+        )
+
+    monkeypatch.setattr(workbench_router_module.WorkbenchSourceWriteService, "write", _write)
+    workspace = _ws(
+        SimpleNamespace(
+            change_applier=SimpleNamespace(),
+            rebuild_indexes=pytest.fail,
+            build_release=pytest.fail,
+            publish_release=pytest.fail,
+            rebuild_rag=pytest.fail,
+            svn_update=pytest.fail,
+            svn_commit=pytest.fail,
+            svn_revert=pytest.fail,
+            start_svn_watcher=pytest.fail,
+        )
+    )
+
+    async def _override(request: Request):
+        request.state.capabilities = {"workbench.source.write"}
+        return workspace
+
+    app = FastAPI()
+    app.include_router(router, prefix="/api")
+    app.dependency_overrides[get_agent_for_request] = _override
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/game/workbench/source-write",
+            json={
+                "ops": [{"op": "update_cell", "table": "Hero", "row_id": 1, "field": "HP", "new_value": 120}],
+                "reason": "write source",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["svn_update_required"] is True
 
 
 def test_workbench_suggest_uses_workbench_suggest_model_type(monkeypatch):
@@ -490,6 +667,7 @@ def test_workbench_suggest_surfaces_structured_router_failure(monkeypatch):
 
     assert response.status_code == 502
     assert response.json()["detail"]["error_code"] == "no_active_model"
+    assert "changes" not in response.json()
 
 
 def test_workbench_suggest_invalid_model_output_returns_explicit_error(monkeypatch):
@@ -518,6 +696,90 @@ def test_workbench_suggest_invalid_model_output_returns_explicit_error(monkeypat
         "message": "Workbench suggest model returned invalid JSON.",
         "raw": "not valid json at all",
     }
+
+
+def test_workbench_suggest_empty_model_output_returns_explicit_error(monkeypatch):
+    async def _call_model_result(prompt, model_type="default"):
+        return SimpleNamespace(
+            ok=True,
+            text='   ',
+            error_code=None,
+            message=None,
+        )
+
+    service = SimpleNamespace(
+        _model_router=lambda: SimpleNamespace(call_model_result=_call_model_result),
+    )
+    workspace = _ws(service)
+
+    with TestClient(_build_app(workspace)) as client:
+        response = client.post(
+            "/api/game/workbench/suggest",
+            json={"user_intent": "把 Hero 表 HP 提高", "context_tables": [], "current_pending": [], "chat_history": []},
+        )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == {
+        "error_code": "empty_model_output",
+        "message": "Workbench suggest model returned empty output.",
+        "raw": "",
+    }
+
+
+def test_workbench_suggest_runtime_only_change_has_no_formal_release_id(monkeypatch):
+    monkeypatch.setattr(
+        workbench_router_module,
+        'build_workbench_suggest_formal_context',
+        lambda project_root, user_intent: {
+            'status': 'no_current_release',
+            'release_id': None,
+            'reason': 'no_current_release',
+            'evidence_catalog': [],
+            'allowed_evidence_refs': [],
+        },
+    )
+
+    async def _call_model_result(prompt, model_type='default'):
+        return SimpleNamespace(
+            ok=True,
+            text='{"message":"runtime only","changes":[{"table":"Hero","row_id":1,"field":"HP","new_value":120,"reason":"Use current workbench rows only.","confidence":0.5,"uses_draft_overlay":true,"evidence_refs":["doc:fake"]}]}',
+            error_code=None,
+            message=None,
+        )
+
+    async def _get_table(name):
+        return SimpleNamespace(
+            table_name=name,
+            primary_key='ID',
+            ai_summary='Hero summary.',
+            fields=[SimpleNamespace(name='ID', type='int', description='id'), SimpleNamespace(name='HP', type='int', description='hp')],
+        )
+
+    service = SimpleNamespace(
+        query_router=SimpleNamespace(get_table=_get_table, dependencies_of=lambda _name: {'upstream': [], 'downstream': []}),
+        change_applier=SimpleNamespace(read_rows=lambda *_args: {'headers': ['ID', 'HP'], 'rows': [[1, 100]], 'total': 1}),
+        _model_router=lambda: SimpleNamespace(call_model_result=_call_model_result),
+    )
+
+    with TestClient(_build_app(_ws(service))) as client:
+        response = client.post(
+            '/api/game/workbench/suggest',
+            json={
+                'user_intent': '提高 Hero HP',
+                'context_tables': ['Hero'],
+                'current_pending': [{'table': 'Hero', 'row_id': 1, 'field': 'HP', 'new_value': 115}],
+                'chat_history': [],
+            },
+        )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body['formal_context_status'] == 'no_current_release'
+    assert body['evidence_refs'] == []
+    assert body['changes'][0]['evidence_refs'] == []
+    assert body['changes'][0]['source_release_id'] is None
+    assert body['changes'][0]['validation_status'] == 'validated_runtime_only'
+    assert body['changes'][0]['uses_draft_overlay'] is True
 
 
 def test_workbench_suggest_no_current_release_keeps_formal_evidence_empty(monkeypatch):

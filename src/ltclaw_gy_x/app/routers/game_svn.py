@@ -12,7 +12,7 @@ from ...app.workspace.workspace import Workspace
 router = APIRouter(prefix="/game/svn", tags=["game-svn"])
 
 SVN_FROZEN_REASON = (
-    "SVN runtime is frozen in P0-01. Run update/commit/checks outside LTClaw and keep using the local project root here."
+    "SVN runtime is frozen in P0-01. Run SVN Update, Commit, and Revert outside LTClaw and keep using the local project root here."
 )
 
 
