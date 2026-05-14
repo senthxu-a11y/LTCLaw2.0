@@ -37,23 +37,35 @@ bash scripts/docker_build.sh [IMAGE_TAG] [EXTRA_ARGS...]
 
 ```bash
 # Run all tests
-python scripts/run_tests.py
+.venv/bin/python scripts/run_tests.py
 
 # Run all unit tests
-python scripts/run_tests.py -u
+.venv/bin/python scripts/run_tests.py -u
 
 # Run unit tests for a specific module
-python scripts/run_tests.py -u providers
+.venv/bin/python scripts/run_tests.py -u providers
 
 # Run integration tests
-python scripts/run_tests.py -i
+.venv/bin/python scripts/run_tests.py -i
 
 # Run all tests and generate a coverage report
-python scripts/run_tests.py -a -c
+.venv/bin/python scripts/run_tests.py -a -c
 
 # Run tests in parallel (requires pytest-xdist)
-python scripts/run_tests.py -p
+.venv/bin/python scripts/run_tests.py -p
 
 # Show help
-python scripts/run_tests.py -h
+.venv/bin/python scripts/run_tests.py -h
 ```
+
+- This repository should use the local virtualenv Python at `.venv/bin/python`.
+
+## Console Build
+
+```bash
+cd console
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+- `console/pnpm-workspace.yaml` explicitly allows `esbuild` build scripts so fresh installs can complete without an interactive approval step.

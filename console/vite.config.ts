@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   // Empty = same-origin; frontend and backend served together, no hardcoded host.
   // Use a dedicated Vite-prefixed key so unrelated shell BASE_URL values don't leak into the build.
   const apiBaseUrl = env.VITE_API_BASE_URL ?? "";
+  const devProxyTarget = apiBaseUrl || "http://127.0.0.1:8088";
 
   return {
     define: {
@@ -34,9 +35,12 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "0.0.0.0",
       port: 5173,
-    },
-    optimizeDeps: {
-      include: ["diff"],
+      proxy: {
+        "/api": {
+          target: devProxyTarget,
+          changeOrigin: true,
+        },
+      },
     },
     build: {
       // Output to QwenPaw's console directory,
