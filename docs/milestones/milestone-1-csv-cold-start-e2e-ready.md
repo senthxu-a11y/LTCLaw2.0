@@ -102,23 +102,23 @@ ID,Name,HP,Attack
 
 ## 5. 人工验收结果模板
 
-- 测试时间：
-- 当前 commit：
-- 前端访问地址：
-- 后端地址：
-- Vite proxy target：
-- Frontend Build ID：
-- Project Root：
-- Project Bundle Root：
-- Cold-start Job ID：
-- Candidate refs：
-- Formal Map 状态：
-- Release ID：
-- Current Release：
-- RAG 测试问题：
-- RAG 回答摘要：
-- NumericWorkbench 表读取结果：
-- 结论：
+- 测试时间：2026-05-15
+- 当前 commit：7dadb49a641a76d437e0f1d225b0017aa7ed9152（Milestone 1 业务基线，docs freeze 之前的最新功能提交）
+- 前端访问地址：http://127.0.0.1:5174
+- 后端地址：http://127.0.0.1:18080
+- Vite proxy target：http://127.0.0.1:18080
+- Frontend Build ID：待人工补充（当前 Vite dev 默认值为 `dev-frontend`）
+- Project Root：examples/minimal_project
+- Project Bundle Root：待人工补充
+- Cold-start Job ID：待人工补充
+- Candidate refs：latest.json、latest_diff.json
+- Formal Map 状态：已人工确认可读取并可显式保存成功
+- Release ID：待人工补充
+- Current Release：已人工确认可显式发布成功，具体 release id 待人工补充
+- RAG 测试问题：HeroTable 这张表有哪些字段？主键是什么？
+- RAG 回答摘要：已人工确认可回答 HeroTable 结构，并能命中当前 release 上下文；具体回答文本待人工补充
+- NumericWorkbench 表读取结果：已人工确认可读取 HeroTable；运行时可见表头 `ID, Name, HP, Attack`，样例行 `1, HeroA, 100, 20` 可被读取，`把hp翻倍` 场景可生成 HP=200 的工作台建议
+- 结论：人工验收通过。Milestone 1 达到 CSV Cold-start E2E Ready，可冻结为项目基线
 
 ## 6. 已验证能力
 
