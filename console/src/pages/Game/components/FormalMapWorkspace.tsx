@@ -30,6 +30,7 @@ import styles from "../GameProject.module.less";
 const { Text } = Typography;
 
 const NO_CURRENT_RELEASE_DETAIL = "No current knowledge release is set";
+const NO_SOURCE_CANDIDATE_DETAIL = "No source candidate map is available";
 const LOCAL_PROJECT_DIRECTORY_ERROR = "Local project directory not configured";
 const FORMAL_MAP_STATUS_OPTIONS: Array<{ label: KnowledgeStatus; value: KnowledgeStatus }> = [
   { label: "active", value: "active" },
@@ -214,14 +215,44 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
     [resolveMapLoadError, t],
   );
 
+  const fetchLatestSourceCandidate = useCallback(
+    async (agentId: string) => {
+      setSourceCandidateLoading(true);
+      setSourceCandidateError(null);
+      try {
+        const response = await gameKnowledgeReleaseApi.getLatestSourceCandidate(agentId);
+        setSourceCandidateResult(response);
+      } catch (err) {
+        const messageText = resolveMapLoadError(
+          err,
+          t("gameProject.mapBuildReviewFailed", {
+            defaultValue: "Failed to load source candidate review",
+          }),
+        );
+        setSourceCandidateResult(null);
+        if (messageText.includes(NO_SOURCE_CANDIDATE_DETAIL)) {
+          setSourceCandidateError(null);
+        } else {
+          setSourceCandidateError(messageText);
+        }
+      } finally {
+        setSourceCandidateLoading(false);
+      }
+    },
+    [resolveMapLoadError, t],
+  );
+
   const fetchMapReviewData = useCallback(
     async (agentId: string) => {
       const tasks: Array<Promise<void>> = [];
       if (!hasExplicitCapabilityContext || canReadCandidate) {
         tasks.push(fetchReleaseSnapshot(agentId));
+        tasks.push(fetchLatestSourceCandidate(agentId));
       } else {
         setReleaseSnapshotResult(null);
         setReleaseSnapshotError(null);
+        setSourceCandidateResult(null);
+        setSourceCandidateError(null);
       }
       if (!hasExplicitCapabilityContext || canReadMap) {
         tasks.push(fetchFormalMap(agentId));
@@ -234,7 +265,7 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
         await Promise.all(tasks);
       }
     },
-    [canReadCandidate, canReadMap, fetchFormalMap, fetchReleaseSnapshot, hasExplicitCapabilityContext],
+    [canReadCandidate, canReadMap, fetchFormalMap, fetchLatestSourceCandidate, fetchReleaseSnapshot, hasExplicitCapabilityContext],
   );
 
   const handleBuildSourceCandidate = useCallback(async () => {

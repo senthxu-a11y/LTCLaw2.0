@@ -14,6 +14,7 @@ from ...game.knowledge_formal_map_store import (
     load_formal_knowledge_map,
     save_formal_knowledge_map,
 )
+from ...game.knowledge_source_candidate_store import load_latest_source_candidate
 from ...game.cold_start_job import (
     ColdStartJobCreateResponse,
     ColdStartJobState,
@@ -278,11 +279,7 @@ def _build_readiness_payload(project_root: Path | None) -> BuildReadinessRespons
 def _candidate_refs(candidate_map: KnowledgeMap | None) -> list[str]:
     if candidate_map is None:
         return []
-    refs = [f'table:{table.table_id}' for table in candidate_map.tables]
-    refs.extend(f'doc:{doc.doc_id}' for doc in candidate_map.docs)
-    refs.extend(f'script:{script.script_id}' for script in candidate_map.scripts)
-    refs.extend(f'system:{system.system_id}' for system in candidate_map.systems)
-    return sorted(refs)
+    return sorted(f'table:{table.table_id}' for table in candidate_map.tables)
 
 
 def _serialize_source_candidate_response(
@@ -304,6 +301,27 @@ async def get_build_readiness(request: Request) -> BuildReadinessResponse:
     require_capability(request, 'knowledge.candidate.read')
     project_root = _project_root_or_none(_game_service_or_404(workspace))
     return _build_readiness_payload(project_root)
+
+
+@router.get('/candidate/source-latest', response_model=SourceCandidateResponse)
+async def get_latest_source_candidate(request: Request) -> SourceCandidateResponse:
+    workspace = await get_agent_for_request(request)
+    require_capability(request, 'knowledge.candidate.read')
+    project_root = _project_root_or_400(_game_service_or_404(workspace))
+
+    candidate = load_latest_source_candidate(project_root)
+    if candidate is None:
+        raise HTTPException(status_code=404, detail='No source candidate map is available')
+
+    readiness = _build_readiness_payload(project_root)
+    diagnostics = CandidateDiagnostics(
+        raw_table_index_count=readiness.raw_table_index_count,
+        canonical_table_count=readiness.canonical_table_count,
+        canonical_tables_dir=readiness.canonical_tables_dir or '',
+        blocking_reason=readiness.blocking_reason,
+        next_action=readiness.next_action,
+    )
+    return _serialize_source_candidate_response(candidate, diagnostics=diagnostics)
 
 
 @router.get('/candidate', response_model=KnowledgeMapCandidateResult)

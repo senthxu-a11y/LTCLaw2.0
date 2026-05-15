@@ -88,6 +88,10 @@ export const gameKnowledgeReleaseApi = {
     return request<KnowledgeMapCandidateResponse>(`/agents/${agentId}/game/knowledge/map/candidate`);
   },
 
+  async getLatestSourceCandidate(agentId: string): Promise<KnowledgeMapCandidateResponse> {
+    return request<KnowledgeMapCandidateResponse>(`/agents/${agentId}/game/knowledge/map/candidate/source-latest`);
+  },
+
   async buildMapCandidateFromSource(
     agentId: string,
     payload: BuildSourceCandidateRequest = {},

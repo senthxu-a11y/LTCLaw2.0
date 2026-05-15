@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from .canonical_facts_committer import CanonicalFactsCommitter
 from .config import load_project_tables_source_config
 from .knowledge_formal_map_store import load_formal_knowledge_map
+from .knowledge_source_candidate_store import save_latest_source_candidate
 from .knowledge_map_candidate import (
     build_map_candidate_from_canonical_facts,
     build_map_diff_review,
@@ -23,7 +24,6 @@ from .knowledge_map_candidate import (
 )
 from .models import KnowledgeMap
 from .paths import (
-    get_project_candidate_map_path,
     get_project_canonical_tables_dir,
     get_project_key,
     get_project_raw_table_indexes_path,
@@ -457,7 +457,6 @@ def _run_cold_start_job(project_root: Path, job_id: str, cancel_requested: threa
         state.warnings.extend([item for item in candidate_result.warnings if item not in state.warnings])
         state.counts.candidate_table_count = len(candidate_result.map.tables) if candidate_result.map is not None else 0
         state.candidate_refs = _serialize_candidate_refs(candidate_result.map)
-        state.partial_outputs["candidate_map_path"] = str(get_project_candidate_map_path(project_root))
         state.partial_outputs["candidate_mode"] = candidate_result.mode
         if candidate_result.map is None or candidate_result.mode == "no_canonical_facts":
             state.status = "failed"
@@ -488,9 +487,25 @@ def _run_cold_start_job(project_root: Path, job_id: str, cancel_requested: threa
             base_map_source=base_map_source,
             warnings=candidate_result.warnings,
         )
+
+        current_stage = "persisting_candidate_map"
+        state = _update_job_state(
+            project_root,
+            job_id,
+            cancel_requested,
+            started_at,
+            stage=current_stage,
+            progress=95,
+            message="Persisting source candidate map.",
+            next_action="review_candidate_map",
+        )
+        candidate_result.diff_review = diff_review
+        candidate_path = save_latest_source_candidate(project_root, candidate_result, job_id=job_id)
+
         state = _load_state_or_raise(project_root, job_id)
         _ensure_not_cancelled(state, cancel_requested)
         _ensure_not_timed_out(state, started_at)
+        state.partial_outputs["candidate_map_path"] = str(candidate_path)
         state.partial_outputs["diff_review"] = diff_review.model_dump(mode="json")
         state.status = "succeeded"
         state.stage = "done"

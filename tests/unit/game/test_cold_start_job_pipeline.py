@@ -5,10 +5,13 @@ from pathlib import Path
 
 from ltclaw_gy_x.game.cold_start_job import create_or_get_cold_start_job, load_cold_start_job
 from ltclaw_gy_x.game.config import ProjectTablesSourceConfig, save_project_tables_source_config
+from ltclaw_gy_x.game.knowledge_source_candidate_store import load_latest_source_candidate
 from ltclaw_gy_x.game.paths import (
+    get_project_candidate_map_path,
     get_project_canonical_table_schema_path,
     get_project_current_release_path,
     get_project_formal_map_canonical_path,
+    get_project_latest_map_diff_path,
     get_project_raw_table_index_path,
 )
 
@@ -63,5 +66,16 @@ def test_cold_start_job_pipeline_succeeds_for_single_csv_rule_only(tmp_path, mon
 
     assert get_project_raw_table_index_path(project_root, 'HeroTable').exists()
     assert get_project_canonical_table_schema_path(project_root, 'HeroTable').exists()
+    assert get_project_candidate_map_path(project_root).exists()
+    assert get_project_latest_map_diff_path(project_root).exists()
+
+    loaded_candidate = load_latest_source_candidate(project_root)
+    assert loaded_candidate is not None
+    assert loaded_candidate.map is not None
+    assert len(loaded_candidate.map.tables) == 1
+    assert loaded_candidate.map.tables[0].table_id == 'HeroTable'
+    assert loaded_candidate.diff_review is not None
+    assert 'table:HeroTable' in loaded_candidate.diff_review.added_refs
+
     assert not get_project_formal_map_canonical_path(project_root).exists()
     assert not get_project_current_release_path(project_root).exists()
