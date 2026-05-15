@@ -3,6 +3,8 @@ import type {
   ColdStartJobCreateResponse,
   ColdStartJobState,
   ProjectConfig, 
+  FrontendRuntimeInfo,
+  ProjectCapabilityStatus,
   ProjectSetupStatusResponse,
   ProjectTableSourceDiscoveryResponse,
   ProjectTablesSourceConfig,
@@ -58,6 +60,14 @@ export const gameApi = {
 
   async getProjectSetupStatus(agentId: string): Promise<ProjectSetupStatusResponse> {
     return request<ProjectSetupStatusResponse>(`/agents/${agentId}/game/project/setup-status`);
+  },
+
+  async getFrontendRuntimeInfo(): Promise<FrontendRuntimeInfo> {
+    return request<FrontendRuntimeInfo>(`/runtime/frontend-info`);
+  },
+
+  async getProjectCapabilityStatus(agentId: string): Promise<ProjectCapabilityStatus> {
+    return request<ProjectCapabilityStatus>(`/agents/${agentId}/game/project/capability-status`);
   },
 
   async saveProjectRoot(agentId: string, projectRoot: string): Promise<SaveProjectRootResponse> {

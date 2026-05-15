@@ -36,7 +36,7 @@ from .models import (
     ReleaseMapSource,
     TableIndex,
 )
-from .paths import get_code_index_dir, get_table_indexes_path
+from .paths import get_code_index_dir, get_project_raw_table_indexes_path, get_table_indexes_path
 
 
 class KnowledgeReleaseBuildServiceError(RuntimeError):
@@ -383,7 +383,9 @@ def _collect_source_paths(
 def _load_current_table_indexes(project_root: Path) -> list[TableIndex]:
     index_path = get_table_indexes_path(project_root)
     if not index_path.exists():
-        return []
+        index_path = get_project_raw_table_indexes_path(project_root)
+        if not index_path.exists():
+            return []
 
     try:
         payload = json.loads(index_path.read_text(encoding='utf-8'))

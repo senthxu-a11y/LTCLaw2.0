@@ -15,6 +15,8 @@ from ltclaw_gy_x.game.config import (
     SvnConfig,
     TableConvention,
 )
+from ltclaw_gy_x.game.models import TableIndex
+from ltclaw_gy_x.game.paths import get_project_raw_table_index_path
 
 
 def _project_config(svn_root: Path) -> ProjectConfig:
@@ -192,3 +194,51 @@ async def test_type_conversion_failure_raises_apply_error(sample_env):
         await applier.apply(
             _proposal(ChangeOp(op="update_cell", table="Hero", row_id=1, field="HP", new_value="abc"))
         )
+
+
+def test_read_rows_falls_back_to_project_raw_index(tmp_path):
+    svn_root = tmp_path / "svn"
+    tables_dir = svn_root / "Tables"
+    tables_dir.mkdir(parents=True)
+    hero_csv = tables_dir / "HeroTable.csv"
+    _write_csv(hero_csv, [["ID", "Name", "HP", "Attack"], [1, "HeroA", 100, 20]])
+
+    raw_index_path = get_project_raw_table_index_path(svn_root, "HeroTable")
+    raw_index_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_index_path.write_text(
+        TableIndex(
+            table_name="HeroTable",
+            source_path="Tables/HeroTable.csv",
+            source_hash="sha256:hero",
+            svn_revision=1,
+            system="core",
+            row_count=1,
+            header_row=1,
+            primary_key="ID",
+            ai_summary="Hero table",
+            ai_summary_confidence=0.1,
+            fields=[],
+            id_ranges=[],
+            last_indexed_at="2026-05-15T00:00:00Z",
+            indexer_model="rule_only",
+        ).model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+
+    project = ProjectConfig(
+        project=ProjectMeta(name="Test Game", engine="Unity", language="zh-CN"),
+        svn=SvnConfig(root=str(svn_root), poll_interval_seconds=300, jitter_seconds=30),
+        paths=[PathRule(path="Tables/*", semantic="table", system="core")],
+        filters=FilterConfig(include_ext=[".csv"], exclude_glob=[]),
+        table_convention=TableConvention(header_row=1, primary_key_field="ID"),
+        doc_templates={},
+        models={},
+    )
+    applier = ChangeApplier(project, svn_root)
+
+    payload = applier.read_rows("HeroTable", 0, 20)
+
+    assert payload["headers"] == ["ID", "Name", "HP", "Attack"]
+    assert payload["rows"] == [["1", "HeroA", "100", "20"]]
+    assert payload["source"] == "Tables/HeroTable.csv"
+

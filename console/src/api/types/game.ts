@@ -82,6 +82,10 @@ export interface ProjectSetupReadiness {
   next_action: string;
 }
 
+export interface EffectiveProjectSetupReadiness extends ProjectSetupReadiness {
+  source: "setup_status" | "discovery";
+}
+
 export interface ProjectSetupDiscoverySummary {
   status: "not_scanned" | "scanned";
   discovered_table_count: number;
@@ -93,12 +97,37 @@ export interface ProjectSetupDiscoverySummary {
 
 export interface ProjectSetupStatusResponse {
   project_root: string | null;
+  project_root_source?: string | null;
+  user_config_svn_local_root?: string | null;
+  project_config_svn_root?: string | null;
   project_root_exists: boolean;
   project_bundle_root: string | null;
   project_key: string | null;
   tables_config: ProjectTablesSourceConfig;
   discovery: ProjectSetupDiscoverySummary;
   build_readiness: ProjectSetupReadiness;
+}
+
+export interface FrontendRuntimeInfo {
+  console_static_dir: string | null;
+  console_static_source: string | null;
+  console_index: string | null;
+  console_index_mtime: string | null;
+  api_base: string;
+}
+
+export interface ProjectCapabilityStatus {
+  agent_id: string;
+  role: string;
+  capabilities: string[];
+  capability_source: string;
+  required_for_cold_start: Record<string, boolean>;
+  required_for_formal_map: Record<string, boolean>;
+  required_for_release: Record<string, boolean>;
+  config_paths: {
+    user_config_path: string;
+    legacy_user_config_path: string;
+  };
 }
 
 export interface SaveProjectRootResponse {

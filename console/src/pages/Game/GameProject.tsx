@@ -10,7 +10,9 @@ import { gameApi } from "../../api/modules/game";
 import { agentsApi } from "../../api/modules/agents";
 import type {
   ColdStartJobState,
+  FrontendRuntimeInfo,
   GameStorageSummary,
+  ProjectCapabilityStatus,
   ProjectSetupStatusResponse,
   ProjectTableSourceDiscoveryResponse,
   ProjectConfig,
@@ -24,10 +26,12 @@ import {
   buildProjectSetupDiagnosticsText,
   canStartRuleOnlyColdStartBuild,
   clearColdStartActiveJobId,
+  getEffectiveProjectSetupBuildReadiness,
   loadColdStartActiveJobId,
   saveColdStartActiveJobId,
   getAvailableColdStartTables,
   getProjectSetupDiscoverySummary,
+  isProjectSetupProjectRootDirty,
   isProjectSetupBuildBlocked,
   joinProjectSetupLines,
   splitProjectSetupLines,
@@ -68,6 +72,8 @@ export default function GameProject() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [storageSummary, setStorageSummary] = useState<GameStorageSummary | null>(null);
+  const [frontendRuntimeInfo, setFrontendRuntimeInfo] = useState<FrontendRuntimeInfo | null>(null);
+  const [projectCapabilityStatus, setProjectCapabilityStatus] = useState<ProjectCapabilityStatus | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSaving, setWizardSaving] = useState(false);
   const [wizardForm] = Form.useForm<{ id?: string; name: string }>();
@@ -117,13 +123,17 @@ export default function GameProject() {
     setLoading(true);
     setError(null);
     try {
-      const [projectConfig, userConfig, storage, projectSetupStatus] = await Promise.all([
+      const [projectConfig, userConfig, storage, projectSetupStatus, capabilityStatus] = await Promise.all([
         gameApi.getProjectConfig(selectedAgent),
         gameApi.getUserConfig(selectedAgent).catch(() => null),
         gameApi.getStorageSummary(selectedAgent).catch(() => null),
         gameApi.getProjectSetupStatus(selectedAgent).catch(() => null),
+        gameApi.getProjectCapabilityStatus(selectedAgent).catch(() => null),
       ]);
+      const runtimeInfo = await gameApi.getFrontendRuntimeInfo().catch(() => null);
       setStorageSummary(storage);
+      setFrontendRuntimeInfo(runtimeInfo);
+      setProjectCapabilityStatus(capabilityStatus);
       applySetupStatus(projectSetupStatus);
       setDiscoveryResult(null);
       if (projectConfig) {
@@ -182,6 +192,9 @@ export default function GameProject() {
       const response = await gameApi.saveProjectRoot(selectedAgent, projectRootInput.trim());
       applySetupStatus(response.setup_status);
       setDiscoveryResult(null);
+      setColdStartJob(null);
+      setActiveColdStartJobId("");
+      clearColdStartActiveJobId(selectedAgent);
       message.success(t("gameProject.projectRootSaved", { defaultValue: "Local Project Root 已保存。" }));
       await fetchConfig();
     } catch (err) {
@@ -207,6 +220,9 @@ export default function GameProject() {
       });
       applySetupStatus(response.setup_status);
       setDiscoveryResult(null);
+      setColdStartJob(null);
+      setActiveColdStartJobId("");
+      clearColdStartActiveJobId(selectedAgent);
       message.success(t("gameProject.tablesSourceSaved", { defaultValue: "Tables Source 已保存。" }));
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : t("gameProject.saveFailed");
@@ -386,8 +402,10 @@ export default function GameProject() {
 
   const discoverySummary = getProjectSetupDiscoverySummary(setupStatus, discoveryResult);
   const discoveryNotScanned = discoverySummary.status === "not_scanned";
+  const effectiveReadiness = getEffectiveProjectSetupBuildReadiness(setupStatus, discoveryResult);
   const buildBlocked = isProjectSetupBuildBlocked(setupStatus, discoveryResult);
   const canStartColdStartBuild = canStartRuleOnlyColdStartBuild(setupStatus, discoveryResult);
+  const projectRootDirty = isProjectSetupProjectRootDirty(projectRootInput, setupStatus);
   const coldStartProgress = toColdStartProgressView(coldStartJob);
   const availableTableFiles = getAvailableColdStartTables(discoveryResult);
   const recognizedButNotSupportedFiles = discoveryResult?.table_files.filter((item) => !item.cold_start_supported && item.status !== "unsupported") ?? [];
@@ -677,14 +695,101 @@ export default function GameProject() {
                     defaultValue: LOCAL_PROJECT_DIRECTORY_LABEL,
                   })}
                 />
+                {projectRootDirty ? (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message={t("gameProject.projectSetupProjectRootDirty", {
+                      defaultValue: "当前输入值与后端实际生效的 Project Root 不一致，保存后才会生效。",
+                    })}
+                    className={styles.mapReviewAlert}
+                  />
+                ) : null}
                 <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+                  <Descriptions.Item label={t("gameProject.projectSetupEffectiveProjectRoot", { defaultValue: "Effective Project Root" })}>
+                    {setupStatus?.project_root || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupProjectRootSource", { defaultValue: "Project Root Source" })}>
+                    {setupStatus?.project_root_source || "-"}
+                  </Descriptions.Item>
                   <Descriptions.Item label={t("gameProject.projectKey", { defaultValue: "Project Key" })}>
                     {setupStatus?.project_key || "-"}
                   </Descriptions.Item>
                   <Descriptions.Item label={t("gameProject.projectBundleRoot", { defaultValue: "Project Bundle Root" })}>
                     {setupStatus?.project_bundle_root || "-"}
                   </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupUserConfigRoot", { defaultValue: "user_config.svn_local_root" })}>
+                    {setupStatus?.user_config_svn_local_root || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupProjectConfigRoot", { defaultValue: "project_config.svn.root" })}>
+                    {setupStatus?.project_config_svn_root || "-"}
+                  </Descriptions.Item>
                 </Descriptions>
+              </div>
+
+              <div className={styles.projectSetupBlock}>
+                <div className={styles.projectSetupBlockHeader}>
+                  <Text strong>{t("gameProject.projectSetupFrontendRuntimeTitle", { defaultValue: "Frontend Runtime Info" })}</Text>
+                </div>
+                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+                  <Descriptions.Item label={t("gameProject.projectSetupFrontendBuildId", { defaultValue: "Frontend Build" })}>
+                    {import.meta.env.VITE_FRONTEND_BUILD_ID || "dev"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupFrontendBuildTime", { defaultValue: "Frontend Build Time" })}>
+                    {import.meta.env.VITE_FRONTEND_BUILD_TIME || "dev"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupFrontendApiBase", { defaultValue: "API Base" })}>
+                    {frontendRuntimeInfo?.api_base || "/api"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupFrontendStaticSource", { defaultValue: "Backend Static Source" })}>
+                    {frontendRuntimeInfo?.console_static_source || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupFrontendStaticDir", { defaultValue: "Backend Static Dir" })}>
+                    {frontendRuntimeInfo?.console_static_dir || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupFrontendIndexMtime", { defaultValue: "Index MTime" })}>
+                    {frontendRuntimeInfo?.console_index_mtime || "-"}
+                  </Descriptions.Item>
+                </Descriptions>
+              </div>
+
+              <div className={styles.projectSetupBlock}>
+                <div className={styles.projectSetupBlockHeader}>
+                  <Text strong>{t("gameProject.projectSetupCapabilityStatusTitle", { defaultValue: "Capability Status" })}</Text>
+                </div>
+                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityRole", { defaultValue: "Role" })}>
+                    {projectCapabilityStatus?.role || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupCapabilitySource", { defaultValue: "Capability Source" })}>
+                    {projectCapabilityStatus?.capability_source || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityColdStart", { defaultValue: "Cold-start" })}>
+                    {projectCapabilityStatus
+                      ? `${String(projectCapabilityStatus.required_for_cold_start["knowledge.candidate.read"])} / ${String(projectCapabilityStatus.required_for_cold_start["knowledge.candidate.write"])}`
+                      : "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityFormalMap", { defaultValue: "Formal Map" })}>
+                    {projectCapabilityStatus
+                      ? `${String(projectCapabilityStatus.required_for_formal_map["knowledge.map.read"])} / ${String(projectCapabilityStatus.required_for_formal_map["knowledge.map.edit"])}`
+                      : "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityRelease", { defaultValue: "Release" })}>
+                    {projectCapabilityStatus
+                      ? `${String(projectCapabilityStatus.required_for_release["knowledge.read"])} / ${String(projectCapabilityStatus.required_for_release["knowledge.build"])} / ${String(projectCapabilityStatus.required_for_release["knowledge.publish"])}`
+                      : "-"}
+                  </Descriptions.Item>
+                </Descriptions>
+                {projectCapabilityStatus && !projectCapabilityStatus.required_for_cold_start["knowledge.candidate.write"] ? (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message={t("gameProject.projectSetupCapabilityColdStartMissing", {
+                      defaultValue: "当前缺少 knowledge.candidate.write，Rule-only 冷启动写入请求会被拦截。",
+                    })}
+                    className={styles.mapReviewAlert}
+                  />
+                ) : null}
               </div>
 
               <div className={styles.projectSetupBlock}>
@@ -834,10 +939,13 @@ export default function GameProject() {
                 </div>
                 <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
                   <Descriptions.Item label={t("gameProject.projectSetupBlockingReason", { defaultValue: "Blocking Reason" })}>
-                    {setupStatus?.build_readiness.blocking_reason || "-"}
+                    {effectiveReadiness.blocking_reason || "-"}
                   </Descriptions.Item>
                   <Descriptions.Item label={t("gameProject.projectSetupNextAction", { defaultValue: "Next Action" })}>
-                    {setupStatus?.build_readiness.next_action || "-"}
+                    {effectiveReadiness.next_action || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupReadinessSource", { defaultValue: "Readiness Source" })}>
+                    {effectiveReadiness.source}
                   </Descriptions.Item>
                 </Descriptions>
                 {buildBlocked ? (

@@ -12,7 +12,7 @@ import openpyxl
 from .change_proposal import ChangeOp, ChangeProposal
 from .config import ProjectConfig
 from .models import TableIndex
-from .paths import get_tables_dir
+from .paths import get_project_raw_table_index_path, get_tables_dir
 from .table_indexer import TableIndexer
 
 
@@ -203,9 +203,15 @@ class ChangeApplier:
 
     def _resolve_source_from_index(self, table_name: str) -> Path | None:
         index_file = get_tables_dir(self.svn_root) / f"{table_name}.json"
-        if not index_file.exists():
+        if index_file.exists():
+            data = json.loads(index_file.read_text(encoding="utf-8"))
+            source_path = TableIndex.model_validate(data).source_path
+            return self.svn_root / source_path
+
+        raw_index_file = get_project_raw_table_index_path(self.svn_root, table_name)
+        if not raw_index_file.exists():
             return None
-        data = json.loads(index_file.read_text(encoding="utf-8"))
+        data = json.loads(raw_index_file.read_text(encoding="utf-8"))
         source_path = TableIndex.model_validate(data).source_path
         return self.svn_root / source_path
 

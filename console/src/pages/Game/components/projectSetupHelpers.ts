@@ -1,5 +1,6 @@
 import type {
   ColdStartJobState,
+  EffectiveProjectSetupReadiness,
   ProjectSetupStatusResponse,
   ProjectTableSourceEntry,
   ProjectTableSourceDiscoveryResponse,
@@ -49,11 +50,43 @@ export function isProjectSetupBuildBlocked(
   setupStatus: ProjectSetupStatusResponse | null,
   discovery: ProjectTableSourceDiscoveryResponse | null,
 ): boolean {
+  return getEffectiveProjectSetupBuildReadiness(setupStatus, discovery).blocking_reason !== null;
+}
+
+export function getEffectiveProjectSetupBuildReadiness(
+  setupStatus: ProjectSetupStatusResponse | null,
+  discovery: ProjectTableSourceDiscoveryResponse | null,
+): EffectiveProjectSetupReadiness {
   if (discovery) {
-    return getAvailableColdStartTables(discovery).length <= 0;
+    const availableCount = getAvailableColdStartTables(discovery).length;
+    if (availableCount > 0) {
+      return {
+        blocking_reason: null,
+        next_action: "ready_for_rule_only_cold_start",
+        source: "discovery",
+      };
+    }
+    return {
+      blocking_reason: "no_table_sources_found",
+      next_action: String(discovery.next_action || "run_source_discovery"),
+      source: "discovery",
+    };
   }
-  const summary = getProjectSetupDiscoverySummary(setupStatus, discovery);
-  return (summary.available_table_count ?? 0) <= 0;
+
+  return {
+    blocking_reason: setupStatus?.build_readiness.blocking_reason ?? "project_root_not_configured",
+    next_action: setupStatus?.build_readiness.next_action ?? "set_project_root",
+    source: "setup_status",
+  };
+}
+
+export function isProjectSetupProjectRootDirty(
+  inputValue: string,
+  setupStatus: ProjectSetupStatusResponse | null,
+): boolean {
+  const currentValue = inputValue.trim();
+  const effectiveValue = (setupStatus?.project_root ?? "").trim();
+  return currentValue.length > 0 && currentValue !== effectiveValue;
 }
 
 export function buildProjectSetupDiagnosticsText(input: {
@@ -65,6 +98,7 @@ export function buildProjectSetupDiagnosticsText(input: {
     {
       setup_status: input.setupStatus,
       discovery: input.discovery,
+      effective_readiness: getEffectiveProjectSetupBuildReadiness(input.setupStatus, input.discovery),
       cold_start_job: input.coldStartJob ?? null,
     },
     null,
@@ -82,7 +116,8 @@ export function canStartRuleOnlyColdStartBuild(
   if ((setupStatus.tables_config.roots ?? []).length <= 0) {
     return false;
   }
-  return !isProjectSetupBuildBlocked(setupStatus, discovery);
+  const readiness = getEffectiveProjectSetupBuildReadiness(setupStatus, discovery);
+  return readiness.blocking_reason === null;
 }
 
 export function getColdStartActiveJobStorageKey(agentId: string): string {

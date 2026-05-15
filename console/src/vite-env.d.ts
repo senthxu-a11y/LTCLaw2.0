@@ -16,6 +16,11 @@ interface PyWebViewAPI {
   save_file: (url: string, filename: string) => Promise<boolean>;
 }
 
+interface ImportMetaEnv {
+  readonly VITE_FRONTEND_BUILD_ID?: string;
+  readonly VITE_FRONTEND_BUILD_TIME?: string;
+}
+
 declare global {
   interface Window {
     pywebview?: {

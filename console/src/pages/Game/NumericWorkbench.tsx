@@ -471,7 +471,33 @@ export default function NumericWorkbench() {
     [selectedAgent, hasExplicitCapabilityContext, canReadWorkbench],
   );
 
+  const rebuildLocalTableIndex = useCallback(async () => {
+    if (!selectedAgent) return;
+    setTablesLoading(true);
+    try {
+      await gameApi.rebuildIndex(selectedAgent);
+      message.success(t("gameWorkbench.rebuildIndexSuccess", { defaultValue: "本地表索引已重建。" }));
+      await loadTables();
+    } catch (error) {
+      message.error(
+        formatPermissionError(
+          error,
+          t("gameWorkbench.rebuildIndexFailed", { defaultValue: "重建本地表索引失败" }),
+        ),
+      );
+    } finally {
+      setTablesLoading(false);
+    }
+  }, [selectedAgent, message, t, loadTables, formatPermissionError]);
+
   useEffect(() => { loadTables(); }, [loadTables]);
+
+  useEffect(() => {
+    if (tableNames.length !== 1) return;
+    if (openTables.length > 0) return;
+    setOpenTables([tableNames[0]]);
+    setActiveTab(tableNames[0]);
+  }, [tableNames, openTables, setOpenTables, setActiveTab]);
 
   useEffect(() => {
     openTables.forEach((name) => {
@@ -1806,12 +1832,30 @@ export default function NumericWorkbench() {
               }
             >
           {openTables.length === 0 ? (
-            <Empty
-              style={{ padding: 24 }}
-              description={t("gameWorkbench.emptyTablesView", {
-                defaultValue: "请在工具栏选择目标表，或在下方 Chat 描述意图让 AI 自动打开相关表",
-              })}
-            />
+            tableNames.length === 0 && tablesLoaded ? (
+              <Empty
+                style={{ padding: 24 }}
+                description={t("gameWorkbench.emptyTablesCatalog", {
+                  defaultValue: "当前没有可用表。可先重建本地表索引，再重新加载 HeroTable 等数据表。",
+                })}
+              >
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={rebuildLocalTableIndex}
+                  loading={tablesLoading}
+                  disabled={!selectedAgent || !canReadWorkbench}
+                >
+                  {t("gameWorkbench.rebuildIndexAction", { defaultValue: "重建本地表索引" })}
+                </Button>
+              </Empty>
+            ) : (
+              <Empty
+                style={{ padding: 24 }}
+                description={t("gameWorkbench.emptyTablesView", {
+                  defaultValue: "请在工具栏选择目标表，或在下方 Chat 描述意图让 AI 自动打开相关表",
+                })}
+              />
+            )
           ) : pinnedTab && activeTab && pinnedTab !== activeTab ? (
             <div className={styles.pinnedSplit}>
               <div className={styles.pinnedHalf}>

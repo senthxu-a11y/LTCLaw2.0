@@ -7,11 +7,16 @@ export default defineConfig(({ mode }) => {
   // Empty = same-origin; frontend and backend served together, no hardcoded host.
   // Use a dedicated Vite-prefixed key so unrelated shell BASE_URL values don't leak into the build.
   const apiBaseUrl = env.VITE_API_BASE_URL ?? "";
-  const devProxyTarget = apiBaseUrl || "http://127.0.0.1:8088";
+  const apiProxyTarget = env.VITE_API_PROXY_TARGET || apiBaseUrl || "http://127.0.0.1:18080";
+  const frontendBuildId = env.VITE_FRONTEND_BUILD_ID || `${mode}-frontend`;
+  const frontendBuildTime = env.VITE_FRONTEND_BUILD_TIME || new Date().toISOString();
+  console.log(`[LTClaw] Vite API proxy target: ${apiProxyTarget}`);
 
   return {
     define: {
       VITE_API_BASE_URL: JSON.stringify(apiBaseUrl),
+      'import.meta.env.VITE_FRONTEND_BUILD_ID': JSON.stringify(frontendBuildId),
+      'import.meta.env.VITE_FRONTEND_BUILD_TIME': JSON.stringify(frontendBuildTime),
       TOKEN: JSON.stringify(env.TOKEN || ""),
       MOBILE: false,
     },
@@ -37,7 +42,7 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: {
         "/api": {
-          target: devProxyTarget,
+          target: apiProxyTarget,
           changeOrigin: true,
         },
       },

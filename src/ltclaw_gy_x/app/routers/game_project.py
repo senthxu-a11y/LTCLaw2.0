@@ -3,10 +3,11 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from ltclaw_gy_x.app.agent_context import get_agent_for_request
+from ltclaw_gy_x.app.capabilities import build_agent_capability_profile
 from ltclaw_gy_x.game.config import (
     DEFAULT_TABLES_EXCLUDE_PATTERNS,
     DEFAULT_TABLES_INCLUDE_PATTERNS,
@@ -53,6 +54,19 @@ class ProjectTablesSourceConfigRequest(BaseModel):
     primary_key_candidates: list[str] | None = None
 
 
+def _configured_project_root_with_source(game_service) -> tuple[str | None, str | None]:
+    user_root = str(getattr(game_service.user_config, "svn_local_root", "") or "").strip()
+    if user_root:
+        return user_root, "user_config_svn_local_root"
+    project_config = getattr(game_service, "project_config", None)
+    if project_config is None:
+        return None, None
+    configured_root = str(project_config.svn.root or "").strip()
+    if configured_root and "://" not in configured_root:
+        return configured_root, "project_config_svn_root"
+    return None, None
+
+
 def _game_service_or_404(workspace):
     svc = workspace.service_manager.services.get("game_service")
     if svc is None:
@@ -61,16 +75,8 @@ def _game_service_or_404(workspace):
 
 
 def _configured_project_root(game_service) -> str | None:
-    project_root = str(getattr(game_service.user_config, "svn_local_root", "") or "").strip()
-    if project_root:
-        return project_root
-    project_config = getattr(game_service, "project_config", None)
-    if project_config is None:
-        return None
-    configured_root = str(project_config.svn.root or "").strip()
-    if configured_root and "://" not in configured_root:
-        return configured_root
-    return None
+    project_root, _ = _configured_project_root_with_source(game_service)
+    return project_root
 
 
 def _project_root_path(project_root: str | None) -> Path | None:
@@ -118,12 +124,21 @@ def _serialize_tables_config(tables_config: ProjectTablesSourceConfig) -> dict:
 
 
 def _build_setup_status(game_service) -> dict:
-    project_root = _configured_project_root(game_service)
+    project_root, project_root_source = _configured_project_root_with_source(game_service)
     project_root_path = _project_root_path(project_root)
     project_root_exists = bool(project_root_path and project_root_path.exists())
     tables_config = _effective_tables_config(project_root_path)
+    user_config_svn_local_root = str(getattr(game_service.user_config, "svn_local_root", "") or "").strip() or None
+    project_config = getattr(game_service, "project_config", None)
+    project_config_svn_root = None
+    if project_config is not None:
+        configured_root = str(project_config.svn.root or "").strip()
+        project_config_svn_root = configured_root or None
     return {
         "project_root": project_root,
+        "project_root_source": project_root_source,
+        "user_config_svn_local_root": user_config_svn_local_root,
+        "project_config_svn_root": project_config_svn_root,
         "project_root_exists": project_root_exists,
         "project_bundle_root": str(get_project_bundle_root(project_root_path)) if project_root_path is not None else None,
         "project_key": get_project_key(project_root_path) if project_root_path is not None else None,
@@ -163,6 +178,49 @@ def _sanitize_string_list(values: list[str] | None, default: list[str] | None = 
     return [value.strip() for value in values if str(value).strip()]
 
 
+def _capability_status_payload(request: Request, workspace, game_service) -> dict:
+    agent_id = getattr(request.state, 'agent_id', getattr(workspace, 'agent_id', 'default'))
+    local_profile = game_service.user_config.agent_profiles.get(agent_id)
+    capability_profile = build_agent_capability_profile(
+        agent_id=agent_id,
+        display_name=agent_id,
+        local_profile=local_profile,
+        legacy_my_role=game_service.user_config.my_role,
+    )
+    capability_source = 'game_user_config.agent_profiles' if local_profile is not None else 'game_user_config.my_role'
+    capabilities = list(capability_profile.capabilities)
+    capability_set = set(capabilities)
+
+    def _has(capability: str) -> bool:
+        return '*' in capability_set or capability in capability_set
+
+    storage_summary = get_storage_summary(Path(getattr(workspace, 'workspace_dir', '.')))
+
+    return {
+        'agent_id': agent_id,
+        'role': capability_profile.role,
+        'capabilities': capabilities,
+        'capability_source': capability_source,
+        'required_for_cold_start': {
+            'knowledge.candidate.read': _has('knowledge.candidate.read'),
+            'knowledge.candidate.write': _has('knowledge.candidate.write'),
+        },
+        'required_for_formal_map': {
+            'knowledge.map.read': _has('knowledge.map.read'),
+            'knowledge.map.edit': _has('knowledge.map.edit'),
+        },
+        'required_for_release': {
+            'knowledge.read': _has('knowledge.read'),
+            'knowledge.build': _has('knowledge.build'),
+            'knowledge.publish': _has('knowledge.publish'),
+        },
+        'config_paths': {
+            'user_config_path': storage_summary['user_config_path'],
+            'legacy_user_config_path': storage_summary['legacy_user_config_path'],
+        },
+    }
+
+
 @router.get("/config", response_model=Optional[ProjectConfig])
 async def get_project_config(workspace=Depends(get_agent_for_request)):
     return _game_service_or_404(workspace).project_config
@@ -172,6 +230,12 @@ async def get_project_config(workspace=Depends(get_agent_for_request)):
 async def get_project_setup_status(workspace=Depends(get_agent_for_request)):
     game_service = _game_service_or_404(workspace)
     return _build_setup_status(game_service)
+
+
+@router.get('/capability-status')
+async def get_project_capability_status(request: Request, workspace=Depends(get_agent_for_request)):
+    game_service = _game_service_or_404(workspace)
+    return _capability_status_payload(request, workspace, game_service)
 
 
 @router.put("/root")

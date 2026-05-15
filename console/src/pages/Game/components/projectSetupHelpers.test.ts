@@ -4,8 +4,10 @@ import { describe, it } from "node:test";
 import type { ProjectSetupStatusResponse, ProjectTableSourceDiscoveryResponse } from "../../../api/types/game.ts";
 import {
   buildProjectSetupDiagnosticsText,
+  getEffectiveProjectSetupBuildReadiness,
   getAvailableColdStartTables,
   getProjectSetupDiscoverySummary,
+  isProjectSetupProjectRootDirty,
   isProjectSetupBuildBlocked,
   joinProjectSetupLines,
   splitProjectSetupLines,
@@ -83,6 +85,19 @@ describe("projectSetupHelpers", () => {
   it("blocks downstream build steps when discovered or available counts are zero", () => {
     assert.equal(isProjectSetupBuildBlocked(createSetupStatus(), null), true);
     assert.equal(isProjectSetupBuildBlocked(createSetupStatus(), createDiscovery()), false);
+  });
+
+  it("prefers discovery readiness when csv tables are available", () => {
+    assert.deepEqual(getEffectiveProjectSetupBuildReadiness(createSetupStatus(), createDiscovery()), {
+      blocking_reason: null,
+      next_action: "ready_for_rule_only_cold_start",
+      source: "discovery",
+    });
+  });
+
+  it("flags project root input when it differs from backend effective value", () => {
+    assert.equal(isProjectSetupProjectRootDirty("/workspace/project-next", createSetupStatus()), true);
+    assert.equal(isProjectSetupProjectRootDirty("/workspace/project", createSetupStatus()), false);
   });
 
   it("keeps setup-status discovery in not_scanned state until discovery runs", () => {

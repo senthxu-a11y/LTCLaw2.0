@@ -155,6 +155,9 @@ async def test_setup_status_returns_defaults_before_project_root_is_configured(a
     assert payload['project_root_exists'] is False
     assert payload['project_bundle_root'] is None
     assert payload['project_key'] is None
+    assert payload['project_root_source'] is None
+    assert payload['user_config_svn_local_root'] is None
+    assert payload['project_config_svn_root'] is None
     assert payload['tables_config'] == {
         'roots': [],
         'include': DEFAULT_TABLES_INCLUDE_PATTERNS,
@@ -163,7 +166,9 @@ async def test_setup_status_returns_defaults_before_project_root_is_configured(a
         'primary_key_candidates': DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES,
     }
     assert payload['discovery'] == {
+        'status': 'not_scanned',
         'discovered_table_count': 0,
+        'available_table_count': 0,
         'unsupported_table_count': 0,
         'excluded_table_count': 0,
         'error_count': 0,
@@ -216,6 +221,7 @@ async def test_put_project_root_saves_and_returns_setup_status(app, client, monk
     assert payload['project_key'] == get_project_key(project_root)
     assert payload['project_bundle_root'] == str(get_project_bundle_root(project_root))
     assert payload['setup_status']['project_root'] == str(project_root)
+    assert payload['setup_status']['project_root_source'] == 'user_config_svn_local_root'
     assert payload['setup_status']['project_root_exists'] is True
     assert payload['setup_status']['build_readiness'] == {
         'blocking_reason': 'no_table_sources_found',
@@ -244,6 +250,27 @@ async def test_put_project_root_normalizes_backslashes_and_supports_spaces_and_c
     assert response.json()['setup_status']['project_root'] == str(project_root)
     assert readback.status_code == 200
     assert readback.json()['project_root'] == str(project_root)
+
+
+@pytest.mark.asyncio
+async def test_capability_status_reflects_legacy_maintainer_role(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    service = _Service(project_root)
+    service.user_config.agent_profiles = {}
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.get('/api/game/project/capability-status')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['role'] == 'admin'
+    assert payload['capability_source'] == 'game_user_config.my_role'
+    assert payload['required_for_cold_start']['knowledge.candidate.write'] is True
+    assert payload['required_for_formal_map']['knowledge.map.edit'] is True
+    assert payload['required_for_release']['knowledge.publish'] is True
 
 
 def test_project_root_path_normalizes_windows_style_backslashes():
@@ -354,6 +381,8 @@ async def test_source_discovery_finds_minimal_project_sample(app, client):
             'format': 'csv',
             'status': 'available',
             'reason': 'matched_supported_format',
+            'cold_start_supported': True,
+            'cold_start_reason': 'rule_only_supported_csv',
         }
     ]
     assert payload['excluded_files'] == []
@@ -404,12 +433,16 @@ async def test_source_discovery_marks_temp_excel_excluded_and_xls_unsupported(ap
         'format': 'xlsx',
         'status': 'excluded',
         'reason': 'matched_exclude_pattern',
+        'cold_start_supported': False,
+        'cold_start_reason': 'rule_only_cold_start_not_supported_for_xlsx',
     } in payload['excluded_files']
     unsupported_entry = {
         'source_path': 'Tables/OldTable.xls',
         'format': 'xls',
         'status': 'unsupported',
         'reason': 'xls_format_not_supported',
+        'cold_start_supported': False,
+        'cold_start_reason': 'rule_only_cold_start_not_supported_for_xls',
     }
     assert unsupported_entry in payload['unsupported_files']
     assert unsupported_entry in payload['table_files']
@@ -491,6 +524,8 @@ async def test_source_discovery_matches_uppercase_csv_extension_and_backslash_ro
             'format': 'csv',
             'status': 'available',
             'reason': 'matched_supported_format',
+            'cold_start_supported': True,
+            'cold_start_reason': 'rule_only_supported_csv',
         }
     ]
 

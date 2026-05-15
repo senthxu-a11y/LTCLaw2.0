@@ -8,6 +8,7 @@ import sys
 import time
 import uuid
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -536,49 +537,66 @@ if CORS_ORIGINS:
 _CONSOLE_STATIC_ENV = "QWENPAW_CONSOLE_STATIC_DIR"
 
 
-def _resolve_console_static_dir() -> str:
+def _resolve_console_static_info() -> tuple[str, str]:
     from ..constant import EnvVarLoader
 
     static_dir = EnvVarLoader.get_str(_CONSOLE_STATIC_ENV)
     if static_dir:
-        return static_dir
-    # Shipped dist lives in the package as static data
-    pkg_dir = Path(__file__).resolve().parent.parent
-    candidate = pkg_dir / "console"
-    if candidate.is_dir() and (candidate / "index.html").exists():
-        return str(candidate)
+        return static_dir, "env"
 
-    # Fallback to repo data
+    pkg_dir = Path(__file__).resolve().parent.parent
     repo_dir = pkg_dir.parent.parent
     candidate = repo_dir / "console" / "dist"
     if candidate.is_dir() and (candidate / "index.html").exists():
-        return str(candidate)
+        return str(candidate), "repo_dist"
 
-    # Fallback to cwd data
     cwd = Path(os.getcwd())
-    for subdir in ("console/dist", "console_dist"):
-        candidate = cwd / subdir
-        if candidate.is_dir() and (candidate / "index.html").exists():
-            return str(candidate)
+    candidate = cwd / "console" / "dist"
+    if candidate.is_dir() and (candidate / "index.html").exists():
+        return str(candidate), "cwd_dist"
+
+    candidate = cwd / "console_dist"
+    if candidate.is_dir() and (candidate / "index.html").exists():
+        return str(candidate), "cwd_console_dist"
+
+    # Shipped dist lives in the package as static data and should be the
+    # last fallback during local development to avoid serving stale assets.
+    candidate = pkg_dir / "console"
+    if candidate.is_dir() and (candidate / "index.html").exists():
+        return str(candidate), "packaged"
 
     fallback = cwd / "console" / "dist"
     logger.warning(
         f"Console static directory not found. Falling back to '{fallback}'.",
     )
-    return str(fallback)
+    return str(fallback), "missing"
 
 
-_CONSOLE_STATIC_DIR = _resolve_console_static_dir()
+_CONSOLE_STATIC_DIR, _CONSOLE_STATIC_SOURCE = _resolve_console_static_info()
 _CONSOLE_INDEX = (
     Path(_CONSOLE_STATIC_DIR) / "index.html" if _CONSOLE_STATIC_DIR else None
 )
-logger.info(f"STATIC_DIR: {_CONSOLE_STATIC_DIR}")
+_CONSOLE_INDEX_MTIME = (
+    datetime.fromtimestamp(_CONSOLE_INDEX.stat().st_mtime, timezone.utc).isoformat()
+    if _CONSOLE_INDEX and _CONSOLE_INDEX.exists()
+    else None
+)
+logger.info(f"CONSOLE_STATIC_DIR = {_CONSOLE_STATIC_DIR}")
+logger.info(f"CONSOLE_INDEX = {_CONSOLE_INDEX}")
+logger.info(f"CONSOLE_STATIC_SOURCE = {_CONSOLE_STATIC_SOURCE}")
+logger.info(f"CONSOLE_INDEX_MTIME = {_CONSOLE_INDEX_MTIME}")
+if _CONSOLE_STATIC_SOURCE == "packaged":
+    logger.warning("Using packaged frontend console. This may be stale during development.")
+
+
+def _frontend_index_headers() -> dict[str, str]:
+    return {"Cache-Control": "no-store"}
 
 
 @app.get("/")
 def read_root():
     if _CONSOLE_INDEX and _CONSOLE_INDEX.exists():
-        return FileResponse(_CONSOLE_INDEX)
+        return FileResponse(_CONSOLE_INDEX, headers=_frontend_index_headers())
     return {
         "message": (
             f"{PROJECT_NAME} web console is not available. "
@@ -604,6 +622,17 @@ def get_doctor_runtime():
     return {
         "python_executable": sys.executable,
         "python_environment": summarize_python_environment(),
+    }
+
+
+@app.get("/api/runtime/frontend-info")
+def get_frontend_runtime_info():
+    return {
+        "console_static_dir": _CONSOLE_STATIC_DIR,
+        "console_static_source": _CONSOLE_STATIC_SOURCE,
+        "console_index": str(_CONSOLE_INDEX) if _CONSOLE_INDEX is not None else None,
+        "console_index_mtime": _CONSOLE_INDEX_MTIME,
+        "api_base": "/api",
     }
 
 
@@ -637,7 +666,7 @@ if os.path.isdir(_CONSOLE_STATIC_DIR):
 
     def _serve_console_index():
         if _CONSOLE_INDEX and _CONSOLE_INDEX.exists():
-            return FileResponse(_CONSOLE_INDEX)
+            return FileResponse(_CONSOLE_INDEX, headers=_frontend_index_headers())
 
         raise HTTPException(status_code=404, detail="Not Found")
 
