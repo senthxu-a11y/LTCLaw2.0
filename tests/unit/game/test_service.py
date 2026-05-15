@@ -225,6 +225,30 @@ async def test_start_with_maintainer_config_keeps_svn_runtime_frozen(tmp_path, i
 
 
 @pytest.mark.asyncio
+async def test_start_with_local_root_and_no_project_config_still_builds_change_applier(tmp_path, isolated_home):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    svn_root = tmp_path / "svn"
+    svn_root.mkdir()
+    table_dir = svn_root / "Tables"
+    table_dir.mkdir()
+    (table_dir / "HeroTable.csv").write_text("ID,Name,HP\n1,HeroA,100\n", encoding="utf-8")
+    service = GameService(workspace_dir=workspace, runner=None, channel_manager=None)
+
+    with patch(
+        "ltclaw_gy_x.game.service.load_user_config",
+        return_value=UserGameConfig(my_role="maintainer", svn_local_root=str(svn_root)),
+    ), patch("ltclaw_gy_x.game.service.load_project_config", return_value=None):
+        await service.start()
+
+    assert service.configured is False
+    assert service.query_router is not None
+    assert service.change_applier is not None
+    assert service.change_applier.read_rows("HeroTable")["rows"] == [["1", "HeroA", "100"]]
+    await service.stop()
+
+
+@pytest.mark.asyncio
 async def test_start_and_stop_svn_monitoring_do_not_touch_watcher(service):
     watcher = SimpleNamespace(start=AsyncMock(), stop=AsyncMock())
     service._svn_watcher = watcher

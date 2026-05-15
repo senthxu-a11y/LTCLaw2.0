@@ -399,7 +399,7 @@ def _extract_query_terms(text: str) -> list[str]:
         return []
     s = text.lower()
     out: list[str] = []
-    for m in re.finditer(r"[a-z][a-z0-9_]{2,}", s):
+    for m in re.finditer(r"[a-z][a-z0-9_]{1,}", s):
         out.append(m.group(0))
     for m in re.finditer(r"[\u4e00-\u9fff\u3400-\u4dbf]{2,}", s):
         run = m.group(0)
@@ -531,6 +531,136 @@ def _build_row_index(
     return selected_headers, out
 
 
+async def _infer_context_tables_from_intent(
+    qr: Any,
+    *,
+    intent: str,
+    query_terms: list[str],
+) -> list[str]:
+    try:
+        payload = await qr.list_tables(page=1, size=200)
+    except Exception:
+        return []
+
+    items = payload.get("items") or []
+    table_names: list[str] = []
+    for item in items:
+        table_name = str((item or {}).get("table_name") or "").strip()
+        if table_name:
+            table_names.append(table_name)
+    if not table_names:
+        return []
+    if len(table_names) == 1:
+        return table_names[:1]
+
+    intent_lower = intent.lower()
+    inferred: list[str] = []
+    seen: set[str] = set()
+
+    def _push(name: str) -> None:
+        if name in seen:
+            return
+        seen.add(name)
+        inferred.append(name)
+
+    for table_name in table_names:
+        lowered = table_name.lower()
+        if lowered and lowered in intent_lower:
+            _push(table_name)
+
+    if inferred:
+        return inferred[:8]
+
+    lowered_terms = [term.lower() for term in query_terms if term]
+    for term in lowered_terms:
+        for table_name in table_names:
+            lowered = table_name.lower()
+            if term == lowered or term in lowered or lowered in term:
+                _push(table_name)
+
+    return inferred[:8]
+
+
+def _coerce_runtime_number(value: Any) -> float | None:
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        return float(str(value).strip())
+    except Exception:
+        return None
+
+
+def _runtime_multiplier_from_intent(intent: str) -> float | None:
+    lowered = str(intent or "").strip().lower()
+    if not lowered:
+        return None
+    if "翻倍" in lowered or "double" in lowered or "x2" in lowered or "2x" in lowered:
+        return 2.0
+    return None
+
+
+def _build_runtime_multiplier_changes(
+    *,
+    intent: str,
+    query_terms: list[str],
+    tables_meta: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    multiplier = _runtime_multiplier_from_intent(intent)
+    if multiplier is None:
+        return []
+
+    lowered_terms = [term.lower() for term in query_terms if term]
+    changes: list[dict[str, Any]] = []
+    for table in tables_meta:
+        table_name = str(table.get("table") or "").strip()
+        primary_key = str(table.get("primary_key") or "ID").strip() or "ID"
+        fields = [
+            str(field.get("name") or "").strip()
+            for field in list(table.get("fields") or [])
+            if str(field.get("name") or "").strip()
+        ]
+        target_fields = [
+            field_name
+            for field_name in fields
+            if field_name != primary_key and any(
+                term == field_name.lower() or term in field_name.lower() or field_name.lower() in term
+                for term in lowered_terms
+            )
+        ]
+        if not target_fields:
+            continue
+        row_index = list(table.get("row_index") or [])
+        for row in row_index:
+            row_id = row.get(primary_key)
+            if row_id in (None, ""):
+                continue
+            for field_name in target_fields:
+                current_value = row.get(field_name)
+                numeric_value = _coerce_runtime_number(current_value)
+                if numeric_value is None:
+                    continue
+                scaled_value = numeric_value * multiplier
+                if float(scaled_value).is_integer() and str(current_value).strip().isdigit():
+                    scaled_value = int(scaled_value)
+                changes.append(
+                    {
+                        "table": table_name,
+                        "row_id": row_id,
+                        "field": field_name,
+                        "new_value": scaled_value,
+                        "reason": f"Runtime-only fallback: multiply current {field_name} by {multiplier:g}.",
+                        "confidence": 0.95,
+                        "uses_draft_overlay": False,
+                        "source_release_id": None,
+                        "validation_status": "validated_runtime_only",
+                        "evidence_refs": [],
+                    }
+                )
+    return changes
+
+
 @router.post("/suggest")
 async def suggest_workbench_changes(
     request: Request,
@@ -558,10 +688,21 @@ async def suggest_workbench_changes(
     related_seen: set[str] = set()
     qr = getattr(svc, "query_router", None)
     applier = getattr(svc, "change_applier", None)
-    main_tables: set[str] = set(body.context_tables[:8])
+    context_tables = [
+        str(name or "").strip()
+        for name in body.context_tables[:8]
+        if str(name or "").strip()
+    ]
+    if qr is not None and not context_tables:
+        context_tables = await _infer_context_tables_from_intent(
+            qr,
+            intent=intent,
+            query_terms=query_terms,
+        )
+    main_tables: set[str] = set(context_tables[:8])
 
     if qr is not None:
-        for tname in body.context_tables[:8]:
+        for tname in context_tables[:8]:
             try:
                 tinfo = await qr.get_table(tname)
             except Exception:
@@ -792,6 +933,17 @@ async def suggest_workbench_changes(
         formal_context=formal_context,
         draft_overlay=pending_dump,
     )
+
+    if not validated["changes"]:
+        runtime_changes = _build_runtime_multiplier_changes(
+            intent=intent,
+            query_terms=query_terms,
+            tables_meta=tables_meta,
+        )
+        if runtime_changes:
+            validated["changes"] = runtime_changes
+            if not validated["message"]:
+                validated["message"] = "已根据当前工作台行数据生成 runtime-only 变更建议。"
 
     return {
         "message": validated["message"],

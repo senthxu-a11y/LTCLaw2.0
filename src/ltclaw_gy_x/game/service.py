@@ -8,9 +8,16 @@ from pathlib import Path
 from typing import Any, List, Optional, Union
 
 from .config import (
+    FilterConfig,
+    PathRule,
     ProjectConfig,
+    ProjectMeta,
+    ProjectTablesSourceConfig,
+    SvnConfig,
+    TableConvention,
     UserGameConfig,
     load_project_config,
+    load_project_tables_source_config,
     load_user_config,
 )
 from .change_applier import ChangeApplier
@@ -191,8 +198,51 @@ class GameService:
                 compatibility_router=compatibility_router,
             )
 
+    def _runtime_project_config(self) -> ProjectConfig | None:
+        if self._project_config is not None:
+            return self._project_config
+
+        runtime_svn_root = self._runtime_svn_root()
+        if runtime_svn_root is None:
+            return None
+
+        tables_source = load_project_tables_source_config(runtime_svn_root)
+        return self._build_runtime_fallback_project_config(runtime_svn_root, tables_source)
+
+    def _build_runtime_fallback_project_config(
+        self,
+        project_root: Path,
+        tables_source: ProjectTablesSourceConfig | None,
+    ) -> ProjectConfig:
+        table_convention = TableConvention(
+            header_row=(tables_source.header_row if tables_source is not None else 1),
+        )
+        paths = [
+            PathRule(path=str(root), semantic="table")
+            for root in (tables_source.roots or [])
+            if str(root or "").strip()
+        ] if tables_source is not None else []
+        filters = FilterConfig(
+            include_ext=[".csv", ".xlsx", ".xls", ".txt"],
+            exclude_glob=list(tables_source.exclude) if tables_source is not None else [],
+        )
+        return ProjectConfig(
+            project=ProjectMeta(
+                name=project_root.name,
+                engine="Unknown",
+                language="zh",
+            ),
+            svn=SvnConfig(root=str(project_root)),
+            paths=paths,
+            filters=filters,
+            table_convention=table_convention,
+            doc_templates={},
+            models={},
+        )
+
     def _rebuild_runtime_components(self) -> None:
         runtime_svn_root = self._runtime_svn_root()
+        runtime_project_config = self._runtime_project_config()
         self._proposal_store = ProposalStore(self.workspace_dir, svn_root=runtime_svn_root)
         self._change_applier = None
         self._svn_committer = None
@@ -202,19 +252,19 @@ class GameService:
         self._svn_watcher = None
         self._code_indexer = None
         self._code_index_store = None
-        if self._project_config:
-            project_root = runtime_svn_root or Path(self._project_config.svn.root)
+        if runtime_project_config is not None:
+            project_root = runtime_svn_root or Path(runtime_project_config.svn.root)
             self._table_indexer = TableIndexer(
-                project=self._project_config,
+                project=runtime_project_config,
                 model_router=self._model_router(),
                 cache_dir=get_llm_cache_dir(self.workspace_dir, runtime_svn_root),
             )
             self._dependency_resolver = DependencyResolver(
-                project=self._project_config,
+                project=runtime_project_config,
                 model_router=self._model_router(),
             )
             self._change_applier = ChangeApplier(
-                self._project_config,
+                runtime_project_config,
                 project_root,
                 self._table_indexer,
             )

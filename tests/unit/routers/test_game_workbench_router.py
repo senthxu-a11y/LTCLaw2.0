@@ -947,3 +947,261 @@ def test_workbench_suggest_returns_validated_change_metadata(monkeypatch):
     assert change['source_release_id'] == 'release-001'
     assert change['validation_status'] == 'validated'
     assert change['evidence_refs'] == ['doc:combat.formula']
+
+
+def test_workbench_suggest_infers_context_table_from_user_intent_when_none_provided(monkeypatch):
+    monkeypatch.setattr(
+        workbench_router_module,
+        'build_workbench_suggest_formal_context',
+        lambda project_root, user_intent: {
+            'status': 'no_current_release',
+            'release_id': None,
+            'reason': 'no_current_release',
+            'evidence_catalog': [],
+            'allowed_evidence_refs': [],
+        },
+    )
+    captured = {}
+
+    async def _call_model_result(prompt, model_type='default'):
+        captured['prompt'] = prompt
+        return SimpleNamespace(
+            ok=True,
+            text='{"message":"found table","changes":[]}',
+            error_code=None,
+            message=None,
+        )
+
+    async def _list_tables(system=None, query=None, page=1, size=50):
+        return {
+            'items': [
+                {
+                    'table_name': 'HeroTable',
+                    'primary_key': 'ID',
+                    'source_path': 'Tables/HeroTable.csv',
+                }
+            ],
+            'total': 1,
+            'page': page,
+            'size': size,
+        }
+
+    async def _get_table(name):
+        return SimpleNamespace(
+            table_name=name,
+            primary_key='ID',
+            ai_summary='Hero summary.',
+            fields=[
+                SimpleNamespace(name='ID', type='int', description='id'),
+                SimpleNamespace(name='Name', type='string', description='name'),
+                SimpleNamespace(name='HP', type='int', description='hp'),
+            ],
+        )
+
+    service = SimpleNamespace(
+        query_router=SimpleNamespace(
+            list_tables=_list_tables,
+            get_table=_get_table,
+            dependencies_of=lambda _name: {'upstream': [], 'downstream': []},
+        ),
+        change_applier=SimpleNamespace(
+            read_rows=lambda *_args: {
+                'headers': ['ID', 'Name', 'HP'],
+                'rows': [[1, 'HeroA', 100]],
+                'total': 1,
+            }
+        ),
+        _model_router=lambda: SimpleNamespace(call_model_result=_call_model_result),
+    )
+
+    with TestClient(_build_app(_ws(service))) as client:
+        response = client.post(
+            '/api/game/workbench/suggest',
+            json={
+                'user_intent': '看下HeroTable里有什么内容',
+                'context_tables': [],
+                'current_pending': [],
+                'chat_history': [],
+            },
+        )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body['context_summary']['main_tables'] == ['HeroTable']
+    assert 'HeroTable' in captured['prompt']
+
+
+def test_workbench_suggest_falls_back_to_single_available_table_when_context_is_empty(monkeypatch):
+    monkeypatch.setattr(
+        workbench_router_module,
+        'build_workbench_suggest_formal_context',
+        lambda project_root, user_intent: {
+            'status': 'no_current_release',
+            'release_id': None,
+            'reason': 'no_current_release',
+            'evidence_catalog': [],
+            'allowed_evidence_refs': [],
+        },
+    )
+
+    async def _call_model_result(prompt, model_type='default'):
+        return SimpleNamespace(
+            ok=True,
+            text='{"message":"double hp","changes":[{"table":"HeroTable","row_id":"1","field":"HP","new_value":200}]}',
+            error_code=None,
+            message=None,
+        )
+
+    async def _list_tables(system=None, query=None, page=1, size=50):
+        return {
+            'items': [
+                {
+                    'table_name': 'HeroTable',
+                    'primary_key': 'ID',
+                    'source_path': 'Tables/HeroTable.csv',
+                }
+            ],
+            'total': 1,
+            'page': page,
+            'size': size,
+        }
+
+    async def _get_table(name):
+        return SimpleNamespace(
+            table_name=name,
+            primary_key='ID',
+            ai_summary='Hero summary.',
+            fields=[
+                SimpleNamespace(name='ID', type='int', description='id'),
+                SimpleNamespace(name='HP', type='int', description='hp'),
+            ],
+        )
+
+    service = SimpleNamespace(
+        query_router=SimpleNamespace(
+            list_tables=_list_tables,
+            get_table=_get_table,
+            dependencies_of=lambda _name: {'upstream': [], 'downstream': []},
+        ),
+        change_applier=SimpleNamespace(
+            read_rows=lambda *_args: {
+                'headers': ['ID', 'HP'],
+                'rows': [[1, 100]],
+                'total': 1,
+            }
+        ),
+        _model_router=lambda: SimpleNamespace(call_model_result=_call_model_result),
+    )
+
+    with TestClient(_build_app(_ws(service))) as client:
+        response = client.post(
+            '/api/game/workbench/suggest',
+            json={
+                'user_intent': '把hp翻倍',
+                'context_tables': [],
+                'current_pending': [],
+                'chat_history': [],
+            },
+        )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body['context_summary']['main_tables'] == ['HeroTable']
+    assert body['changes'][0]['table'] == 'HeroTable'
+    assert body['changes'][0]['field'] == 'HP'
+
+
+def test_workbench_suggest_builds_runtime_only_multiplier_change_when_model_returns_none(monkeypatch):
+    monkeypatch.setattr(
+        workbench_router_module,
+        'build_workbench_suggest_formal_context',
+        lambda project_root, user_intent: {
+            'status': 'no_current_release',
+            'release_id': None,
+            'reason': 'no_current_release',
+            'evidence_catalog': [],
+            'allowed_evidence_refs': [],
+        },
+    )
+
+    async def _call_model_result(prompt, model_type='default'):
+        return SimpleNamespace(
+            ok=True,
+            text='{"message":"","changes":[]}',
+            error_code=None,
+            message=None,
+        )
+
+    async def _list_tables(system=None, query=None, page=1, size=50):
+        return {
+            'items': [
+                {
+                    'table_name': 'HeroTable',
+                    'primary_key': 'ID',
+                    'source_path': 'Tables/HeroTable.csv',
+                }
+            ],
+            'total': 1,
+            'page': page,
+            'size': size,
+        }
+
+    async def _get_table(name):
+        return SimpleNamespace(
+            table_name=name,
+            primary_key='ID',
+            ai_summary='Hero summary.',
+            fields=[
+                SimpleNamespace(name='ID', type='int', description='id'),
+                SimpleNamespace(name='HP', type='int', description='hp'),
+            ],
+        )
+
+    service = SimpleNamespace(
+        query_router=SimpleNamespace(
+            list_tables=_list_tables,
+            get_table=_get_table,
+            dependencies_of=lambda _name: {'upstream': [], 'downstream': []},
+        ),
+        change_applier=SimpleNamespace(
+            read_rows=lambda *_args: {
+                'headers': ['ID', 'HP'],
+                'rows': [[1, 100]],
+                'total': 1,
+            }
+        ),
+        _model_router=lambda: SimpleNamespace(call_model_result=_call_model_result),
+    )
+
+    with TestClient(_build_app(_ws(service))) as client:
+        response = client.post(
+            '/api/game/workbench/suggest',
+            json={
+                'user_intent': '把hp翻倍',
+                'context_tables': [],
+                'current_pending': [],
+                'chat_history': [],
+            },
+        )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body['context_summary']['main_tables'] == ['HeroTable']
+    assert body['changes'] == [
+        {
+            'table': 'HeroTable',
+            'row_id': 1,
+            'field': 'HP',
+            'new_value': 200,
+            'reason': 'Runtime-only fallback: multiply current HP by 2.',
+            'confidence': 0.95,
+            'uses_draft_overlay': False,
+            'source_release_id': None,
+            'validation_status': 'validated_runtime_only',
+            'evidence_refs': [],
+        }
+    ]
+
+
+def test_extract_query_terms_keeps_two_letter_field_names():
+    assert 'hp' in workbench_router_module._extract_query_terms('把hp翻倍')
