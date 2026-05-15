@@ -62,6 +62,32 @@ def _error_entry(source_path: str | None, error: str) -> dict:
     return payload
 
 
+def _is_rule_only_available_csv(item: dict) -> bool:
+    return (
+        item.get('status') == 'available'
+        and item.get('format') == 'csv'
+        and item.get('cold_start_supported', True) is True
+    )
+
+
+def _recognized_but_not_supported_entries(discovery: dict) -> list[dict]:
+    entries: list[dict] = []
+    for item in discovery.get('table_files', []):
+        if _is_rule_only_available_csv(item):
+            continue
+        status = item.get('status')
+        fmt = item.get('format')
+        source_path = item.get('source_path')
+        if status in {'recognized', 'available'} and fmt != 'csv':
+            entries.append(
+                _error_entry(
+                    source_path,
+                    item.get('cold_start_reason') or 'rule_only_cold_start_currently_supports_csv',
+                )
+            )
+    return entries
+
+
 async def rebuild_raw_table_indexes(
     project_root: Path | None,
     tables_config: ProjectTablesSourceConfig | None,
@@ -86,6 +112,39 @@ async def rebuild_raw_table_indexes(
             result['errors'] = [_error_entry(None, 'no_available_table_files')]
         return result
 
+    available_csv_items = [
+        item
+        for item in discovery['table_files']
+        if _is_rule_only_available_csv(item)
+    ]
+    if not available_csv_items:
+        recognized_errors = _recognized_but_not_supported_entries(discovery)
+        unsupported_errors = [
+            _error_entry(item.get('source_path'), item.get('reason', 'unsupported_table_format'))
+            for item in discovery.get('unsupported_files', [])
+        ]
+        discovery_errors = [
+            _error_entry(item.get('source_path'), item.get('reason', 'source_discovery_error'))
+            for item in discovery.get('errors', [])
+        ]
+        errors = [
+            _error_entry(None, 'no_csv_table_files_available_for_rule_only_cold_start'),
+            *discovery_errors,
+            *recognized_errors,
+            *unsupported_errors,
+        ]
+        result.update(
+            {
+                'success': False,
+                'raw_table_index_count': 0,
+                'indexed_tables': [],
+                'errors': errors,
+                'next_action': 'configure_csv_tables_source',
+                'discovery_summary': discovery.get('summary', {}),
+            }
+        )
+        return result
+
     effective_config = tables_config or ProjectTablesSourceConfig()
     project_config = _build_rule_only_project_config(project_root, effective_config)
     indexer = TableIndexer(
@@ -97,12 +156,9 @@ async def rebuild_raw_table_indexes(
     written_tables = []
     indexed_tables = []
     errors = []
-    for item in discovery['table_files']:
+    for item in available_csv_items:
         source_path = item['source_path']
         fmt = item['format']
-        status = item['status']
-        if status != 'available':
-            continue
         if fmt != 'csv':
             errors.append(_error_entry(source_path, 'rule_only_raw_index_currently_supports_csv'))
             continue
