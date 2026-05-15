@@ -1,6 +1,7 @@
 import type {
   ColdStartJobState,
   ProjectSetupStatusResponse,
+  ProjectTableSourceEntry,
   ProjectTableSourceDiscoveryResponse,
 } from "../../../api/types/game";
 
@@ -23,9 +24,13 @@ export function getProjectSetupDiscoverySummary(
   discovery: ProjectTableSourceDiscoveryResponse | null,
 ) {
   if (discovery) {
-    return discovery.summary;
+    return {
+      status: "scanned" as const,
+      ...discovery.summary,
+    };
   }
   return {
+    status: setupStatus?.discovery.status ?? "not_scanned",
     discovered_table_count: setupStatus?.discovery.discovered_table_count ?? 0,
     available_table_count: setupStatus?.discovery.available_table_count ?? 0,
     excluded_table_count: setupStatus?.discovery.excluded_table_count ?? 0,
@@ -34,12 +39,21 @@ export function getProjectSetupDiscoverySummary(
   };
 }
 
+export function getAvailableColdStartTables(
+  discovery: ProjectTableSourceDiscoveryResponse | null,
+): ProjectTableSourceEntry[] {
+  return discovery?.table_files.filter((item) => item.cold_start_supported) ?? [];
+}
+
 export function isProjectSetupBuildBlocked(
   setupStatus: ProjectSetupStatusResponse | null,
   discovery: ProjectTableSourceDiscoveryResponse | null,
 ): boolean {
+  if (discovery) {
+    return getAvailableColdStartTables(discovery).length <= 0;
+  }
   const summary = getProjectSetupDiscoverySummary(setupStatus, discovery);
-  return summary.discovered_table_count <= 0 || summary.available_table_count <= 0;
+  return (summary.available_table_count ?? 0) <= 0;
 }
 
 export function buildProjectSetupDiagnosticsText(input: {

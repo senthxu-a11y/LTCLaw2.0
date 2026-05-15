@@ -129,7 +129,9 @@ def _build_setup_status(game_service) -> dict:
         "project_key": get_project_key(project_root_path) if project_root_path is not None else None,
         "tables_config": _serialize_tables_config(tables_config),
         "discovery": {
+            "status": "not_scanned",
             "discovered_table_count": 0,
+            "available_table_count": 0,
             "unsupported_table_count": 0,
             "excluded_table_count": 0,
             "error_count": 0,

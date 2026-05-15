@@ -26,6 +26,7 @@ import {
   clearColdStartActiveJobId,
   loadColdStartActiveJobId,
   saveColdStartActiveJobId,
+  getAvailableColdStartTables,
   getProjectSetupDiscoverySummary,
   isProjectSetupBuildBlocked,
   joinProjectSetupLines,
@@ -384,10 +385,12 @@ export default function GameProject() {
   ];
 
   const discoverySummary = getProjectSetupDiscoverySummary(setupStatus, discoveryResult);
+  const discoveryNotScanned = discoverySummary.status === "not_scanned";
   const buildBlocked = isProjectSetupBuildBlocked(setupStatus, discoveryResult);
   const canStartColdStartBuild = canStartRuleOnlyColdStartBuild(setupStatus, discoveryResult);
   const coldStartProgress = toColdStartProgressView(coldStartJob);
-  const availableTableFiles = discoveryResult?.table_files.filter((item) => item.status === "available") ?? [];
+  const availableTableFiles = getAvailableColdStartTables(discoveryResult);
+  const recognizedButNotSupportedFiles = discoveryResult?.table_files.filter((item) => !item.cold_start_supported && item.status !== "unsupported") ?? [];
   const unsupportedFiles = discoveryResult?.unsupported_files ?? [];
   const excludedFiles = discoveryResult?.excluded_files ?? [];
   const discoveryErrors = discoveryResult?.errors ?? [];
@@ -722,27 +725,51 @@ export default function GameProject() {
                   <div className={styles.projectSetupSummaryItem}><span>unsupported</span><strong>{discoverySummary.unsupported_table_count}</strong></div>
                   <div className={styles.projectSetupSummaryItem}><span>errors</span><strong>{discoverySummary.error_count}</strong></div>
                 </div>
-                {(discoverySummary.discovered_table_count <= 0 || (discoverySummary.available_table_count ?? 0) <= 0) ? (
+                {discoveryNotScanned ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    message={t("gameProject.projectSetupDiscoveryNotScanned", {
+                      defaultValue: "尚未检查数据源",
+                    })}
+                  />
+                ) : null}
+                {!discoveryNotScanned && (discoverySummary.available_table_count ?? 0) <= 0 ? (
                   <Alert
                     type="info"
                     showIcon
                     message={t("gameProject.projectSetupNoTablesMessage", {
-                      defaultValue: "没有发现表文件，当前不能继续后续构建阶段。",
+                      defaultValue: "当前没有可用于 Rule-only 冷启动的 CSV 表文件，后续构建阶段不可继续。",
                     })}
                   />
                 ) : null}
                 <div className={styles.projectSetupListGroup}>
                   <div className={styles.projectSetupListSection}>
-                    <Text strong>{t("gameProject.projectSetupAvailableList", { defaultValue: "Available" })}</Text>
+                    <Text strong>{t("gameProject.projectSetupAvailableList", { defaultValue: "Rule-only Available (CSV)" })}</Text>
                     {availableTableFiles.length > 0 ? (
                       availableTableFiles.map((item) => (
                         <div key={`available-${item.source_path}`} className={styles.projectSetupListItem}>
                           <span>{item.source_path}</span>
-                          <Tag color="green">{item.reason}</Tag>
+                          <Tag color="green">{item.cold_start_reason}</Tag>
+                        </div>
+                      ))
+                    ) : discoveryNotScanned ? (
+                      <div className={styles.projectSetupListEmpty}>-</div>
+                    ) : (
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("gameProject.projectSetupNoAvailableTables", { defaultValue: "没有发现可用于 Rule-only 冷启动的 CSV 表文件" })} />
+                    )}
+                  </div>
+                  <div className={styles.projectSetupListSection}>
+                    <Text strong>{t("gameProject.projectSetupRecognizedList", { defaultValue: "Recognized But Not Rule-only" })}</Text>
+                    {recognizedButNotSupportedFiles.length > 0 ? (
+                      recognizedButNotSupportedFiles.map((item) => (
+                        <div key={`recognized-${item.source_path}`} className={styles.projectSetupListItem}>
+                          <span>{item.source_path}</span>
+                          <Tag color="gold">{item.cold_start_reason}</Tag>
                         </div>
                       ))
                     ) : (
-                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("gameProject.projectSetupNoAvailableTables", { defaultValue: "没有发现表文件" })} />
+                      <div className={styles.projectSetupListEmpty}>-</div>
                     )}
                   </div>
                   <div className={styles.projectSetupListSection}>
@@ -818,7 +845,7 @@ export default function GameProject() {
                     type="warning"
                     showIcon
                     message={t("gameProject.projectSetupBlockedMessage", {
-                      defaultValue: "尚未发现可用表文件，后续构建入口保持不可继续状态。",
+                      defaultValue: "尚未发现可用于 Rule-only 冷启动的 CSV 表文件，后续构建入口保持不可继续状态。",
                     })}
                   />
                 ) : (
@@ -826,14 +853,14 @@ export default function GameProject() {
                     type="success"
                     showIcon
                     message={t("gameProject.projectSetupReadyMessage", {
-                      defaultValue: "Source Discovery 已发现可用表文件，可以继续后续 rule-only 构建链路。",
+                      defaultValue: "Source Discovery 已发现可用于 Rule-only 冷启动的 CSV 表文件，可以继续后续构建链路。",
                     })}
                   />
                 )}
                 {!canStartColdStartBuild ? (
                   <div className={styles.projectSetupHint}>
                     {t("gameProject.projectSetupRuleOnlyBuildBlocked", {
-                      defaultValue: "未配置有效 Project Root / Tables Source，或当前 Source Discovery 没有 available 表，因此 Rule-only 冷启动构建按钮不可用。",
+                      defaultValue: "未配置有效 Project Root / Tables Source，或当前 Source Discovery 没有可用于 Rule-only 冷启动的 CSV 表，因此构建按钮不可用。",
                     })}
                   </div>
                 ) : null}

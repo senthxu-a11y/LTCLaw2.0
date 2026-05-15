@@ -125,6 +125,26 @@ def load_cold_start_job(project_root: Path, job_id: str) -> ColdStartJobState | 
     return ColdStartJobState.model_validate_json(job_path.read_text(encoding="utf-8"))
 
 
+def load_cold_start_job_with_stale_check(project_root: Path, job_id: str) -> ColdStartJobState | None:
+    state = load_cold_start_job(project_root, job_id)
+    if state is None:
+        return None
+    if state.status not in _ACTIVE_JOB_STATUSES:
+        return state
+
+    handle = _active_handle(state.project_key)
+    if handle is not None and handle.job_id == job_id:
+        return state
+
+    state.status = "failed"
+    state.stage = "stale"
+    state.message = "Cold-start job became stale after runtime restart."
+    state.next_action = "retry_cold_start_job"
+    state.finished_at = _now()
+    _append_error(state, stage="stale", error="cold_start_job_handle_missing")
+    return save_cold_start_job(project_root, state)
+
+
 def save_cold_start_job(project_root: Path, state: ColdStartJobState) -> ColdStartJobState:
     state.updated_at = _now()
     _write_json_atomic(

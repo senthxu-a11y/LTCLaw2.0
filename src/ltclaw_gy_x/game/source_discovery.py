@@ -12,6 +12,8 @@ AVAILABLE_TABLE_FORMATS: dict[str, str] = {
     ".txt": "txt",
 }
 
+COLD_START_SUPPORTED_FORMATS: frozenset[str] = frozenset({"csv"})
+
 UNSUPPORTED_TABLE_FORMATS: dict[str, str] = {
     ".xls": "xls",
 }
@@ -36,11 +38,15 @@ def _classify_format(path: Path) -> tuple[str | None, str | None]:
 
 
 def _entry(source_path: str, fmt: str, status: str, reason: str) -> dict:
+    cold_start_supported = fmt in COLD_START_SUPPORTED_FORMATS and status == "available"
+    cold_start_reason = "rule_only_supported_csv" if cold_start_supported else f"rule_only_cold_start_not_supported_for_{fmt}"
     return {
         "source_path": _normalize_path_for_match(source_path),
         "format": fmt,
         "status": status,
         "reason": reason,
+        "cold_start_supported": cold_start_supported,
+        "cold_start_reason": cold_start_reason,
     }
 
 
@@ -122,7 +128,9 @@ def discover_table_sources(project_root: Path | None, tables_config: ProjectTabl
 
             fmt, status = _classify_format(file_path)
             if status == "available" and fmt is not None:
-                table_files.append(_entry(normalized_path, fmt, "available", "matched_supported_format"))
+                table_status = "available" if fmt in COLD_START_SUPPORTED_FORMATS else "recognized"
+                table_reason = "matched_supported_format" if table_status == "available" else "matched_recognized_format"
+                table_files.append(_entry(normalized_path, fmt, table_status, table_reason))
                 seen_paths.add(normalized_path)
                 continue
             if status == "unsupported" and fmt is not None:
@@ -131,7 +139,7 @@ def discover_table_sources(project_root: Path | None, tables_config: ProjectTabl
                 unsupported_files.append(unsupported_entry)
                 seen_paths.add(normalized_path)
 
-    available_count = sum(1 for item in table_files if item["status"] == "available")
+    available_count = sum(1 for item in table_files if item["cold_start_supported"])
     payload = {
         "success": len(errors) == 0,
         "project_root": str(project_root),

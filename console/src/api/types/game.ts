@@ -83,8 +83,9 @@ export interface ProjectSetupReadiness {
 }
 
 export interface ProjectSetupDiscoverySummary {
+  status: "not_scanned" | "scanned";
   discovered_table_count: number;
-  available_table_count?: number;
+  available_table_count: number;
   excluded_table_count: number;
   unsupported_table_count: number;
   error_count: number;
@@ -117,6 +118,8 @@ export interface ProjectTableSourceEntry {
   format: string;
   status: string;
   reason: string;
+  cold_start_supported: boolean;
+  cold_start_reason: string;
 }
 
 export interface ProjectTableSourceError {

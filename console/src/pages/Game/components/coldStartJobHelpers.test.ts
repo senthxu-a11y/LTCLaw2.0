@@ -25,6 +25,7 @@ function createSetupStatus(): ProjectSetupStatusResponse {
       primary_key_candidates: ["ID"],
     },
     discovery: {
+      status: "not_scanned",
       discovered_table_count: 1,
       available_table_count: 1,
       excluded_table_count: 0,
@@ -43,7 +44,7 @@ function createDiscovery(available = 1): ProjectTableSourceDiscoveryResponse {
     success: true,
     project_root: "/workspace/project",
     table_files: available
-      ? [{ source_path: "Tables/HeroTable.csv", format: "csv", status: "available", reason: "matched_supported_format" }]
+      ? [{ source_path: "Tables/HeroTable.csv", format: "csv", status: "available", reason: "matched_supported_format", cold_start_supported: true, cold_start_reason: "rule_only_supported_csv" }]
       : [],
     excluded_files: [],
     unsupported_files: [],

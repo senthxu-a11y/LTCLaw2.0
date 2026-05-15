@@ -19,7 +19,7 @@ from ...game.cold_start_job import (
     ColdStartJobState,
     cancel_cold_start_job,
     create_or_get_cold_start_job,
-    load_cold_start_job,
+    load_cold_start_job_with_stale_check,
 )
 from ...game.knowledge_map_candidate import (
     build_map_candidate_from_canonical_facts,
@@ -373,7 +373,7 @@ async def get_cold_start_job(request: Request, job_id: str) -> ColdStartJobState
     workspace = await get_agent_for_request(request)
     require_capability(request, 'knowledge.candidate.read')
     project_root = _project_root_or_400(_game_service_or_404(workspace))
-    job = load_cold_start_job(project_root, job_id)
+    job = load_cold_start_job_with_stale_check(project_root, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail='Cold-start job not found')
     return job
