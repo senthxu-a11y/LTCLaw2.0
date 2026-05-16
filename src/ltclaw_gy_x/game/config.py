@@ -13,11 +13,14 @@ from typing import Literal, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from .paths import (
+    ensure_data_workspace_layout,
+    get_active_data_workspace_root,
     get_legacy_project_config_path,
     get_legacy_user_config_path,
     get_project_config_path,
     get_project_tables_source_path,
     get_user_config_path,
+    get_workspace_agent_profile_path,
 )
 
 
@@ -41,7 +44,7 @@ SUPPORTED_MODEL_TYPES = (
     DEPENDENCY_ANALYZER_MODEL_TYPE,
 )
 
-DEFAULT_TABLES_INCLUDE_PATTERNS = ["**/*.csv", "**/*.xlsx", "**/*.txt"]
+DEFAULT_TABLES_INCLUDE_PATTERNS = ["**/*.csv", "**/*.xlsx"]
 DEFAULT_TABLES_EXCLUDE_PATTERNS = ["**/~$*", "**/.backup/**"]
 DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES = ["ID", "Id", "id"]
 
@@ -229,6 +232,92 @@ class UserGameConfig(BaseModel):
     svn_trust_cert: bool = Field(default=False, description="??????")
 
 
+def _map_legacy_role_to_workspace_role(my_role: str | None) -> str:
+    normalized_role = str(my_role or "").strip().lower()
+    if normalized_role == "maintainer":
+        return "admin"
+    if normalized_role == "planner":
+        return "planner"
+    return "viewer"
+
+
+def load_workspace_agent_profile(agent_id: str, workspace_root: Path | None = None) -> LocalAgentProfile | None:
+    resolved_workspace_root = workspace_root or get_active_data_workspace_root()
+    if resolved_workspace_root is None:
+        return None
+    profile_path = get_workspace_agent_profile_path(agent_id, resolved_workspace_root)
+    if not profile_path.exists():
+        return None
+    try:
+        with open(profile_path, "r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+        return LocalAgentProfile.model_validate(data)
+    except Exception:
+        return None
+
+
+def save_workspace_agent_profile(profile: LocalAgentProfile, workspace_root: Path | None = None) -> Path | None:
+    resolved_workspace_root = workspace_root or get_active_data_workspace_root()
+    if resolved_workspace_root is None:
+        return None
+    ensure_data_workspace_layout(resolved_workspace_root)
+    profile_path = get_workspace_agent_profile_path(profile.agent_id, resolved_workspace_root)
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=profile_path.parent,
+        delete=False,
+        suffix=".tmp"
+    ) as tmp:
+        yaml.dump(
+            profile.model_dump(exclude_defaults=False),
+            tmp,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=True,
+        )
+        tmp_path = tmp.name
+    Path(tmp_path).replace(profile_path)
+    return profile_path
+
+
+def ensure_default_workspace_agent_profile(
+    legacy_my_role: str | None = None,
+    workspace_root: Path | None = None,
+) -> LocalAgentProfile | None:
+    resolved_workspace_root = workspace_root or get_active_data_workspace_root()
+    if resolved_workspace_root is None:
+        return None
+    existing = load_workspace_agent_profile("default", workspace_root=resolved_workspace_root)
+    if existing is not None:
+        return existing
+    profile = LocalAgentProfile(
+        agent_id="default",
+        display_name="Default Agent",
+        role=_map_legacy_role_to_workspace_role(legacy_my_role),
+        capabilities=[],
+    )
+    save_workspace_agent_profile(profile, workspace_root=resolved_workspace_root)
+    return profile
+
+
+def sync_workspace_agent_profiles_from_user_config(cfg: UserGameConfig) -> None:
+    workspace_root = get_active_data_workspace_root()
+    if workspace_root is None:
+        return
+    ensure_data_workspace_layout(workspace_root)
+    ensure_default_workspace_agent_profile(cfg.my_role, workspace_root=workspace_root)
+    for agent_id, profile in (cfg.agent_profiles or {}).items():
+        normalized_profile = profile
+        if not isinstance(normalized_profile, LocalAgentProfile):
+            try:
+                normalized_profile = LocalAgentProfile.model_validate(profile)
+            except Exception:
+                continue
+        save_workspace_agent_profile(normalized_profile, workspace_root=workspace_root)
+
+
 class ValidationIssue(BaseModel):
     """??????"""
     severity: Literal["error", "warning"]
@@ -405,3 +494,4 @@ def save_user_config(cfg: UserGameConfig) -> None:
         )
         tmp_path = tmp.name
     Path(tmp_path).replace(config_path)
+    sync_workspace_agent_profiles_from_user_config(cfg)

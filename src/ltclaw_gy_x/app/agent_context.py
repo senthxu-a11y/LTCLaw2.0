@@ -10,7 +10,7 @@ from .multi_agent_manager import MultiAgentManager
 from .capabilities import build_agent_capability_profile
 from ..config.utils import load_config
 from ..config.config import load_agent_config
-from ..game.config import load_user_config
+from ..game.config import load_user_config, load_workspace_agent_profile
 
 if TYPE_CHECKING:
     from .workspace import Workspace
@@ -110,7 +110,7 @@ async def get_agent_for_request(
             )
         agent_config = load_agent_config(target_agent_id)
         user_config = load_user_config()
-        local_profile = user_config.agent_profiles.get(target_agent_id)
+        local_profile = load_workspace_agent_profile(target_agent_id) or user_config.agent_profiles.get(target_agent_id)
         capability_profile = build_agent_capability_profile(
             agent_id=target_agent_id,
             display_name=agent_config.name,

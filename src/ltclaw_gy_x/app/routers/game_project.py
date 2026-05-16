@@ -12,22 +12,31 @@ from ltclaw_gy_x.game.config import (
     DEFAULT_TABLES_EXCLUDE_PATTERNS,
     DEFAULT_TABLES_INCLUDE_PATTERNS,
     DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES,
+    ensure_default_workspace_agent_profile,
     ProjectConfig,
     ProjectTablesSourceConfig,
     UserGameConfig,
     ValidationIssue,
     load_project_tables_source_config,
+    load_workspace_agent_profile,
     save_project_config,
     save_project_tables_source_config,
     save_user_config,
     validate_project_config,
 )
 from ltclaw_gy_x.game.paths import (
+    ensure_data_workspace_layout,
+    get_active_data_workspace_root,
     get_project_bundle_root,
     get_project_config_path,
     get_project_key,
     get_project_tables_source_path,
     get_storage_summary,
+    get_workspace_config_path,
+    get_workspace_pointer_path,
+    load_data_workspace_config,
+    save_data_workspace_config,
+    set_active_data_workspace_root,
 )
 from ltclaw_gy_x.game.source_discovery import discover_table_sources
 
@@ -44,6 +53,12 @@ REMOTE_PATH_PREFIXES = ("svn://", "http://", "https://", "file://")
 
 class ProjectRootUpdateRequest(BaseModel):
     project_root: str
+
+
+class WorkspaceRootUpdateRequest(BaseModel):
+    workspace_root: str
+    workspace_name: str | None = None
+    create_if_missing: bool = False
 
 
 class ProjectTablesSourceConfigRequest(BaseModel):
@@ -128,6 +143,8 @@ def _build_setup_status(game_service) -> dict:
     project_root_path = _project_root_path(project_root)
     project_root_exists = bool(project_root_path and project_root_path.exists())
     tables_config = _effective_tables_config(project_root_path)
+    active_workspace_root = get_active_data_workspace_root()
+    workspace_config = load_data_workspace_config(active_workspace_root) if active_workspace_root is not None else None
     user_config_svn_local_root = str(getattr(game_service.user_config, "svn_local_root", "") or "").strip() or None
     project_config = getattr(game_service, "project_config", None)
     project_config_svn_root = None
@@ -135,6 +152,11 @@ def _build_setup_status(game_service) -> dict:
         configured_root = str(project_config.svn.root or "").strip()
         project_config_svn_root = configured_root or None
     return {
+        "active_workspace_root": str(active_workspace_root) if active_workspace_root is not None else None,
+        "workspace_pointer_path": str(get_workspace_pointer_path()),
+        "workspace_config_path": str(get_workspace_config_path(active_workspace_root)) if active_workspace_root is not None else None,
+        "workspace_name": workspace_config.get("workspace_name") if workspace_config is not None else None,
+        "active_workspace_project_key": workspace_config.get("active_project_key") if workspace_config is not None else None,
         "project_root": project_root,
         "project_root_source": project_root_source,
         "user_config_svn_local_root": user_config_svn_local_root,
@@ -180,14 +202,21 @@ def _sanitize_string_list(values: list[str] | None, default: list[str] | None = 
 
 def _capability_status_payload(request: Request, workspace, game_service) -> dict:
     agent_id = getattr(request.state, 'agent_id', getattr(workspace, 'agent_id', 'default'))
-    local_profile = game_service.user_config.agent_profiles.get(agent_id)
+    workspace_profile = load_workspace_agent_profile(agent_id)
+    local_profile = workspace_profile or game_service.user_config.agent_profiles.get(agent_id)
     capability_profile = build_agent_capability_profile(
         agent_id=agent_id,
         display_name=agent_id,
         local_profile=local_profile,
         legacy_my_role=game_service.user_config.my_role,
     )
-    capability_source = 'game_user_config.agent_profiles' if local_profile is not None else 'game_user_config.my_role'
+    capability_source = (
+        'workspace.agents'
+        if workspace_profile is not None
+        else 'game_user_config.agent_profiles'
+        if local_profile is not None
+        else 'game_user_config.my_role'
+    )
     capabilities = list(capability_profile.capabilities)
     capability_set = set(capabilities)
 
@@ -195,12 +224,30 @@ def _capability_status_payload(request: Request, workspace, game_service) -> dic
         return '*' in capability_set or capability in capability_set
 
     storage_summary = get_storage_summary(Path(getattr(workspace, 'workspace_dir', '.')))
+    required_capabilities = [
+        'knowledge.read',
+        'knowledge.build',
+        'knowledge.publish',
+        'knowledge.map.read',
+        'knowledge.map.edit',
+        'knowledge.candidate.read',
+        'knowledge.candidate.write',
+        'workbench.read',
+        'workbench.test.write',
+        'workbench.test.export',
+        'workbench.source.write',
+    ]
+    missing_required_capabilities = [] if '*' in capability_set else [
+        item for item in required_capabilities if item not in capability_set
+    ]
 
     return {
         'agent_id': agent_id,
         'role': capability_profile.role,
         'capabilities': capabilities,
         'capability_source': capability_source,
+        'is_legacy_role_fallback': workspace_profile is None and local_profile is None,
+        'missing_required_capabilities': missing_required_capabilities,
         'required_for_cold_start': {
             'knowledge.candidate.read': _has('knowledge.candidate.read'),
             'knowledge.candidate.write': _has('knowledge.candidate.write'),
@@ -238,6 +285,60 @@ async def get_project_capability_status(request: Request, workspace=Depends(get_
     return _capability_status_payload(request, workspace, game_service)
 
 
+@router.get('/workspace-root')
+async def get_workspace_root_status(workspace=Depends(get_agent_for_request)):
+    game_service = _game_service_or_404(workspace)
+    active_workspace_root = get_active_data_workspace_root()
+    workspace_config = load_data_workspace_config(active_workspace_root) if active_workspace_root is not None else None
+    return {
+        'active_workspace_root': str(active_workspace_root) if active_workspace_root is not None else None,
+        'workspace_pointer_path': str(get_workspace_pointer_path()),
+        'workspace_config_path': str(get_workspace_config_path(active_workspace_root)) if active_workspace_root is not None else None,
+        'workspace_name': workspace_config.get('workspace_name') if workspace_config is not None else None,
+        'active_project_key': workspace_config.get('active_project_key') if workspace_config is not None else None,
+        'project_root': _configured_project_root(game_service),
+    }
+
+
+@router.put('/workspace-root')
+async def save_workspace_root(
+    request: WorkspaceRootUpdateRequest,
+    workspace=Depends(get_agent_for_request),
+):
+    game_service = _game_service_or_404(workspace)
+    workspace_root_value = str(request.workspace_root or '').strip()
+    if not workspace_root_value:
+        raise HTTPException(status_code=400, detail='workspace_root must not be empty')
+    workspace_root = Path(workspace_root_value.replace('\\', '/')).expanduser()
+    if workspace_root.exists() and not workspace_root.is_dir():
+        raise HTTPException(status_code=400, detail=f'workspace_root is not a directory: {workspace_root}')
+    if not workspace_root.exists() and not request.create_if_missing:
+        raise HTTPException(status_code=400, detail=f'workspace_root does not exist: {workspace_root}')
+    project_root = _project_root_path(_configured_project_root(game_service))
+    project_key = get_project_key(project_root) if project_root is not None else None
+    active_workspace_root = set_active_data_workspace_root(
+        workspace_root,
+        workspace_name=request.workspace_name,
+        active_project_key=project_key,
+    )
+    ensure_data_workspace_layout(
+        active_workspace_root,
+        workspace_name=request.workspace_name,
+        active_project_key=project_key,
+    )
+    ensure_default_workspace_agent_profile(game_service.user_config.my_role, workspace_root=active_workspace_root)
+    await game_service.reload_config()
+    workspace_config = load_data_workspace_config(active_workspace_root)
+    return {
+        'active_workspace_root': str(active_workspace_root),
+        'workspace_pointer_path': str(get_workspace_pointer_path()),
+        'workspace_config_path': str(get_workspace_config_path(active_workspace_root)),
+        'workspace_name': workspace_config.get('workspace_name'),
+        'active_project_key': workspace_config.get('active_project_key'),
+        'setup_status': _build_setup_status(game_service),
+    }
+
+
 @router.put("/root")
 async def save_project_root(
     request: ProjectRootUpdateRequest,
@@ -248,6 +349,10 @@ async def save_project_root(
     user_config = game_service.user_config
     user_config.svn_local_root = str(project_root)
     save_user_config(user_config)
+    active_workspace_root = get_active_data_workspace_root()
+    if active_workspace_root is not None:
+        save_data_workspace_config(active_workspace_root, active_project_key=get_project_key(project_root))
+        ensure_default_workspace_agent_profile(user_config.my_role, workspace_root=active_workspace_root)
     await game_service.reload_config()
     return {
         "project_key": get_project_key(project_root),

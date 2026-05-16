@@ -10,9 +10,11 @@ import type {
   ProjectTablesSourceConfig,
   SaveProjectRootResponse,
   SaveProjectTablesSourceResponse,
+  SaveWorkspaceRootResponse,
   UserGameConfig, 
   GameStorageSummary,
   ValidationIssue,
+  WorkspaceRootStatus,
   CommitResult,
   TableIndex,
   FieldPatch,
@@ -68,6 +70,20 @@ export const gameApi = {
 
   async getProjectCapabilityStatus(agentId: string): Promise<ProjectCapabilityStatus> {
     return request<ProjectCapabilityStatus>(`/agents/${agentId}/game/project/capability-status`);
+  },
+
+  async getWorkspaceRootStatus(agentId: string): Promise<WorkspaceRootStatus> {
+    return request<WorkspaceRootStatus>(`/agents/${agentId}/game/project/workspace-root`);
+  },
+
+  async saveWorkspaceRoot(
+    agentId: string,
+    payload: { workspace_root: string; workspace_name?: string | null; create_if_missing?: boolean },
+  ): Promise<SaveWorkspaceRootResponse> {
+    return request<SaveWorkspaceRootResponse>(`/agents/${agentId}/game/project/workspace-root`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
   },
 
   async saveProjectRoot(agentId: string, projectRoot: string): Promise<SaveProjectRootResponse> {

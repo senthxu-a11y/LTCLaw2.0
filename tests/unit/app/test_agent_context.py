@@ -108,6 +108,58 @@ async def test_get_agent_for_request_prefers_local_agent_profile(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_agent_for_request_prefers_workspace_agent_profile_over_user_config(monkeypatch):
+    app = FastAPI()
+    workspace = SimpleNamespace(agent_id='default', workspace_dir='/tmp/default')
+    app.state.multi_agent_manager = _DummyManager(workspace)
+    request = _request(app)
+
+    config = SimpleNamespace(
+        agents=SimpleNamespace(
+            active_agent='default',
+            profiles={'default': SimpleNamespace(enabled=True, workspace_dir='/tmp/default')},
+        )
+    )
+    monkeypatch.setattr(agent_context_module, 'load_config', lambda: config)
+    monkeypatch.setattr(
+        agent_context_module,
+        'load_agent_config',
+        lambda agent_id: SimpleNamespace(name='Default Agent'),
+    )
+    monkeypatch.setattr(
+        agent_context_module,
+        'load_workspace_agent_profile',
+        lambda agent_id: LocalAgentProfile(
+            agent_id='default',
+            display_name='Workspace Viewer',
+            role='viewer',
+            capabilities=[],
+        ),
+    )
+    monkeypatch.setattr(
+        agent_context_module,
+        'load_user_config',
+        lambda: UserGameConfig(
+            my_role='maintainer',
+            agent_profiles={
+                'default': LocalAgentProfile(
+                    agent_id='default',
+                    display_name='Legacy Admin',
+                    role='admin',
+                    capabilities=['*'],
+                )
+            },
+        ),
+    )
+
+    await agent_context_module.get_agent_for_request(request)
+
+    assert request.state.agent_profile['display_name'] == 'Workspace Viewer'
+    assert request.state.agent_profile['role'] == 'viewer'
+    assert '*' not in request.state.capabilities
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ('legacy_role', 'expected_role', 'expected_capabilities'),
     [

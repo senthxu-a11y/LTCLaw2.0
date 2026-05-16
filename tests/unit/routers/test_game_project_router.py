@@ -17,17 +17,23 @@ from ltclaw_gy_x.game.config import (
     DEFAULT_TABLES_EXCLUDE_PATTERNS,
     DEFAULT_TABLES_INCLUDE_PATTERNS,
     DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES,
+    LocalAgentProfile,
     ProjectTablesSourceConfig,
     UserGameConfig,
     load_project_config,
     save_project_tables_source_config,
+    save_workspace_agent_profile,
 )
 from ltclaw_gy_x.game.models import KnowledgeManifest, KnowledgeSystem
 from ltclaw_gy_x.game.paths import (
+    get_active_data_workspace_root,
     get_project_bundle_root,
     get_project_config_path,
     get_project_key,
     get_project_tables_source_path,
+    get_workspace_agent_profile_path,
+    get_workspace_config_path,
+    get_workspace_pointer_path,
 )
 
 
@@ -268,9 +274,75 @@ async def test_capability_status_reflects_legacy_maintainer_role(app, client, mo
     payload = response.json()
     assert payload['role'] == 'admin'
     assert payload['capability_source'] == 'game_user_config.my_role'
+    assert payload['is_legacy_role_fallback'] is True
     assert payload['required_for_cold_start']['knowledge.candidate.write'] is True
     assert payload['required_for_formal_map']['knowledge.map.edit'] is True
     assert payload['required_for_release']['knowledge.publish'] is True
+
+
+@pytest.mark.asyncio
+async def test_workspace_root_api_creates_pointer_and_updates_setup_status(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    service = _Service(project_root)
+    service.user_config.svn_local_root = str(project_root)
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+    workspace_root = tmp_path / 'LTClawWorkspace'
+
+    async with client:
+        response = await client.put(
+            '/api/game/project/workspace-root',
+            json={'workspace_root': str(workspace_root), 'workspace_name': 'LTClaw Workspace', 'create_if_missing': True},
+        )
+        setup = await client.get('/api/game/project/setup-status')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['active_workspace_root'] == str(workspace_root)
+    assert get_active_data_workspace_root() == workspace_root
+    assert get_workspace_pointer_path().exists()
+    assert get_workspace_config_path(workspace_root).exists()
+    assert get_workspace_agent_profile_path('default', workspace_root).exists()
+    assert setup.status_code == 200
+    setup_payload = setup.json()
+    assert setup_payload['active_workspace_root'] == str(workspace_root)
+    assert setup_payload['project_bundle_root'] == str(get_project_bundle_root(project_root))
+    assert str(get_project_bundle_root(project_root)).startswith(str(workspace_root / 'projects'))
+
+
+@pytest.mark.asyncio
+async def test_capability_status_prefers_workspace_agent_profile(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    workspace_root = tmp_path / 'LTClawWorkspace'
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    service = _Service(project_root)
+    service.user_config = UserGameConfig(my_role='maintainer', svn_local_root=str(project_root))
+    app.dependency_overrides[get_agent_for_request] = lambda: SimpleNamespace(
+        service_manager=SimpleNamespace(services={'game_service': service}),
+        workspace_dir=str(tmp_path / 'qa-workspace'),
+        agent_id='qa-agent',
+    )
+    (tmp_path / 'qa-workspace').mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr('ltclaw_gy_x.app.routers.game_project.get_active_data_workspace_root', lambda: workspace_root)
+    monkeypatch.setattr('ltclaw_gy_x.game.config.get_active_data_workspace_root', lambda: workspace_root)
+    monkeypatch.setattr('ltclaw_gy_x.game.paths.get_active_data_workspace_root', lambda: workspace_root)
+    save_workspace_agent_profile(
+        LocalAgentProfile(agent_id='qa-agent', display_name='QA Agent', role='viewer', capabilities=[]),
+        workspace_root=workspace_root,
+    )
+
+    async with client:
+        response = await client.get('/api/game/project/capability-status')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['agent_id'] == 'qa-agent'
+    assert payload['role'] == 'viewer'
+    assert payload['capability_source'] == 'workspace.agents'
+    assert payload['is_legacy_role_fallback'] is False
+    assert 'knowledge.build' in payload['missing_required_capabilities']
 
 
 def test_project_root_path_normalizes_windows_style_backslashes():
@@ -385,17 +457,68 @@ async def test_source_discovery_finds_minimal_project_sample(app, client):
             'cold_start_reason': 'rule_only_supported_csv',
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_setup_status_default_table_include_does_not_include_txt(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    service = _Service(tmp_path / 'missing-root')
+    service.user_config.svn_local_root = None
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.get('/api/game/project/setup-status')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['tables_config']['include'] == ['**/*.csv', '**/*.xlsx']
+    assert '**/*.txt' not in payload['tables_config']['include']
+
+
+@pytest.mark.asyncio
+async def test_source_discovery_accepts_txt_when_explicitly_included(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / 'txt-project'
+    tables_dir = project_root / 'Tables'
+    tables_dir.mkdir(parents=True)
+    (tables_dir / 'HeroTable.txt').write_text('ID\tName\n1\tHeroA\n', encoding='utf-8')
+
+    service = _Service(project_root)
+    service.user_config.svn_local_root = str(project_root)
+    save_project_tables_source_config(
+        project_root,
+        ProjectTablesSourceConfig(roots=['Tables'], include=['**/*.txt']),
+    )
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.post('/api/game/project/sources/discover')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['summary']['discovered_table_count'] == 1
+    assert payload['summary']['available_table_count'] == 0
+    assert payload['table_files'] == [
+        {
+            'source_path': 'Tables/HeroTable.txt',
+            'format': 'txt',
+            'status': 'recognized',
+            'reason': 'matched_recognized_format',
+            'cold_start_supported': False,
+            'cold_start_reason': 'rule_only_cold_start_not_supported_for_txt',
+        }
+    ]
     assert payload['excluded_files'] == []
     assert payload['unsupported_files'] == []
     assert payload['errors'] == []
     assert payload['summary'] == {
         'discovered_table_count': 1,
-        'available_table_count': 1,
+        'available_table_count': 0,
         'excluded_table_count': 0,
         'unsupported_table_count': 0,
         'error_count': 0,
     }
-    assert payload['next_action'] == 'run_raw_index'
+    assert payload['next_action'] == 'configure_tables_source'
 
 
 @pytest.mark.asyncio

@@ -79,6 +79,7 @@ export default function GameProject() {
   const [wizardForm] = Form.useForm<{ id?: string; name: string }>();
   const [setupStatus, setSetupStatus] = useState<ProjectSetupStatusResponse | null>(null);
   const [discoveryResult, setDiscoveryResult] = useState<ProjectTableSourceDiscoveryResponse | null>(null);
+  const [workspaceRootInput, setWorkspaceRootInput] = useState("");
   const [projectRootInput, setProjectRootInput] = useState("");
   const [tablesRootsInput, setTablesRootsInput] = useState("");
   const [tablesIncludeInput, setTablesIncludeInput] = useState("");
@@ -86,6 +87,7 @@ export default function GameProject() {
   const [tablesHeaderRow, setTablesHeaderRow] = useState(1);
   const [tablesPrimaryKeysInput, setTablesPrimaryKeysInput] = useState("");
   const [savingProjectSetupRoot, setSavingProjectSetupRoot] = useState(false);
+  const [savingWorkspaceRoot, setSavingWorkspaceRoot] = useState(false);
   const [savingProjectSetupTables, setSavingProjectSetupTables] = useState(false);
   const [discoveringSources, setDiscoveringSources] = useState(false);
   const [activeColdStartJobId, setActiveColdStartJobId] = useState("");
@@ -97,6 +99,7 @@ export default function GameProject() {
   const applySetupStatus = useCallback((status: ProjectSetupStatusResponse | null) => {
     setSetupStatus(status);
     if (!status) {
+      setWorkspaceRootInput("");
       setProjectRootInput("");
       setTablesRootsInput("");
       setTablesIncludeInput("");
@@ -105,6 +108,7 @@ export default function GameProject() {
       setTablesPrimaryKeysInput("");
       return;
     }
+    setWorkspaceRootInput(status.active_workspace_root ?? "");
     setProjectRootInput(status.project_root ?? "");
     setTablesRootsInput(joinProjectSetupLines(status.tables_config.roots));
     setTablesIncludeInput(joinProjectSetupLines(status.tables_config.include));
@@ -202,6 +206,32 @@ export default function GameProject() {
       message.error(errMsg);
     } finally {
       setSavingProjectSetupRoot(false);
+    }
+  };
+
+  const handleSaveWorkspaceRoot = async (createIfMissing = false) => {
+    if (!selectedAgent) {
+      return;
+    }
+    try {
+      setSavingWorkspaceRoot(true);
+      const response = await gameApi.saveWorkspaceRoot(selectedAgent, {
+        workspace_root: workspaceRootInput.trim(),
+        workspace_name: setupStatus?.workspace_name || "LTClaw Workspace",
+        create_if_missing: createIfMissing,
+      });
+      applySetupStatus(response.setup_status);
+      await fetchConfig();
+      message.success(
+        t("gameProject.workspaceRootSaved", {
+          defaultValue: createIfMissing ? "Workspace Root 已创建并设置。" : "Workspace Root 已设置。",
+        }),
+      );
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : t("gameProject.saveFailed");
+      message.error(errMsg);
+    } finally {
+      setSavingWorkspaceRoot(false);
     }
   };
 
@@ -412,6 +442,7 @@ export default function GameProject() {
   const unsupportedFiles = discoveryResult?.unsupported_files ?? [];
   const excludedFiles = discoveryResult?.excluded_files ?? [];
   const discoveryErrors = discoveryResult?.errors ?? [];
+  const discoveryRoots = discoveryResult?.roots ?? [];
 
   const handleSave = async () => {
     try {
@@ -678,6 +709,73 @@ export default function GameProject() {
             <div className={styles.projectSetupBlocks}>
               <div className={styles.projectSetupBlock}>
                 <div className={styles.projectSetupBlockHeader}>
+                  <Text strong>{t("gameProject.projectSetupEnvironmentTitle", { defaultValue: "Current Environment" })}</Text>
+                </div>
+                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+                  <Descriptions.Item label={t("gameProject.projectSetupWorkspaceRoot", { defaultValue: "Workspace Root" })}>
+                    {setupStatus?.active_workspace_root || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupProjectRootShort", { defaultValue: "Project Root" })}>
+                    {setupStatus?.project_root || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectBundleRoot", { defaultValue: "Project Bundle Root" })}>
+                    {setupStatus?.project_bundle_root || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectKey", { defaultValue: "Current Project" })}>
+                    {setupStatus?.project_key || setupStatus?.active_workspace_project_key || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupCurrentAgent", { defaultValue: "Current Agent" })}>
+                    {selectedAgent || storageSummary?.current_agent_id || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityRole", { defaultValue: "Role" })}>
+                    {projectCapabilityStatus?.role || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupCapabilitySource", { defaultValue: "Capability Source" })}>
+                    {projectCapabilityStatus?.capability_source || "-"}
+                  </Descriptions.Item>
+                </Descriptions>
+              </div>
+
+              <div className={styles.projectSetupBlock}>
+                <div className={styles.projectSetupBlockHeader}>
+                  <Text strong>{t("gameProject.projectSetupWorkspaceRootTitle", { defaultValue: "Workspace Root" })}</Text>
+                  <Space wrap>
+                    <Button size="small" type="primary" onClick={() => void handleSaveWorkspaceRoot(false)} loading={savingWorkspaceRoot}>
+                      {t("gameProject.projectSetupSetWorkspaceRoot", { defaultValue: "设置 Workspace Root" })}
+                    </Button>
+                    <Button size="small" onClick={() => void handleSaveWorkspaceRoot(true)} loading={savingWorkspaceRoot}>
+                      {t("gameProject.projectSetupCreateWorkspaceRoot", { defaultValue: "新建 Workspace Root" })}
+                    </Button>
+                    <Button size="small" icon={<CopyOutlined />} onClick={() => copyText(setupStatus?.active_workspace_root || workspaceRootInput || "") }>
+                      {t("gameProject.projectSetupCopyWorkspaceRoot", { defaultValue: "复制路径" })}
+                    </Button>
+                  </Space>
+                </div>
+                <div className={styles.projectSetupHint}>
+                  {t("gameProject.projectSetupWorkspaceRootHint", {
+                    defaultValue: "切 Workspace 才切换完整数据环境；切 Agent 只切权限、session 和草稿，不切项目数据。",
+                  })}
+                </div>
+                <Input
+                  value={workspaceRootInput}
+                  onChange={(event) => setWorkspaceRootInput(event.target.value)}
+                  placeholder={t("gameProject.projectSetupWorkspaceRootPlaceholder", { defaultValue: "/Users/Admin/LTClawWorkspace" })}
+                />
+                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+                  <Descriptions.Item label={t("gameProject.projectSetupWorkspaceRootActive", { defaultValue: "Active Workspace Root" })}>
+                    {setupStatus?.active_workspace_root || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupWorkspacePointerPath", { defaultValue: "Workspace Pointer" })}>
+                    {setupStatus?.workspace_pointer_path || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupWorkspaceConfigPath", { defaultValue: "workspace.yaml" })}>
+                    {setupStatus?.workspace_config_path || "-"}
+                  </Descriptions.Item>
+                </Descriptions>
+              </div>
+
+              <div className={styles.projectSetupBlock}>
+                <div className={styles.projectSetupBlockHeader}>
                   <Text strong>{t("gameProject.projectSetupLocalRootTitle", { defaultValue: "Local Project Root" })}</Text>
                   <Button size="small" type="primary" onClick={handleSaveProjectRoot} loading={savingProjectSetupRoot}>
                     {t("common.save")}
@@ -761,8 +859,14 @@ export default function GameProject() {
                   <Descriptions.Item label={t("gameProject.projectSetupCapabilityRole", { defaultValue: "Role" })}>
                     {projectCapabilityStatus?.role || "-"}
                   </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityAgentId", { defaultValue: "Agent ID" })}>
+                    {projectCapabilityStatus?.agent_id || selectedAgent || "-"}
+                  </Descriptions.Item>
                   <Descriptions.Item label={t("gameProject.projectSetupCapabilitySource", { defaultValue: "Capability Source" })}>
                     {projectCapabilityStatus?.capability_source || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityLegacyFallback", { defaultValue: "Legacy Role Fallback" })}>
+                    {projectCapabilityStatus ? String(projectCapabilityStatus.is_legacy_role_fallback) : "-"}
                   </Descriptions.Item>
                   <Descriptions.Item label={t("gameProject.projectSetupCapabilityColdStart", { defaultValue: "Cold-start" })}>
                     {projectCapabilityStatus
@@ -786,6 +890,16 @@ export default function GameProject() {
                     showIcon
                     message={t("gameProject.projectSetupCapabilityColdStartMissing", {
                       defaultValue: "当前缺少 knowledge.candidate.write，Rule-only 冷启动写入请求会被拦截。",
+                    })}
+                    className={styles.mapReviewAlert}
+                  />
+                ) : null}
+                {projectCapabilityStatus && projectCapabilityStatus.missing_required_capabilities.length > 0 ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    message={t("gameProject.projectSetupCapabilityMissingList", {
+                      defaultValue: `Missing required capabilities: ${projectCapabilityStatus.missing_required_capabilities.join(", ")}`,
                     })}
                     className={styles.mapReviewAlert}
                   />
@@ -830,6 +944,28 @@ export default function GameProject() {
                   <div className={styles.projectSetupSummaryItem}><span>unsupported</span><strong>{discoverySummary.unsupported_table_count}</strong></div>
                   <div className={styles.projectSetupSummaryItem}><span>errors</span><strong>{discoverySummary.error_count}</strong></div>
                 </div>
+                {discoveryRoots.length > 0 ? (
+                  <div className={styles.projectSetupListSection}>
+                    <Text strong>{t("gameProject.projectSetupRootsResolved", { defaultValue: "Resolved Source Roots" })}</Text>
+                    {discoveryRoots.map((item) => (
+                      <div key={`${item.configured_root}-${item.resolved_root}`} className={styles.projectSetupListItem}>
+                        <span>{`${item.configured_root} -> ${item.resolved_root}`}</span>
+                        <Tag color={item.exists && item.is_directory ? "green" : "red"}>
+                          {item.exists && item.is_directory ? "exists" : "missing"}
+                        </Tag>
+                      </div>
+                    ))}
+                    {discoveryErrors.some((item) => item.reason === "source_root_missing") ? (
+                      <Alert
+                        type="warning"
+                        showIcon
+                        message={t("gameProject.projectSetupSourceRootMissingHint", {
+                          defaultValue: "如果 Project Root 已经是 multi_source_project，则 Table Root 应填写 Tables，而不是再次填写 multi_source_project。",
+                        })}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
                 {discoveryNotScanned ? (
                   <Alert
                     type="info"
@@ -1004,9 +1140,13 @@ export default function GameProject() {
                     </Descriptions>
                     <div className={styles.projectSetupSummaryGrid}>
                       <div className={styles.projectSetupSummaryItem}><span>discovered</span><strong>{coldStartJob.counts.discovered_table_count}</strong></div>
+                      <div className={styles.projectSetupSummaryItem}><span>docs</span><strong>{coldStartJob.counts.discovered_doc_count ?? 0}</strong></div>
+                      <div className={styles.projectSetupSummaryItem}><span>scripts</span><strong>{coldStartJob.counts.discovered_script_count ?? 0}</strong></div>
                       <div className={styles.projectSetupSummaryItem}><span>raw</span><strong>{coldStartJob.counts.raw_table_index_count}</strong></div>
                       <div className={styles.projectSetupSummaryItem}><span>canonical</span><strong>{coldStartJob.counts.canonical_table_count}</strong></div>
                       <div className={styles.projectSetupSummaryItem}><span>candidate</span><strong>{coldStartJob.counts.candidate_table_count}</strong></div>
+                      <div className={styles.projectSetupSummaryItem}><span>warnings</span><strong>{coldStartJob.warnings.length}</strong></div>
+                      <div className={styles.projectSetupSummaryItem}><span>errors</span><strong>{coldStartJob.errors.length}</strong></div>
                       <div className={styles.projectSetupSummaryItem}><span>timeout</span><strong>{coldStartJob.timeout_seconds}s</strong></div>
                     </div>
                     <div className={styles.projectSetupJobActions}>

@@ -45,6 +45,8 @@ _JOB_LOCK = threading.Lock()
 
 class ColdStartJobCounts(BaseModel):
     discovered_table_count: int = 0
+    discovered_doc_count: int = 0
+    discovered_script_count: int = 0
     raw_table_index_count: int = 0
     canonical_table_count: int = 0
     candidate_table_count: int = 0

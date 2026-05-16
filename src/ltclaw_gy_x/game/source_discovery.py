@@ -55,6 +55,7 @@ def discover_table_sources(project_root: Path | None, tables_config: ProjectTabl
     empty_payload = {
         "success": False,
         "project_root": project_root_value,
+        "roots": [],
         "table_files": [],
         "excluded_files": [],
         "unsupported_files": [],
@@ -91,6 +92,7 @@ def discover_table_sources(project_root: Path | None, tables_config: ProjectTabl
     excluded_files: list[dict] = []
     unsupported_files: list[dict] = []
     errors: list[dict] = []
+    root_entries: list[dict] = []
     seen_paths: set[str] = set()
 
     for configured_root in effective_config.roots:
@@ -101,6 +103,14 @@ def discover_table_sources(project_root: Path | None, tables_config: ProjectTabl
         root_path = Path(normalized_root_value).expanduser()
         if not root_path.is_absolute():
             root_path = project_root / normalized_root_value
+        root_entries.append(
+            {
+                "configured_root": _normalize_path_for_match(root_value),
+                "resolved_root": root_path.as_posix(),
+                "exists": root_path.exists(),
+                "is_directory": root_path.is_dir(),
+            }
+        )
         if not root_path.exists():
             errors.append({"source_path": _normalize_path_for_match(root_value), "reason": "source_root_missing"})
             continue
@@ -143,6 +153,7 @@ def discover_table_sources(project_root: Path | None, tables_config: ProjectTabl
     payload = {
         "success": len(errors) == 0,
         "project_root": str(project_root),
+        "roots": root_entries,
         "table_files": table_files,
         "excluded_files": excluded_files,
         "unsupported_files": unsupported_files,

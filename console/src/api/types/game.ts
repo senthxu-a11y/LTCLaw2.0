@@ -96,6 +96,11 @@ export interface ProjectSetupDiscoverySummary {
 }
 
 export interface ProjectSetupStatusResponse {
+  active_workspace_root?: string | null;
+  workspace_pointer_path?: string;
+  workspace_config_path?: string | null;
+  workspace_name?: string | null;
+  active_workspace_project_key?: string | null;
   project_root: string | null;
   project_root_source?: string | null;
   user_config_svn_local_root?: string | null;
@@ -121,6 +126,8 @@ export interface ProjectCapabilityStatus {
   role: string;
   capabilities: string[];
   capability_source: string;
+  is_legacy_role_fallback: boolean;
+  missing_required_capabilities: string[];
   required_for_cold_start: Record<string, boolean>;
   required_for_formal_map: Record<string, boolean>;
   required_for_release: Record<string, boolean>;
@@ -159,6 +166,12 @@ export interface ProjectTableSourceError {
 export interface ProjectTableSourceDiscoveryResponse {
   success: boolean;
   project_root: string | null;
+  roots: Array<{
+    configured_root: string;
+    resolved_root: string;
+    exists: boolean;
+    is_directory: boolean;
+  }>;
   table_files: ProjectTableSourceEntry[];
   excluded_files: ProjectTableSourceEntry[];
   unsupported_files: ProjectTableSourceEntry[];
@@ -175,9 +188,24 @@ export interface ProjectTableSourceDiscoveryResponse {
 
 export interface ColdStartJobCounts {
   discovered_table_count: number;
+  discovered_doc_count: number;
+  discovered_script_count: number;
   raw_table_index_count: number;
   canonical_table_count: number;
   candidate_table_count: number;
+}
+
+export interface WorkspaceRootStatus {
+  active_workspace_root: string | null;
+  workspace_pointer_path: string;
+  workspace_config_path: string | null;
+  workspace_name: string | null;
+  active_project_key: string | null;
+  project_root: string | null;
+}
+
+export interface SaveWorkspaceRootResponse extends WorkspaceRootStatus {
+  setup_status: ProjectSetupStatusResponse;
 }
 
 export interface ColdStartJobError {
@@ -218,6 +246,16 @@ export interface GameStorageSummary {
   working_root: string;
   game_data_root: string;
   workspace_dir: string;
+  active_workspace_root?: string | null;
+  workspace_pointer_path?: string;
+  workspace_config_path?: string | null;
+  workspace_name?: string | null;
+  workspace_projects_dir?: string | null;
+  workspace_agents_dir?: string | null;
+  workspace_sessions_dir?: string | null;
+  workspace_audit_dir?: string | null;
+  workspace_cache_dir?: string | null;
+  current_agent_id?: string;
   user_config_path: string;
   legacy_user_config_path: string;
   svn_root?: string | null;

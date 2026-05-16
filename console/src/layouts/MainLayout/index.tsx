@@ -158,6 +158,7 @@ export default function MainLayout() {
                   <Route path="/index-map" element={<IndexMapPage />} />
                   <Route path="/doc-library" element={<DocLibraryPage />} />
                   <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
+                  <Route path="/game/workbench" element={<Navigate to="/numeric-workbench" replace />} />
                   <Route path="/numeric-workbench" element={<NumericWorkbenchPage />} />
 
                   {/* Plugin routes — dynamically injected at runtime */}
