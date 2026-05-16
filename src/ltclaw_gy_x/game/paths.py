@@ -28,6 +28,7 @@ _WORKING_DIR_ENV_VARS = (
 
 _DEFAULT_SESSION_NAME = "default"
 _DEFAULT_WORKSPACE_NAME = "LTClaw Workspace"
+_UNSET = object()
 _DEFAULT_WORKSPACE_STORAGE = {
     "projects_dir": "projects",
     "agents_dir": "agents",
@@ -104,11 +105,13 @@ def _default_workspace_config(
     *,
     workspace_name: str | None = None,
     active_project_key: str | None = None,
+    active_project_root: str | None = None,
 ) -> dict:
     return {
         "schema_version": "workspace.v1",
         "workspace_name": str(workspace_name or _DEFAULT_WORKSPACE_NAME),
         "active_project_key": active_project_key,
+        "active_project_root": active_project_root,
         "storage": dict(_DEFAULT_WORKSPACE_STORAGE),
     }
 
@@ -123,6 +126,7 @@ def load_data_workspace_config(workspace_root: Path) -> dict:
         "schema_version": config.get("schema_version") or "workspace.v1",
         "workspace_name": config.get("workspace_name") or _DEFAULT_WORKSPACE_NAME,
         "active_project_key": config.get("active_project_key"),
+        "active_project_root": str(config.get("active_project_root") or "").strip() or None,
         "storage": merged_storage,
     }
 
@@ -131,18 +135,40 @@ def save_data_workspace_config(
     workspace_root: Path,
     *,
     workspace_name: str | None = None,
-    active_project_key: str | None = None,
+    active_project_key: str | None | object = _UNSET,
+    active_project_root: str | os.PathLike[str] | None | object = _UNSET,
 ) -> dict:
     workspace_root = Path(workspace_root).expanduser()
     existing = load_data_workspace_config(workspace_root)
+    next_active_project_root = existing.get("active_project_root")
+    if active_project_root is not _UNSET:
+        normalized_active_project_root = _normalize_local_path(active_project_root)
+        next_active_project_root = (
+            str(normalized_active_project_root)
+            if normalized_active_project_root is not None
+            else None
+        )
     payload = {
         "schema_version": "workspace.v1",
         "workspace_name": workspace_name or existing.get("workspace_name") or _DEFAULT_WORKSPACE_NAME,
-        "active_project_key": active_project_key if active_project_key is not None else existing.get("active_project_key"),
+        "active_project_key": (
+            existing.get("active_project_key")
+            if active_project_key is _UNSET
+            else active_project_key
+        ),
+        "active_project_root": next_active_project_root,
         "storage": dict(existing.get("storage") or _DEFAULT_WORKSPACE_STORAGE),
     }
     _write_yaml_atomic(get_workspace_config_path(workspace_root), payload)
     return payload
+
+
+def get_active_workspace_project_root() -> Path | None:
+    workspace_root = get_active_data_workspace_root()
+    if workspace_root is None:
+        return None
+    workspace_config = load_data_workspace_config(workspace_root)
+    return _normalize_local_path(workspace_config.get("active_project_root"))
 
 
 def get_workspace_projects_dir(workspace_root: Path) -> Path:
@@ -183,7 +209,8 @@ def ensure_data_workspace_layout(
     workspace_root: Path,
     *,
     workspace_name: str | None = None,
-    active_project_key: str | None = None,
+    active_project_key: str | None | object = _UNSET,
+    active_project_root: str | os.PathLike[str] | None | object = _UNSET,
 ) -> dict:
     workspace_root = Path(workspace_root).expanduser()
     workspace_root.mkdir(parents=True, exist_ok=True)
@@ -191,6 +218,7 @@ def ensure_data_workspace_layout(
         workspace_root,
         workspace_name=workspace_name,
         active_project_key=active_project_key,
+        active_project_root=active_project_root,
     )
     get_workspace_projects_dir(workspace_root).mkdir(parents=True, exist_ok=True)
     get_workspace_agents_dir(workspace_root).mkdir(parents=True, exist_ok=True)
@@ -204,7 +232,8 @@ def set_active_data_workspace_root(
     path: str | os.PathLike[str],
     *,
     workspace_name: str | None = None,
-    active_project_key: str | None = None,
+    active_project_key: str | None | object = _UNSET,
+    active_project_root: str | os.PathLike[str] | None | object = _UNSET,
 ) -> Path:
     workspace_root = _normalize_local_path(path)
     if workspace_root is None:
@@ -213,6 +242,7 @@ def set_active_data_workspace_root(
         workspace_root,
         workspace_name=workspace_name,
         active_project_key=active_project_key,
+        active_project_root=active_project_root,
     )
     _write_yaml_atomic(
         get_workspace_pointer_path(),
@@ -762,6 +792,7 @@ def get_storage_summary(
         "game_data_root": str(get_game_data_root()),
         "workspace_dir": str(workspace_dir),
         "active_workspace_root": str(active_workspace_root) if active_workspace_root is not None else None,
+        "active_workspace_project_root": workspace_config.get("active_project_root") if workspace_config is not None else None,
         "workspace_pointer_path": str(get_workspace_pointer_path()),
         "workspace_config_path": workspace_config_path,
         "workspace_name": workspace_config.get("workspace_name") if workspace_config is not None else None,

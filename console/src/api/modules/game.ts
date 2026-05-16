@@ -2,6 +2,7 @@
 import type { 
   ColdStartJobCreateResponse,
   ColdStartJobState,
+  LocalAgentProfile,
   ProjectConfig, 
   FrontendRuntimeInfo,
   ProjectCapabilityStatus,
@@ -70,6 +71,23 @@ export const gameApi = {
 
   async getProjectCapabilityStatus(agentId: string): Promise<ProjectCapabilityStatus> {
     return request<ProjectCapabilityStatus>(`/agents/${agentId}/game/project/capability-status`);
+  },
+
+  async getWorkspaceAgentProfile(agentId: string): Promise<LocalAgentProfile> {
+    return request<LocalAgentProfile>(`/agents/${agentId}/game/project/agent-profile`);
+  },
+
+  async saveWorkspaceAgentProfile(
+    agentId: string,
+    payload: Pick<LocalAgentProfile, "display_name" | "role" | "capabilities">,
+  ): Promise<{ profile: LocalAgentProfile; capability_status: ProjectCapabilityStatus }> {
+    return request<{ profile: LocalAgentProfile; capability_status: ProjectCapabilityStatus }>(
+      `/agents/${agentId}/game/project/agent-profile`,
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      },
+    );
   },
 
   async getWorkspaceRootStatus(agentId: string): Promise<WorkspaceRootStatus> {
@@ -159,13 +177,13 @@ export const gameApi = {
     return request<RecentSvnChangesResponse>(`/agents/${agentId}/game/svn/changes/recent?limit=${limit}`);
   },
   
-  subscribeSvnLog(agentId: string, onMessage: (data: any) => void): EventSource {
+  subscribeSvnLog(agentId: string, onMessage: (data: unknown) => void): EventSource {
     const eventSource = new EventSource(`/api/agents/${agentId}/game/svn/log/stream`);
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         onMessage(data);
-      } catch (e) {
+      } catch {
         console.warn('Failed to parse SSE data:', event.data);
       }
     };

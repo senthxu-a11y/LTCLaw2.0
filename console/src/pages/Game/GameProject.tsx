@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Form, Input, Switch, Button, Card } from "@agentscope-ai/design";
 import { CopyOutlined } from "@ant-design/icons";
-import { Alert, Descriptions, Empty, InputNumber, Modal, Progress, Space, Tag, Typography } from "antd";
+import { Alert, Descriptions, Empty, InputNumber, Modal, Progress, Select, Space, Tag, Typography } from "antd";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
@@ -17,6 +17,7 @@ import type {
   ProjectTableSourceDiscoveryResponse,
   ProjectConfig,
   UserGameConfig,
+  LocalAgentProfile,
   ValidationIssue,
 } from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
@@ -61,12 +62,26 @@ interface GameProjectFormData {
 }
 
 const LOCAL_PROJECT_DIRECTORY_LABEL = "local project directory";
+const WORKSPACE_AGENT_ROLE_OPTIONS: LocalAgentProfile["role"][] = ["viewer", "planner", "source_writer", "admin"];
+const WORKSPACE_AGENT_CAPABILITY_OPTIONS = [
+  "knowledge.read",
+  "knowledge.build",
+  "knowledge.publish",
+  "knowledge.map.read",
+  "knowledge.map.edit",
+  "knowledge.candidate.read",
+  "knowledge.candidate.write",
+  "workbench.read",
+  "workbench.test.write",
+  "workbench.test.export",
+  "workbench.source.write",
+] as const;
 
 export default function GameProject() {
   const { t } = useTranslation();
   const { message } = useAppMessage();
   const navigate = useNavigate();
-  const { selectedAgent, addAgent, setSelectedAgent } = useAgentStore();
+  const { selectedAgent, addAgent, setSelectedAgent, updateAgent } = useAgentStore();
   const [form] = Form.useForm<GameProjectFormData>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -74,6 +89,8 @@ export default function GameProject() {
   const [storageSummary, setStorageSummary] = useState<GameStorageSummary | null>(null);
   const [frontendRuntimeInfo, setFrontendRuntimeInfo] = useState<FrontendRuntimeInfo | null>(null);
   const [projectCapabilityStatus, setProjectCapabilityStatus] = useState<ProjectCapabilityStatus | null>(null);
+  const [workspaceAgentProfile, setWorkspaceAgentProfile] = useState<LocalAgentProfile | null>(null);
+  const [savingWorkspaceAgentProfile, setSavingWorkspaceAgentProfile] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSaving, setWizardSaving] = useState(false);
   const [wizardForm] = Form.useForm<{ id?: string; name: string }>();
@@ -127,17 +144,32 @@ export default function GameProject() {
     setLoading(true);
     setError(null);
     try {
-      const [projectConfig, userConfig, storage, projectSetupStatus, capabilityStatus] = await Promise.all([
+      const [projectConfig, userConfig, storage, projectSetupStatus, capabilityStatus, workspaceProfile] = await Promise.all([
         gameApi.getProjectConfig(selectedAgent),
         gameApi.getUserConfig(selectedAgent).catch(() => null),
         gameApi.getStorageSummary(selectedAgent).catch(() => null),
         gameApi.getProjectSetupStatus(selectedAgent).catch(() => null),
         gameApi.getProjectCapabilityStatus(selectedAgent).catch(() => null),
+        gameApi.getWorkspaceAgentProfile(selectedAgent).catch(() => null),
       ]);
       const runtimeInfo = await gameApi.getFrontendRuntimeInfo().catch(() => null);
       setStorageSummary(storage);
       setFrontendRuntimeInfo(runtimeInfo);
       setProjectCapabilityStatus(capabilityStatus);
+      setWorkspaceAgentProfile(workspaceProfile);
+      if (capabilityStatus) {
+        updateAgent(selectedAgent, {
+          role: capabilityStatus.role as LocalAgentProfile["role"],
+          capabilities: capabilityStatus.capabilities,
+          agent_profile:
+            workspaceProfile ?? {
+              agent_id: capabilityStatus.agent_id,
+              display_name: capabilityStatus.agent_id,
+              role: capabilityStatus.role as LocalAgentProfile["role"],
+              capabilities: capabilityStatus.capabilities,
+            },
+        });
+      }
       applySetupStatus(projectSetupStatus);
       setDiscoveryResult(null);
       if (projectConfig) {
@@ -185,7 +217,36 @@ export default function GameProject() {
     } finally {
       setLoading(false);
     }
-  }, [applySetupStatus, form, selectedAgent, t]);
+  }, [applySetupStatus, form, selectedAgent, t, updateAgent]);
+
+  const canWriteColdStart = projectCapabilityStatus?.required_for_cold_start["knowledge.candidate.write"] ?? true;
+
+  const handleSaveWorkspaceAgentProfile = async () => {
+    if (!selectedAgent || !workspaceAgentProfile) {
+      return;
+    }
+    try {
+      setSavingWorkspaceAgentProfile(true);
+      const response = await gameApi.saveWorkspaceAgentProfile(selectedAgent, {
+        display_name: workspaceAgentProfile.display_name,
+        role: workspaceAgentProfile.role,
+        capabilities: workspaceAgentProfile.capabilities,
+      });
+      setWorkspaceAgentProfile(response.profile);
+      setProjectCapabilityStatus(response.capability_status);
+      updateAgent(selectedAgent, {
+        role: response.capability_status.role as LocalAgentProfile["role"],
+        capabilities: response.capability_status.capabilities,
+        agent_profile: response.profile,
+      });
+      message.success(t("gameProject.workspaceAgentProfileSaved", { defaultValue: "Agent Role / Capabilities 已保存。" }));
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : t("gameProject.saveFailed");
+      message.error(errMsg);
+    } finally {
+      setSavingWorkspaceAgentProfile(false);
+    }
+  };
 
   const handleSaveProjectRoot = async () => {
     if (!selectedAgent) {
@@ -749,6 +810,9 @@ export default function GameProject() {
                     <Button size="small" icon={<CopyOutlined />} onClick={() => copyText(setupStatus?.active_workspace_root || workspaceRootInput || "") }>
                       {t("gameProject.projectSetupCopyWorkspaceRoot", { defaultValue: "复制路径" })}
                     </Button>
+                    <Button size="small" disabled>
+                      {t("gameProject.projectSetupOpenWorkspaceFolder", { defaultValue: "打开工作区文件夹" })}
+                    </Button>
                   </Space>
                 </div>
                 <div className={styles.projectSetupHint}>
@@ -756,6 +820,15 @@ export default function GameProject() {
                     defaultValue: "切 Workspace 才切换完整数据环境；切 Agent 只切权限、session 和草稿，不切项目数据。",
                   })}
                 </div>
+                <Alert
+                  type="info"
+                  showIcon
+                  message={t("gameProject.projectSetupWorkspaceSwitchTitle", { defaultValue: "Workspace Switch" })}
+                  description={t("gameProject.projectSetupWorkspaceSwitchDescription", {
+                    defaultValue: "当前卡片展示完整 workspace 切换上下文：workspace.yaml、active project、project bundle、当前 agent 与当前 role。打开文件夹入口暂未接入客户端能力，因此保持禁用。",
+                  })}
+                  className={styles.mapReviewAlert}
+                />
                 <Input
                   value={workspaceRootInput}
                   onChange={(event) => setWorkspaceRootInput(event.target.value)}
@@ -764,6 +837,24 @@ export default function GameProject() {
                 <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
                   <Descriptions.Item label={t("gameProject.projectSetupWorkspaceRootActive", { defaultValue: "Active Workspace Root" })}>
                     {setupStatus?.active_workspace_root || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupWorkspaceProjectRoot", { defaultValue: "Active Project Root" })}>
+                    {setupStatus?.active_workspace_project_root || setupStatus?.project_root || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectBundleRoot", { defaultValue: "Project Bundle Root" })}>
+                    {setupStatus?.project_bundle_root || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectKey", { defaultValue: "Current Project" })}>
+                    {setupStatus?.project_key || setupStatus?.active_workspace_project_key || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupCurrentAgent", { defaultValue: "Current Agent" })}>
+                    {selectedAgent || storageSummary?.current_agent_id || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityRole", { defaultValue: "Role" })}>
+                    {projectCapabilityStatus?.role || "-"}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupCapabilitySource", { defaultValue: "Capability Source" })}>
+                    {projectCapabilityStatus?.capability_source || "-"}
                   </Descriptions.Item>
                   <Descriptions.Item label={t("gameProject.projectSetupWorkspacePointerPath", { defaultValue: "Workspace Pointer" })}>
                     {setupStatus?.workspace_pointer_path || "-"}
@@ -854,6 +945,20 @@ export default function GameProject() {
               <div className={styles.projectSetupBlock}>
                 <div className={styles.projectSetupBlockHeader}>
                   <Text strong>{t("gameProject.projectSetupCapabilityStatusTitle", { defaultValue: "Capability Status" })}</Text>
+                  <Space wrap>
+                    <Button size="small" onClick={() => navigate("/agent/config")}>
+                      {t("gameProject.projectSetupOpenAgentConfig", { defaultValue: "打开 Agent 设置" })}
+                    </Button>
+                    <Button
+                      size="small"
+                      type="primary"
+                      onClick={() => void handleSaveWorkspaceAgentProfile()}
+                      loading={savingWorkspaceAgentProfile}
+                      disabled={!selectedAgent || !workspaceAgentProfile}
+                    >
+                      {t("gameProject.projectSetupSaveAgentProfile", { defaultValue: "保存 Role / Capabilities" })}
+                    </Button>
+                  </Space>
                 </div>
                 <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
                   <Descriptions.Item label={t("gameProject.projectSetupCapabilityRole", { defaultValue: "Role" })}>
@@ -903,6 +1008,53 @@ export default function GameProject() {
                     })}
                     className={styles.mapReviewAlert}
                   />
+                ) : null}
+                {workspaceAgentProfile ? (
+                  <div className={styles.projectSetupListSection}>
+                    <Text strong>{t("gameProject.projectSetupAgentProfileEditor", { defaultValue: "Role / Capability Editor" })}</Text>
+                    <Form.Item label={t("gameProject.projectSetupAgentDisplayName", { defaultValue: "Display Name" })}>
+                      <Input
+                        value={workspaceAgentProfile.display_name}
+                        onChange={(event) =>
+                          setWorkspaceAgentProfile((current) =>
+                            current
+                              ? { ...current, display_name: event.target.value }
+                              : current,
+                          )
+                        }
+                      />
+                    </Form.Item>
+                    <Form.Item label={t("gameProject.projectSetupAgentRole", { defaultValue: "Role" })}>
+                      <Select
+                        value={workspaceAgentProfile.role}
+                        onChange={(value) =>
+                          setWorkspaceAgentProfile((current) =>
+                            current
+                              ? { ...current, role: value as LocalAgentProfile["role"] }
+                              : current,
+                          )
+                        }
+                        options={WORKSPACE_AGENT_ROLE_OPTIONS.map((role) => ({ label: role, value: role }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label={t("gameProject.projectSetupAgentCapabilities", { defaultValue: "Explicit Capabilities" })}>
+                      <Select
+                        mode="multiple"
+                        value={workspaceAgentProfile.capabilities}
+                        onChange={(values) =>
+                          setWorkspaceAgentProfile((current) =>
+                            current
+                              ? { ...current, capabilities: values as string[] }
+                              : current,
+                          )
+                        }
+                        options={WORKSPACE_AGENT_CAPABILITY_OPTIONS.map((capability) => ({ label: capability, value: capability }))}
+                        placeholder={t("gameProject.projectSetupAgentCapabilitiesPlaceholder", {
+                          defaultValue: "留空表示使用 Role 模板能力集",
+                        })}
+                      />
+                    </Form.Item>
+                  </div>
                 ) : null}
               </div>
 
@@ -1063,7 +1215,7 @@ export default function GameProject() {
                       size="small"
                       type="primary"
                       onClick={handleStartColdStartJob}
-                      disabled={!canStartColdStartBuild || coldStartProgress.isRunning}
+                      disabled={!canStartColdStartBuild || coldStartProgress.isRunning || !canWriteColdStart}
                       loading={creatingColdStartJob}
                     >
                       {t("gameProject.projectSetupRuleOnlyBuildButton", { defaultValue: "Rule-only 冷启动构建" })}
@@ -1105,6 +1257,13 @@ export default function GameProject() {
                   <div className={styles.projectSetupHint}>
                     {t("gameProject.projectSetupRuleOnlyBuildBlocked", {
                       defaultValue: "未配置有效 Project Root / Tables Source，或当前 Source Discovery 没有可用于 Rule-only 冷启动的 CSV 表，因此构建按钮不可用。",
+                    })}
+                  </div>
+                ) : null}
+                {canStartColdStartBuild && !canWriteColdStart ? (
+                  <div className={styles.projectSetupHint}>
+                    {t("gameProject.projectSetupRuleOnlyBuildPermissionBlocked", {
+                      defaultValue: "当前 agent 缺少 knowledge.candidate.write，构建入口已在前端预先禁用。",
                     })}
                   </div>
                 ) : null}

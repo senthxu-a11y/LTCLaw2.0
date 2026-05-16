@@ -1,7 +1,7 @@
 """Game project HTTP API."""
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -12,6 +12,7 @@ from ltclaw_gy_x.game.config import (
     DEFAULT_TABLES_EXCLUDE_PATTERNS,
     DEFAULT_TABLES_INCLUDE_PATTERNS,
     DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES,
+    LocalAgentProfile,
     ensure_default_workspace_agent_profile,
     ProjectConfig,
     ProjectTablesSourceConfig,
@@ -22,11 +23,14 @@ from ltclaw_gy_x.game.config import (
     save_project_config,
     save_project_tables_source_config,
     save_user_config,
+    save_workspace_agent_profile,
     validate_project_config,
 )
+from ltclaw_gy_x.app.capabilities import LOCAL_CAPABILITY_CATALOG
 from ltclaw_gy_x.game.paths import (
     ensure_data_workspace_layout,
     get_active_data_workspace_root,
+    get_active_workspace_project_root,
     get_project_bundle_root,
     get_project_config_path,
     get_project_key,
@@ -69,7 +73,16 @@ class ProjectTablesSourceConfigRequest(BaseModel):
     primary_key_candidates: list[str] | None = None
 
 
+class WorkspaceAgentProfileRequest(BaseModel):
+    display_name: str | None = None
+    role: Literal["viewer", "planner", "source_writer", "admin"]
+    capabilities: list[str] | None = None
+
+
 def _configured_project_root_with_source(game_service) -> tuple[str | None, str | None]:
+    workspace_project_root = get_active_workspace_project_root()
+    if workspace_project_root is not None:
+        return str(workspace_project_root), "workspace_active_project_root"
     user_root = str(getattr(game_service.user_config, "svn_local_root", "") or "").strip()
     if user_root:
         return user_root, "user_config_svn_local_root"
@@ -145,6 +158,13 @@ def _build_setup_status(game_service) -> dict:
     tables_config = _effective_tables_config(project_root_path)
     active_workspace_root = get_active_data_workspace_root()
     workspace_config = load_data_workspace_config(active_workspace_root) if active_workspace_root is not None else None
+    active_workspace_project_root = None
+    if workspace_config is not None:
+        active_workspace_project_root = workspace_config.get("active_project_root")
+    if active_workspace_project_root is None:
+        resolved_workspace_project_root = get_active_workspace_project_root()
+        if resolved_workspace_project_root is not None:
+            active_workspace_project_root = str(resolved_workspace_project_root)
     user_config_svn_local_root = str(getattr(game_service.user_config, "svn_local_root", "") or "").strip() or None
     project_config = getattr(game_service, "project_config", None)
     project_config_svn_root = None
@@ -153,6 +173,7 @@ def _build_setup_status(game_service) -> dict:
         project_config_svn_root = configured_root or None
     return {
         "active_workspace_root": str(active_workspace_root) if active_workspace_root is not None else None,
+        "active_workspace_project_root": active_workspace_project_root,
         "workspace_pointer_path": str(get_workspace_pointer_path()),
         "workspace_config_path": str(get_workspace_config_path(active_workspace_root)) if active_workspace_root is not None else None,
         "workspace_name": workspace_config.get("workspace_name") if workspace_config is not None else None,
@@ -200,8 +221,49 @@ def _sanitize_string_list(values: list[str] | None, default: list[str] | None = 
     return [value.strip() for value in values if str(value).strip()]
 
 
+def _current_agent_id(request: Request, workspace) -> str:
+    return getattr(request.state, 'agent_id', getattr(workspace, 'agent_id', 'default'))
+
+
+def _workspace_agent_profile_payload(request: Request, workspace, game_service) -> dict:
+    agent_id = _current_agent_id(request, workspace)
+    workspace_profile = load_workspace_agent_profile(agent_id)
+    local_profile = workspace_profile or game_service.user_config.agent_profiles.get(agent_id)
+    capability_profile = build_agent_capability_profile(
+        agent_id=agent_id,
+        display_name=agent_id,
+        local_profile=local_profile,
+        legacy_my_role=game_service.user_config.my_role,
+    )
+    effective_profile = workspace_profile or LocalAgentProfile(
+        agent_id=agent_id,
+        display_name=capability_profile.display_name,
+        role=capability_profile.role,
+        capabilities=list(local_profile.capabilities) if isinstance(local_profile, LocalAgentProfile) else [],
+    )
+    return {
+        'agent_id': effective_profile.agent_id,
+        'display_name': effective_profile.display_name,
+        'role': effective_profile.role,
+        'capabilities': list(effective_profile.capabilities),
+    }
+
+
+def _sanitize_capability_tokens(values: list[str] | None) -> list[str]:
+    allowed = set(LOCAL_CAPABILITY_CATALOG)
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values or []:
+        token = str(value or '').strip()
+        if not token or token in seen or token not in allowed:
+            continue
+        seen.add(token)
+        normalized.append(token)
+    return normalized
+
+
 def _capability_status_payload(request: Request, workspace, game_service) -> dict:
-    agent_id = getattr(request.state, 'agent_id', getattr(workspace, 'agent_id', 'default'))
+    agent_id = _current_agent_id(request, workspace)
     workspace_profile = load_workspace_agent_profile(agent_id)
     local_profile = workspace_profile or game_service.user_config.agent_profiles.get(agent_id)
     capability_profile = build_agent_capability_profile(
@@ -285,13 +347,48 @@ async def get_project_capability_status(request: Request, workspace=Depends(get_
     return _capability_status_payload(request, workspace, game_service)
 
 
+@router.get('/agent-profile')
+async def get_workspace_agent_profile_status(request: Request, workspace=Depends(get_agent_for_request)):
+    game_service = _game_service_or_404(workspace)
+    return _workspace_agent_profile_payload(request, workspace, game_service)
+
+
+@router.put('/agent-profile')
+async def save_workspace_agent_profile_status(
+    body: WorkspaceAgentProfileRequest,
+    request: Request,
+    workspace=Depends(get_agent_for_request),
+):
+    game_service = _game_service_or_404(workspace)
+    agent_id = _current_agent_id(request, workspace)
+    profile = LocalAgentProfile(
+        agent_id=agent_id,
+        display_name=str(body.display_name or '').strip() or agent_id,
+        role=body.role,
+        capabilities=_sanitize_capability_tokens(body.capabilities),
+    )
+    save_workspace_agent_profile(profile)
+    return {
+        'profile': _workspace_agent_profile_payload(request, workspace, game_service),
+        'capability_status': _capability_status_payload(request, workspace, game_service),
+    }
+
+
 @router.get('/workspace-root')
 async def get_workspace_root_status(workspace=Depends(get_agent_for_request)):
     game_service = _game_service_or_404(workspace)
     active_workspace_root = get_active_data_workspace_root()
     workspace_config = load_data_workspace_config(active_workspace_root) if active_workspace_root is not None else None
+    active_workspace_project_root = None
+    if workspace_config is not None:
+        active_workspace_project_root = workspace_config.get('active_project_root')
+    if active_workspace_project_root is None:
+        resolved_workspace_project_root = get_active_workspace_project_root()
+        if resolved_workspace_project_root is not None:
+            active_workspace_project_root = str(resolved_workspace_project_root)
     return {
         'active_workspace_root': str(active_workspace_root) if active_workspace_root is not None else None,
+        'active_workspace_project_root': active_workspace_project_root,
         'workspace_pointer_path': str(get_workspace_pointer_path()),
         'workspace_config_path': str(get_workspace_config_path(active_workspace_root)) if active_workspace_root is not None else None,
         'workspace_name': workspace_config.get('workspace_name') if workspace_config is not None else None,
@@ -320,11 +417,13 @@ async def save_workspace_root(
         workspace_root,
         workspace_name=request.workspace_name,
         active_project_key=project_key,
+        active_project_root=str(project_root) if project_root is not None else _configured_project_root(game_service),
     )
     ensure_data_workspace_layout(
         active_workspace_root,
         workspace_name=request.workspace_name,
         active_project_key=project_key,
+        active_project_root=str(project_root) if project_root is not None else _configured_project_root(game_service),
     )
     ensure_default_workspace_agent_profile(game_service.user_config.my_role, workspace_root=active_workspace_root)
     await game_service.reload_config()
@@ -351,7 +450,11 @@ async def save_project_root(
     save_user_config(user_config)
     active_workspace_root = get_active_data_workspace_root()
     if active_workspace_root is not None:
-        save_data_workspace_config(active_workspace_root, active_project_key=get_project_key(project_root))
+        save_data_workspace_config(
+            active_workspace_root,
+            active_project_key=get_project_key(project_root),
+            active_project_root=str(project_root),
+        )
         ensure_default_workspace_agent_profile(user_config.my_role, workspace_root=active_workspace_root)
     await game_service.reload_config()
     return {

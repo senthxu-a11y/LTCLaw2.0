@@ -25,6 +25,7 @@ from .change_proposal import ProposalStore
 from .svn_committer import SvnCommitter
 from .svn_client import SvnClient, TortoiseUiOnlyError
 from .paths import (
+    get_active_workspace_project_root,
     get_workspace_game_dir,
     get_chroma_dir,
     get_llm_cache_dir,
@@ -160,6 +161,9 @@ class GameService:
         return list(self._recent_changes_buffer)
 
     def _runtime_svn_root(self) -> Path | None:
+        workspace_project_root = get_active_workspace_project_root()
+        if workspace_project_root is not None and workspace_project_root.exists():
+            return workspace_project_root
         candidate = getattr(self._user_config, "svn_local_root", None)
         if candidate:
             path = Path(candidate).expanduser()

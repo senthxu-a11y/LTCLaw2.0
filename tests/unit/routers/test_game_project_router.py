@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from datetime import datetime, timezone
 
 import pytest
+import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
@@ -34,6 +35,7 @@ from ltclaw_gy_x.game.paths import (
     get_workspace_agent_profile_path,
     get_workspace_config_path,
     get_workspace_pointer_path,
+    load_data_workspace_config,
 )
 
 
@@ -304,11 +306,46 @@ async def test_workspace_root_api_creates_pointer_and_updates_setup_status(app, 
     assert get_workspace_pointer_path().exists()
     assert get_workspace_config_path(workspace_root).exists()
     assert get_workspace_agent_profile_path('default', workspace_root).exists()
+    workspace_config = load_data_workspace_config(workspace_root)
+    assert workspace_config['active_project_root'] == str(project_root)
+    default_profile = LocalAgentProfile.model_validate(
+        yaml.safe_load(get_workspace_agent_profile_path('default', workspace_root).read_text(encoding='utf-8'))
+    )
+    assert default_profile.role == 'admin'
     assert setup.status_code == 200
     setup_payload = setup.json()
     assert setup_payload['active_workspace_root'] == str(workspace_root)
+    assert setup_payload['active_workspace_project_root'] == str(project_root)
     assert setup_payload['project_bundle_root'] == str(get_project_bundle_root(project_root))
     assert str(get_project_bundle_root(project_root)).startswith(str(workspace_root / 'projects'))
+
+
+@pytest.mark.asyncio
+async def test_setup_status_prefers_workspace_active_project_root_over_agent_local_root(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    workspace_root = tmp_path / 'LTClawWorkspace'
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    service = _Service(tmp_path / 'agent-local-missing')
+    service.user_config = UserGameConfig(my_role='consumer', svn_local_root=None)
+    app.dependency_overrides[get_agent_for_request] = lambda: SimpleNamespace(
+        service_manager=SimpleNamespace(services={'game_service': service}),
+        workspace_dir=str(tmp_path / 'qa-workspace'),
+        agent_id='qa-agent',
+    )
+    (tmp_path / 'qa-workspace').mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr('ltclaw_gy_x.app.routers.game_project.get_active_data_workspace_root', lambda: workspace_root)
+    monkeypatch.setattr('ltclaw_gy_x.app.routers.game_project.get_active_workspace_project_root', lambda: project_root)
+    monkeypatch.setattr('ltclaw_gy_x.game.paths.get_active_data_workspace_root', lambda: workspace_root)
+
+    async with client:
+        response = await client.get('/api/game/project/setup-status')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['project_root'] == str(project_root)
+    assert payload['project_root_source'] == 'workspace_active_project_root'
+    assert payload['active_workspace_project_root'] == str(project_root)
 
 
 @pytest.mark.asyncio
@@ -343,6 +380,49 @@ async def test_capability_status_prefers_workspace_agent_profile(app, client, mo
     assert payload['capability_source'] == 'workspace.agents'
     assert payload['is_legacy_role_fallback'] is False
     assert 'knowledge.build' in payload['missing_required_capabilities']
+
+
+@pytest.mark.asyncio
+async def test_workspace_agent_profile_api_persists_role_and_capabilities(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    workspace_root = tmp_path / 'LTClawWorkspace'
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    service = _Service(project_root)
+    service.user_config = UserGameConfig(my_role='consumer', svn_local_root=str(project_root))
+    app.dependency_overrides[get_agent_for_request] = lambda: SimpleNamespace(
+        service_manager=SimpleNamespace(services={'game_service': service}),
+        workspace_dir=str(tmp_path / 'qa-workspace'),
+        agent_id='qa-agent',
+    )
+    (tmp_path / 'qa-workspace').mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr('ltclaw_gy_x.app.routers.game_project.get_active_data_workspace_root', lambda: workspace_root)
+    monkeypatch.setattr('ltclaw_gy_x.game.config.get_active_data_workspace_root', lambda: workspace_root)
+    monkeypatch.setattr('ltclaw_gy_x.game.paths.get_active_data_workspace_root', lambda: workspace_root)
+
+    async with client:
+        response = await client.put(
+            '/api/game/project/agent-profile',
+            json={
+                'display_name': 'QA Agent',
+                'role': 'planner',
+                'capabilities': ['workbench.test.write', 'knowledge.read', 'invalid.capability'],
+            },
+        )
+        readback = await client.get('/api/game/project/agent-profile')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['profile'] == {
+        'agent_id': 'qa-agent',
+        'display_name': 'QA Agent',
+        'role': 'planner',
+        'capabilities': ['workbench.test.write', 'knowledge.read'],
+    }
+    assert payload['capability_status']['role'] == 'planner'
+    assert payload['capability_status']['capability_source'] == 'workspace.agents'
+    assert readback.status_code == 200
+    assert readback.json() == payload['profile']
 
 
 def test_project_root_path_normalizes_windows_style_backslashes():

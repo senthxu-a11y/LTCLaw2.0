@@ -13,6 +13,7 @@ const apiSource = readFileSync(resolve(consoleRoot, "api", "modules", "game.ts")
 describe("project setup UI surface", () => {
   it("keeps project setup on the existing game project entry page", () => {
     assert.equal(pageSource.includes('title={t("gameProject.projectSetupTitle", { defaultValue: "Project setup" })}'), true);
+    assert.equal(pageSource.includes('defaultValue: "Workspace Switch"'), true);
     assert.equal(pageSource.includes('defaultValue: "Local Project Root"'), true);
     assert.equal(pageSource.includes('defaultValue: "Tables Source"'), true);
     assert.equal(pageSource.includes('defaultValue: "Source Discovery"'), true);
@@ -34,6 +35,7 @@ describe("project setup UI surface", () => {
   it("surfaces project key, project bundle root, discovery summary, job status, and clipboard diagnostics", () => {
     assert.equal(pageSource.includes('defaultValue: "Project Key"'), true);
     assert.equal(pageSource.includes('defaultValue: "Project Bundle Root"'), true);
+    assert.equal(pageSource.includes('defaultValue: "Role / Capability Editor"'), true);
     assert.equal(pageSource.includes('discovered_table_count'), true);
     assert.equal(pageSource.includes('available_table_count'), true);
     assert.equal(pageSource.includes('handleCopyDiagnostics'), true);
@@ -50,6 +52,6 @@ describe("project setup UI surface", () => {
     assert.equal(pageSource.includes('navigate("/game/map")'), true);
     assert.equal(pageSource.includes('saveFormalKnowledgeMap'), false);
     assert.equal(pageSource.includes('buildRelease'), false);
-    assert.equal(pageSource.includes('publish'), false);
+    assert.equal(pageSource.includes('publishCurrentRelease'), false);
   });
 });

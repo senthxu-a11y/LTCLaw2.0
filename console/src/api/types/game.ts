@@ -97,6 +97,7 @@ export interface ProjectSetupDiscoverySummary {
 
 export interface ProjectSetupStatusResponse {
   active_workspace_root?: string | null;
+  active_workspace_project_root?: string | null;
   workspace_pointer_path?: string;
   workspace_config_path?: string | null;
   workspace_name?: string | null;
@@ -197,6 +198,7 @@ export interface ColdStartJobCounts {
 
 export interface WorkspaceRootStatus {
   active_workspace_root: string | null;
+  active_workspace_project_root?: string | null;
   workspace_pointer_path: string;
   workspace_config_path: string | null;
   workspace_name: string | null;

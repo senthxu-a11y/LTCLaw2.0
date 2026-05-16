@@ -311,11 +311,18 @@ def ensure_default_workspace_agent_profile(
         return None
     existing = load_workspace_agent_profile("default", workspace_root=resolved_workspace_root)
     if existing is not None:
+        if (
+            existing.role != "admin"
+            and not existing.capabilities
+            and (not existing.display_name or existing.display_name == "Default Agent")
+        ):
+            existing = existing.model_copy(update={"display_name": "Default Agent", "role": "admin"})
+            save_workspace_agent_profile(existing, workspace_root=resolved_workspace_root)
         return existing
     profile = LocalAgentProfile(
         agent_id="default",
         display_name="Default Agent",
-        role=_map_legacy_role_to_workspace_role(legacy_my_role),
+        role="admin",
         capabilities=[],
     )
     save_workspace_agent_profile(profile, workspace_root=resolved_workspace_root)

@@ -123,6 +123,7 @@ export default function NumericWorkbench() {
   const capabilities: FrontendCapabilityToken[] | undefined = selectedAgentSummary?.capabilities;
   const hasExplicitCapabilityContext = hasCapabilityContext(capabilities);
   const canReadWorkbench = canUseGovernanceAction(capabilities, "workbench.read");
+  const canBuildKnowledge = canUseGovernanceAction(capabilities, "knowledge.build");
   const canWriteWorkbench = canUseGovernanceAction(capabilities, "workbench.test.write");
   const canExportWorkbench = canUseGovernanceAction(capabilities, "workbench.test.export");
   const canSourceWrite = canUseGovernanceAction(capabilities, "workbench.source.write");
@@ -151,6 +152,12 @@ export default function NumericWorkbench() {
     hasExplicitCapabilityContext && !canSourceWrite
       ? t("gameWorkbench.permissionSourceWriteRequired", {
           defaultValue: "Requires workbench.source.write permission.",
+        })
+      : null;
+      const workbenchRebuildReason =
+    hasExplicitCapabilityContext && !canBuildKnowledge
+      ? t("gameWorkbench.permissionRebuildRequired", {
+          defaultValue: "Requires knowledge.build permission.",
         })
       : null;
 
@@ -473,6 +480,10 @@ export default function NumericWorkbench() {
 
   const rebuildLocalTableIndex = useCallback(async () => {
     if (!selectedAgent) return;
+    if (hasExplicitCapabilityContext && !canBuildKnowledge) {
+      message.error(permissionDeniedMessage);
+      return;
+    }
     setTablesLoading(true);
     try {
       await gameApi.rebuildIndex(selectedAgent);
@@ -488,7 +499,7 @@ export default function NumericWorkbench() {
     } finally {
       setTablesLoading(false);
     }
-  }, [selectedAgent, message, t, loadTables, formatPermissionError]);
+  }, [selectedAgent, hasExplicitCapabilityContext, canBuildKnowledge, message, permissionDeniedMessage, t, loadTables, formatPermissionError]);
 
   useEffect(() => { loadTables(); }, [loadTables]);
 
@@ -1835,15 +1846,18 @@ export default function NumericWorkbench() {
             tableNames.length === 0 && tablesLoaded ? (
               <Empty
                 style={{ padding: 24 }}
-                description={t("gameWorkbench.emptyTablesCatalog", {
-                  defaultValue: "当前没有可用表。可先重建本地表索引，再重新加载 HeroTable 等数据表。",
-                })}
+                description={
+                  workbenchRebuildReason ||
+                  t("gameWorkbench.emptyTablesCatalog", {
+                    defaultValue: "当前没有可用表。可先重建本地表索引，再重新加载 HeroTable 等数据表。",
+                  })
+                }
               >
                 <Button
                   icon={<ReloadOutlined />}
                   onClick={rebuildLocalTableIndex}
                   loading={tablesLoading}
-                  disabled={!selectedAgent || !canReadWorkbench}
+                  disabled={!selectedAgent || !canBuildKnowledge}
                 >
                   {t("gameWorkbench.rebuildIndexAction", { defaultValue: "重建本地表索引" })}
                 </Button>

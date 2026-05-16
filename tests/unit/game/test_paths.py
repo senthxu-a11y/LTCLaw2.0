@@ -3,6 +3,7 @@ from pathlib import Path
 
 from ltclaw_gy_x.game.paths import (
     get_active_data_workspace_root,
+    get_active_workspace_project_root,
     get_agent_profile_path,
     get_agent_session_proposals_dir,
     get_agent_session_ui_state_path,
@@ -52,6 +53,8 @@ from ltclaw_gy_x.game.paths import (
     get_workspace_pointer_path,
     get_workspace_project_bundle_root,
     get_workspace_sessions_dir,
+    load_data_workspace_config,
+    save_data_workspace_config,
     set_active_data_workspace_root,
 )
 
@@ -212,6 +215,21 @@ def test_workspace_root_redirects_project_bundle_paths(monkeypatch, tmp_path):
     assert str(get_project_bundle_root(project_root)).startswith(str(workspace_root / "projects"))
 
 
+def test_workspace_config_persists_active_project_root(monkeypatch, tmp_path):
+    working_root = tmp_path / "working-root"
+    workspace_root = tmp_path / "LTClawWorkspace"
+    project_root = tmp_path / "svn-root"
+    monkeypatch.setenv("LTCLAW_WORKING_DIR", str(working_root))
+    project_root.mkdir()
+
+    set_active_data_workspace_root(workspace_root, active_project_root=str(project_root))
+    save_data_workspace_config(workspace_root, active_project_key=get_project_key(project_root), active_project_root=str(project_root))
+
+    workspace_config = load_data_workspace_config(workspace_root)
+    assert workspace_config["active_project_root"] == str(project_root)
+    assert get_active_workspace_project_root() == project_root
+
+
 def test_workspace_root_redirects_agent_session_and_cache_paths(monkeypatch, tmp_path):
     working_root = tmp_path / "working-root"
     workspace_root = tmp_path / "LTClawWorkspace"
@@ -236,6 +254,7 @@ def test_workspace_root_redirects_agent_session_and_cache_paths(monkeypatch, tmp
     )
     summary = get_storage_summary(workspace_dir, svn_root=project_root, session_id="chat 42")
     assert summary["active_workspace_root"] == str(workspace_root)
+    assert summary["active_workspace_project_root"] is None
     assert summary["workspace_agents_dir"] == str(get_workspace_agents_dir(workspace_root))
     assert summary["workspace_cache_dir"] == str(get_workspace_cache_dir(workspace_root))
     assert summary["current_agent_id"] == "qa-agent"
