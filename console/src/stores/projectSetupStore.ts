@@ -74,7 +74,6 @@ export const useProjectSetupStore = create<ProjectSetupStore>()(
               coldStartJob: null,
               activeColdStartJobId: "",
               frontendRuntimeInfo: null,
-              lastUpdatedAt: 0,
               ...state.runtimeByAgent[agentId],
               ...patch,
               lastUpdatedAt: Date.now(),
