@@ -27,10 +27,13 @@ import FormalMapWorkspace from "./components/FormalMapWorkspace";
 import {
   buildProjectSetupDiagnosticsText,
   canStartRuleOnlyColdStartBuild,
+  clearProjectSetupCachedDiscovery,
   clearColdStartActiveJobId,
   getEffectiveProjectSetupBuildReadiness,
   loadColdStartActiveJobId,
+  loadProjectSetupCachedDiscovery,
   saveColdStartActiveJobId,
+  saveProjectSetupCachedDiscovery,
   getAvailableColdStartTables,
   getProjectSetupDiscoverySummary,
   isProjectSetupProjectRootDirty,
@@ -182,7 +185,7 @@ export default function GameProject() {
         });
       }
       applySetupStatus(projectSetupStatus);
-      setDiscoveryResult(null);
+      setDiscoveryResult(loadProjectSetupCachedDiscovery(projectSetupStatus));
       const savedJobId = loadColdStartActiveJobId(selectedAgent);
       if (!savedJobId) {
         setColdStartJob(null);
@@ -334,6 +337,7 @@ export default function GameProject() {
     }
     try {
       setSavingProjectSetupTables(true);
+      clearProjectSetupCachedDiscovery(setupStatus);
       const response = await gameApi.saveProjectTablesSource(selectedAgent, {
         roots: splitProjectSetupLines(tablesRootsInput),
         include: splitProjectSetupLines(tablesIncludeInput),
@@ -363,6 +367,7 @@ export default function GameProject() {
       setDiscoveringSources(true);
       const response = await gameApi.discoverProjectTableSources(selectedAgent);
       setDiscoveryResult(response);
+      saveProjectSetupCachedDiscovery(setupStatus, response);
       message.success(t("gameProject.discoveryCompleted", { defaultValue: "Source Discovery 已完成。" }));
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : t("gameProject.loadFailed");

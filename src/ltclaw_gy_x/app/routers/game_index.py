@@ -29,6 +29,22 @@ def _get(workspace: Workspace):
     return svc, qr
 
 
+async def _ensure_change_applier(svc):
+    applier = getattr(svc, "change_applier", None)
+    if applier is not None:
+        return applier
+
+    reload_config = getattr(svc, "reload_config", None)
+    if callable(reload_config):
+        await reload_config()
+        applier = getattr(svc, "change_applier", None)
+
+    if applier is None:
+        raise HTTPException(status_code=412, detail="Project config not loaded")
+
+    return applier
+
+
 @router.get("/systems")
 async def list_systems(workspace: Workspace = Depends(get_agent_for_request)):
     _, qr = _get(workspace)
@@ -124,9 +140,7 @@ async def get_table_rows(
 ):
     """Return paginated raw rows of a table for the workbench grid view."""
     svc, _ = _get(workspace)
-    applier = getattr(svc, "change_applier", None)
-    if applier is None:
-        raise HTTPException(status_code=412, detail="Project config not loaded")
+    applier = await _ensure_change_applier(svc)
     try:
         return await __import__("asyncio").to_thread(applier.read_rows, name, offset, limit)
     except Exception as exc:  # ApplyError or file errors

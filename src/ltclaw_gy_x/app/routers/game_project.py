@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from ltclaw_gy_x.app.agent_context import get_agent_for_request
 from ltclaw_gy_x.app.capabilities import build_agent_capability_profile
+from ltclaw_gy_x.app.multi_agent_manager import get_active_manager
 from ltclaw_gy_x.game.config import (
     DEFAULT_TABLES_EXCLUDE_PATTERNS,
     DEFAULT_TABLES_INCLUDE_PATTERNS,
@@ -100,6 +101,25 @@ def _game_service_or_404(workspace):
     if svc is None:
         raise HTTPException(status_code=404, detail="Game service not available")
     return svc
+
+
+async def _reload_loaded_game_services(current_workspace, current_game_service) -> None:
+    await current_game_service.reload_config()
+
+    manager = get_active_manager()
+    if manager is None:
+        return
+
+    for loaded_workspace in list(manager.agents.values()):
+        if loaded_workspace is current_workspace:
+            continue
+        service_manager = getattr(loaded_workspace, "service_manager", None)
+        if service_manager is None:
+            continue
+        loaded_game_service = service_manager.services.get("game_service")
+        if loaded_game_service is None or loaded_game_service is current_game_service:
+            continue
+        await loaded_game_service.reload_config()
 
 
 def _configured_project_root(game_service) -> str | None:
@@ -426,7 +446,7 @@ async def save_workspace_root(
         active_project_root=str(project_root) if project_root is not None else _configured_project_root(game_service),
     )
     ensure_default_workspace_agent_profile(game_service.user_config.my_role, workspace_root=active_workspace_root)
-    await game_service.reload_config()
+    await _reload_loaded_game_services(workspace, game_service)
     workspace_config = load_data_workspace_config(active_workspace_root)
     return {
         'active_workspace_root': str(active_workspace_root),
@@ -456,7 +476,7 @@ async def save_project_root(
             active_project_root=str(project_root),
         )
         ensure_default_workspace_agent_profile(user_config.my_role, workspace_root=active_workspace_root)
-    await game_service.reload_config()
+    await _reload_loaded_game_services(workspace, game_service)
     return {
         "project_key": get_project_key(project_root),
         "project_bundle_root": str(get_project_bundle_root(project_root)),
@@ -491,6 +511,7 @@ async def save_project_tables_source(
         ),
     )
     save_project_tables_source_config(project_root, tables_config)
+    await _reload_loaded_game_services(workspace, game_service)
     return {
         "effective_config": _serialize_tables_config(tables_config),
         "setup_status": _build_setup_status(game_service),

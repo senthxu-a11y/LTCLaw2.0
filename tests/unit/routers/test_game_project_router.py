@@ -43,13 +43,19 @@ class _Service:
     def __init__(self, svn_root: Path):
         self._project_config = None
         self.user_config = UserGameConfig(my_role='maintainer', svn_local_root=str(svn_root))
+        self.reload_calls = 0
 
     @property
     def project_config(self):
         return self._project_config
 
     async def reload_config(self):
-        self._project_config = load_project_config(Path(self.user_config.svn_local_root))
+        self.reload_calls += 1
+        svn_local_root = getattr(self.user_config, 'svn_local_root', None)
+        if not svn_local_root:
+            self._project_config = None
+            return
+        self._project_config = load_project_config(Path(svn_local_root))
 
 
 def _workspace(service):
@@ -237,6 +243,29 @@ async def test_put_project_root_saves_and_returns_setup_status(app, client, monk
     }
     assert readback.status_code == 200
     assert readback.json()['project_root'] == str(project_root)
+
+
+@pytest.mark.asyncio
+async def test_put_project_root_reloads_other_loaded_game_services(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    default_service = _Service(project_root)
+    default_service.user_config.svn_local_root = None
+    qa_service = _Service(project_root)
+    qa_service.user_config.svn_local_root = None
+    default_workspace = SimpleNamespace(service_manager=SimpleNamespace(services={'game_service': default_service}))
+    qa_workspace = SimpleNamespace(service_manager=SimpleNamespace(services={'game_service': qa_service}))
+    app.dependency_overrides[get_agent_for_request] = lambda: default_workspace
+    manager = SimpleNamespace(agents={'default': default_workspace, 'qa-agent': qa_workspace})
+    monkeypatch.setattr('ltclaw_gy_x.app.routers.game_project.get_active_manager', lambda: manager)
+
+    async with client:
+        response = await client.put('/api/game/project/root', json={'project_root': str(project_root)})
+
+    assert response.status_code == 200
+    assert default_service.reload_calls == 1
+    assert qa_service.reload_calls == 1
 
 
 @pytest.mark.asyncio
@@ -507,6 +536,30 @@ async def test_put_tables_source_persists_config_and_setup_status_reads_it_back(
     assert 'HeroID' in saved_text
     assert readback.status_code == 200
     assert readback.json()['tables_config'] == payload
+
+
+@pytest.mark.asyncio
+async def test_put_tables_source_reloads_other_loaded_game_services(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    default_service = _Service(project_root)
+    qa_service = _Service(project_root)
+    default_workspace = SimpleNamespace(service_manager=SimpleNamespace(services={'game_service': default_service}))
+    qa_workspace = SimpleNamespace(service_manager=SimpleNamespace(services={'game_service': qa_service}))
+    app.dependency_overrides[get_agent_for_request] = lambda: default_workspace
+    manager = SimpleNamespace(agents={'default': default_workspace, 'qa-agent': qa_workspace})
+    monkeypatch.setattr('ltclaw_gy_x.app.routers.game_project.get_active_manager', lambda: manager)
+
+    async with client:
+        response = await client.put(
+            '/api/game/project/sources/tables',
+            json={'roots': ['Tables'], 'header_row': 1},
+        )
+
+    assert response.status_code == 200
+    assert default_service.reload_calls == 1
+    assert qa_service.reload_calls == 1
 
 
 @pytest.mark.asyncio

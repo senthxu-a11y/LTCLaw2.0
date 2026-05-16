@@ -4,17 +4,48 @@ import { describe, it } from "node:test";
 import type { ProjectSetupStatusResponse, ProjectTableSourceDiscoveryResponse } from "../../../api/types/game.ts";
 import {
   buildProjectSetupDiagnosticsText,
+  clearProjectSetupCachedDiscovery,
   getEffectiveProjectSetupBuildReadiness,
   getAvailableColdStartTables,
+  getProjectSetupDiscoveryCacheKey,
   getProjectSetupDiscoverySummary,
   isProjectSetupProjectRootDirty,
   isProjectSetupBuildBlocked,
   joinProjectSetupLines,
+  loadProjectSetupCachedDiscovery,
+  saveProjectSetupCachedDiscovery,
   splitProjectSetupLines,
 } from "./projectSetupHelpers.ts";
 
+function createStorage() {
+  const store = new Map<string, string>();
+  return {
+    getItem(key: string) {
+      return store.has(key) ? store.get(key)! : null;
+    },
+    setItem(key: string, value: string) {
+      store.set(key, value);
+    },
+    removeItem(key: string) {
+      store.delete(key);
+    },
+    clear() {
+      store.clear();
+    },
+  };
+}
+
+const localStorageMock = createStorage();
+Object.defineProperty(globalThis, "localStorage", {
+  value: localStorageMock,
+  configurable: true,
+});
+
 function createSetupStatus(): ProjectSetupStatusResponse {
   return {
+    active_workspace_root: "/workspace-a",
+    active_workspace_project_root: "/workspace/project",
+    active_workspace_project_key: "demo-project",
     project_root: "/workspace/project",
     project_root_exists: true,
     project_bundle_root: "/workspace/game_data/projects/demo",
@@ -45,6 +76,14 @@ function createDiscovery(): ProjectTableSourceDiscoveryResponse {
   return {
     success: true,
     project_root: "/workspace/project",
+    roots: [
+      {
+        configured_root: "Tables",
+        resolved_root: "/workspace/project/Tables",
+        exists: true,
+        is_directory: true,
+      },
+    ],
     table_files: [
       {
         source_path: "Tables/HeroTable.csv",
@@ -70,6 +109,39 @@ function createDiscovery(): ProjectTableSourceDiscoveryResponse {
 }
 
 describe("projectSetupHelpers", () => {
+  it("builds a stable discovery cache key from workspace and project identity", () => {
+    assert.equal(
+      getProjectSetupDiscoveryCacheKey(createSetupStatus()),
+      "ltclaw_project_setup_discovery:/workspace-a::demo-project",
+    );
+  });
+
+  it("caches and restores discovery results for the same workspace/project", () => {
+    localStorage.clear();
+    const setupStatus = createSetupStatus();
+    const discovery = createDiscovery();
+
+    saveProjectSetupCachedDiscovery(setupStatus, discovery);
+
+    assert.deepEqual(loadProjectSetupCachedDiscovery(setupStatus), discovery);
+  });
+
+  it("does not leak cached discovery across workspaces and can clear it", () => {
+    localStorage.clear();
+    const setupStatus = createSetupStatus();
+    const otherWorkspaceStatus = {
+      ...createSetupStatus(),
+      active_workspace_root: "/workspace-b",
+    };
+
+    saveProjectSetupCachedDiscovery(setupStatus, createDiscovery());
+
+    assert.equal(loadProjectSetupCachedDiscovery(otherWorkspaceStatus), null);
+
+    clearProjectSetupCachedDiscovery(setupStatus);
+    assert.equal(loadProjectSetupCachedDiscovery(setupStatus), null);
+  });
+
   it("splits and joins multiline config fields", () => {
     assert.deepEqual(splitProjectSetupLines("Tables\n\n Configs \n"), ["Tables", "Configs"]);
     assert.equal(joinProjectSetupLines(["Tables", "Configs"]), "Tables\nConfigs");

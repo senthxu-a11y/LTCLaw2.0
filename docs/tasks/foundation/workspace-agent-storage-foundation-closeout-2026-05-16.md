@@ -259,6 +259,33 @@
   - 刷新浏览器后仍保持当前 Workspace Root，不回退到旧值。
   - 切 agent 后，Current Agent / Role / Capability Source / Agent 目录刷新，但 Workspace Root 保持不变，符合“切 agent 只切权限和 session”的语义。
 
+## 22. Final P0 Smoke Follow-up
+- 修复范围: 仅收口 foundation full manual smoke 剩余 2 个真实失败项，不扩 M2，不接 txtai，不恢复 SVN 主线，不改已通过的 Workspace Switch UI。
+- Item 19 修复:
+  - `game_project` 的 workspace/project/tables 保存接口现在会同步 reload 已加载 agent 的 `GameService`，避免 QA 这类已加载 agent 保留 stale runtime。
+  - `game_index` 的 rows 读取在 `change_applier` 缺失时会先尝试 `reload_config()` 再读，保证读路径对 stale runtime 自愈，但不放开任何写权限。
+  - 新增 router 测试覆盖:
+    - 其他已加载 agent 在 project root / tables source 变更后会被 reload
+    - viewer 可读 HeroTable rows
+    - viewer rebuild 仍为 403
+- Item 23 修复:
+  - `GameProject` 现在按 `workspace_root + project_key/project_root` 键控恢复最近一次 discovery 结果。
+  - 切回原 workspace 后，如果此前已做过 Source Discovery，Project 页会恢复正确的 discovery/readiness 语义，不再错误落回未配置态。
+  - 保存 tables source 时会清掉对应缓存，避免同一 workspace/project 下复用过期 discovery。
+  - 新增前端 helper/node 测试覆盖缓存键、同 workspace/project 恢复、跨 workspace 不串数据、clear 行为。
+- 自动化验证:
+  - 后端: `PYTHONPATH=$PWD/src /Users/Admin/LTCLaw2.0/.venv/bin/python -m pytest -q tests/unit/game/test_paths.py tests/unit/app/test_agent_context.py tests/unit/routers/test_game_project_router.py tests/unit/game/test_cold_start_job_pipeline.py tests/unit/routers/test_game_knowledge_map_cold_start_job_router.py tests/unit/routers/test_game_index_router.py` -> 58 passed
+  - M1 smoke: `PYTHONPATH=$PWD/src /Users/Admin/LTCLaw2.0/.venv/bin/python scripts/run_map_cold_start_smoke.py --project examples/minimal_project --rule-only` -> 通过
+  - 前端: `pnpm exec tsc --noEmit` -> 通过
+  - 前端: `node --test src/pages/Game/projectSetupSurface.test.ts src/pages/Game/components/projectSetupHelpers.test.ts` -> 15 passed
+  - 前端: `pnpm exec eslint --quiet src/pages/Game/GameProject.tsx src/pages/Game/NumericWorkbench.tsx src/pages/Game/projectSetupSurface.test.ts src/pages/Game/components/projectSetupHelpers.test.ts src/api/modules/game.ts src/api/types/game.ts` -> 通过
+- 局部人工 smoke:
+  - QA `index/tables` 返回 HeroTable，QA rows 返回 200，首行数据为 `HeroA / 100 / 20`，QA rebuild 仍为 403。
+  - 切到空 workspace 后 `build_readiness = no_table_sources_found`；切回原 workspace 后 `project_root` / `project_bundle_root` / `tables_config` 恢复，`build_readiness.blocking_reason = null`，不再是 `project_root_not_configured`。
+- 决策更新:
+  - foundation full manual smoke 的 2 个真实失败项已修复。
+  - 当前剩余 4 项仍是用户明确要求不执行的写链路阻塞项，不属于本轮缺陷。
+
 ## 21. Full Manual Smoke Result After Workspace Switch Fix
 - 执行日期: 2026-05-16
 - 当前 commit: 60d1b0051a9409f09348ce80dfd0a0665dae278c

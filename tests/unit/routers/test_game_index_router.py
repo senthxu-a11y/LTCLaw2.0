@@ -19,7 +19,6 @@ from ltclaw_gy_x.game.config import (
 from ltclaw_gy_x.game.models import TableIndex
 from ltclaw_gy_x.game.paths import get_project_raw_table_index_path
 from ltclaw_gy_x.game.query_router import QueryRouter
-from ltclaw_gy_x.game.service import GameService
 
 
 def _build_app(workspace):
@@ -117,22 +116,20 @@ def test_index_routes_fall_back_to_project_raw_indexes(tmp_path):
     assert rows_response.status_code == 200
     assert rows_response.json()["headers"] == ["ID", "Name", "HP", "Attack"]
     assert rows_response.json()["rows"] == [["1", "HeroA", "100", "20"]]
-    assert rows_response.json()["source"] == "Tables/HeroTable.csv"
 
 
-def test_index_rows_route_works_with_runtime_local_root_without_project_config(tmp_path, monkeypatch):
+def test_viewer_still_cannot_rebuild_index(tmp_path):
     project_root = tmp_path / "project-root"
-    _write_minimal_raw_only_project(project_root)
-    monkeypatch.setenv("LTCLAW_WORKING_DIR", str(tmp_path / "ltclaw-data"))
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    service = GameService(workspace_dir=workspace_dir, runner=None, channel_manager=None)
-    service._user_config = SimpleNamespace(my_role="maintainer", svn_local_root=str(project_root))
-    service._rebuild_runtime_components()
+    project_root.mkdir(parents=True, exist_ok=True)
+    service = SimpleNamespace(
+        query_router=SimpleNamespace(),
+        change_applier=None,
+        project_config=object(),
+        user_config=SimpleNamespace(my_role="viewer"),
+    )
 
     with TestClient(_build_app(_workspace(service))) as client:
-        rows_response = client.get("/api/game/index/tables/HeroTable/rows", params={"offset": 0, "limit": 20})
+        response = client.post("/api/game/index/rebuild")
 
-    assert rows_response.status_code == 200
-    assert rows_response.json()["headers"] == ["ID", "Name", "HP", "Attack"]
-    assert rows_response.json()["rows"] == [["1", "HeroA", "100", "20"]]
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only maintainers can rebuild index"

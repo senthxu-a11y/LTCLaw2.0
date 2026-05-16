@@ -157,3 +157,34 @@
 	- QA NumericWorkbench 仍无法读取行数据
 	- 切回原 Workspace 后 Project 页 Source Discovery / readiness 没有完全恢复
 - 当前不建议替换 main。
+
+## 22. Final P0 Smoke Follow-up
+
+执行信息:
+- 执行日期: 2026-05-16
+- 分支: foundation/workspace-agent-storage-from-m1
+- 范围: 仅复测原 failed item 19、item 23 及其最小前置条件
+- 后端地址: http://127.0.0.1:18082
+
+复测结果:
+- Item 19: passed
+	- default 在 Workspace A 下重新设置 Project Root=/Users/Admin/LTCLaw2.0-foundation/examples/minimal_project、Table Root=Tables 后，default `index/tables` 返回 HeroTable。
+	- QA agent profile 显式设为 viewer + `workbench.read` 后，QA `index/tables` 仍返回 HeroTable。
+	- QA `GET /api/agents/LTCLAW-GY.X_QA_Agent_0.2/game/index/tables/HeroTable/rows?offset=0&limit=500` 返回 200，表头为 `ID / Name / HP / Attack`，首行数据为 `1 / HeroA / 100 / 20`。
+	- QA `POST /api/agents/LTCLAW-GY.X_QA_Agent_0.2/game/index/rebuild` 返回 403，viewer 仍不能重建索引。
+	- default 与 QA `setup-status` 的 `project_root` / `project_bundle_root` / `tables_config` 保持一致，确认 rows 读取已回到 shared project-scoped 数据。
+- Item 23: passed
+	- default 切到空 Workspace Root `/Users/Admin/LTClawFullSmokeWorkspace_Empty` 后，`setup-status` 切换到空 workspace bundle，并回到 `no_table_sources_found`。
+	- 再切回原 Workspace Root `/Users/Admin/LTClawFullSmokeWorkspace` 后，`setup-status` 恢复为:
+		- `project_root = /Users/Admin/LTCLaw2.0-foundation/examples/minimal_project`
+		- `project_bundle_root = /Users/Admin/LTClawFullSmokeWorkspace/projects/minimal_project-200c235d46f2`
+		- `tables_config.roots = ["Tables"]`
+		- `build_readiness.blocking_reason = null`
+		- `build_readiness.next_action = ready_for_discovery`
+	- 本轮前端补充了按 workspace/project 键控的 discovery 缓存恢复；对应 helper/node 测试已通过，避免切回原 workspace 后再次落回错误的未配置态。
+
+Final 汇总:
+- passed: 19
+- failed: 0
+- blocked: 4
+- 当前 2 个真实失败项已收口；剩余 4 项仍是用户明确要求不执行的写链路阻塞项。

@@ -8,6 +8,7 @@ import type {
 
 
 const ACTIVE_COLD_START_JOB_PREFIX = "ltclaw_cold_start_active_job:";
+const PROJECT_SETUP_DISCOVERY_CACHE_PREFIX = "ltclaw_project_setup_discovery:";
 
 export function splitProjectSetupLines(value: string): string[] {
   return value
@@ -122,6 +123,71 @@ export function canStartRuleOnlyColdStartBuild(
 
 export function getColdStartActiveJobStorageKey(agentId: string): string {
   return `${ACTIVE_COLD_START_JOB_PREFIX}${agentId}`;
+}
+
+export function getProjectSetupDiscoveryCacheKey(
+  setupStatus: ProjectSetupStatusResponse | null,
+): string {
+  const workspaceRoot = (setupStatus?.active_workspace_root ?? "").trim() || "__legacy_workspace__";
+  const projectIdentity =
+    (setupStatus?.project_key ?? "").trim() ||
+    (setupStatus?.project_root ?? "").trim() ||
+    (setupStatus?.active_workspace_project_root ?? "").trim();
+
+  if (!projectIdentity) {
+    return "";
+  }
+
+  return `${PROJECT_SETUP_DISCOVERY_CACHE_PREFIX}${workspaceRoot}::${projectIdentity}`;
+}
+
+export function loadProjectSetupCachedDiscovery(
+  setupStatus: ProjectSetupStatusResponse | null,
+): ProjectTableSourceDiscoveryResponse | null {
+  if (typeof localStorage === "undefined") {
+    return null;
+  }
+  const cacheKey = getProjectSetupDiscoveryCacheKey(setupStatus);
+  if (!cacheKey) {
+    return null;
+  }
+  const payload = localStorage.getItem(cacheKey);
+  if (!payload) {
+    return null;
+  }
+  try {
+    return JSON.parse(payload) as ProjectTableSourceDiscoveryResponse;
+  } catch {
+    localStorage.removeItem(cacheKey);
+    return null;
+  }
+}
+
+export function saveProjectSetupCachedDiscovery(
+  setupStatus: ProjectSetupStatusResponse | null,
+  discovery: ProjectTableSourceDiscoveryResponse | null,
+): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+  const cacheKey = getProjectSetupDiscoveryCacheKey(setupStatus);
+  if (!cacheKey || !discovery) {
+    return;
+  }
+  localStorage.setItem(cacheKey, JSON.stringify(discovery));
+}
+
+export function clearProjectSetupCachedDiscovery(
+  setupStatus: ProjectSetupStatusResponse | null,
+): void {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+  const cacheKey = getProjectSetupDiscoveryCacheKey(setupStatus);
+  if (!cacheKey) {
+    return;
+  }
+  localStorage.removeItem(cacheKey);
 }
 
 export function loadColdStartActiveJobId(agentId: string): string {
