@@ -258,6 +258,41 @@
   - Workspace A / B 切换成功，Current Workspace Root、workspace.yaml 路径、Current Environment、Agent 目录、Session 目录、Cache 目录均同步刷新。
   - 刷新浏览器后仍保持当前 Workspace Root，不回退到旧值。
   - 切 agent 后，Current Agent / Role / Capability Source / Agent 目录刷新，但 Workspace Root 保持不变，符合“切 agent 只切权限和 session”的语义。
+
+## 21. Full Manual Smoke Result After Workspace Switch Fix
+- 执行日期: 2026-05-16
+- 当前 commit: 60d1b0051a9409f09348ce80dfd0a0665dae278c
+- 前端地址: http://127.0.0.1:5175
+- 后端地址: http://127.0.0.1:18082
+- Workspace Root: /Users/Admin/LTClawFullSmokeWorkspace
+- 备用空 Workspace Root: /Users/Admin/LTClawFullSmokeWorkspace_Empty
+- Project Root: /Users/Admin/LTCLaw2.0-foundation/examples/minimal_project
+- Table Root: Tables
+- 23 项汇总:
+  - passed: 17
+  - failed: 2
+  - blocked: 4
+- 本轮已确认修复的上一轮失败项:
+  - default 在建立 workspace 后恢复 admin 权限，Rule-only cold-start 可执行并成功。
+  - cold-start job panel、source candidate、default NumericWorkbench 表数据均恢复可读。
+  - QA 切换后 Project Root 与 candidate map 不再直接丢失。
+  - viewer 写入口已改为前置 disabled，而不是点击后再 403。
+- 本轮仍失败的项:
+  - Item 19: QA NumericWorkbench 仍无法读取 HeroTable 行数据，UI 为“暂无数据”，rows 接口返回 412。
+  - Item 23: 切回原 Workspace 后 candidate map 与 workbench 数据能恢复，但 Project 页 Source Discovery / build readiness 只恢复了一半，仍停在 discovery=0 / project_root_not_configured。
+- blocked 项说明:
+  - Item 9 / 10 / 11 / 18 全部由本轮显式运行约束触发：不自动 Save Formal Map、不自动 Build Release、不自动 Publish Current，因此没有 current release 可继续验证。
+- 关键 API 摘要:
+  - default capability-status: 200, role=admin, capability_source=workspace.agents, is_legacy_role_fallback=false。
+  - QA capability-status: 200, role=viewer, capability_source=game_user_config.my_role, is_legacy_role_fallback=true。
+  - default / QA setup-status: 均指向同一 workspace root 与 minimal_project。
+  - default / QA candidate/source-latest: 均为 200，可读到 HeroTable candidate map。
+  - default / QA releases/current: 均为 404 No current knowledge release is set。
+  - default / QA index/tables: 均能返回 HeroTable 摘要，但 QA rows 读取仍为 412。
+- 是否建议替换 main: 不建议。
+- 当前主要剩余风险:
+  - QA workbench 数据读链路未闭环。
+  - workspace 切回原目录后的 Project 页状态恢复仍不完整。
 - 当前结论:
   - 就本轮限定范围而言，Workspace Switch UI 和切换后的状态刷新闭环已经完成。
   - 这轮 follow-up 不改变第 19 节对更大范围 foundation 替换 main 的结论；它只证明 workspace switch 这一条 UX / state loop 已经收口。
