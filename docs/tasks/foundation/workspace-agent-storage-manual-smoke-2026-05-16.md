@@ -188,3 +188,37 @@ Final 汇总:
 - failed: 0
 - blocked: 4
 - 当前 2 个真实失败项已收口；剩余 4 项仍是用户明确要求不执行的写链路阻塞项。
+
+## UI Reality Check After User Feedback
+
+- 用户反馈:
+	- 看不到切换工作区按钮
+	- 冷启动进度条不明显
+	- 页面切换回来像整页重刷
+	- 用户不知道工作区到底在哪里切换
+- 修复 commit:
+	- `foundation: make workspace switcher and cold-start status visible`
+- 真实前端地址:
+	- http://127.0.0.1:5175/game/project
+- 真实后端地址:
+	- http://127.0.0.1:18082
+- 实际页面命中信息:
+	- Frontend Build ID = `foundation-ui-2b40c40`
+	- Frontend Build Time = `2026-05-17T00:00:00+08:00`
+	- Frontend Git Ref = `foundation/workspace-agent-storage-from-m1@2b40c40`
+	- Backend Git Ref = `foundation/workspace-agent-storage-from-m1@2b40c40`
+	- Backend Static Source = `packaged`
+	- Backend Static Dir = `/Users/Admin/LTCLaw2.0-foundation/src/ltclaw_gy_x/console`
+	- Index MTime = `2026-05-16T10:59:03.247690+00:00`
+- 实际页面是否看到 Workspace Bar:
+	- 是。顶层在 PageHeader 下方直接可见，包含 `当前工作区`、Workspace Root、Project Root、Project Bundle Root、Current Agent、Current Role，以及 `切换工作区` / `新建工作区` 按钮。
+- 实际页面是否看到切换工作区 Modal:
+	- 是。点击 `切换工作区` 后出现标题 `打开 / 切换工作区` 的 Modal，包含目标 Workspace Root 输入框、当前 Workspace Root，以及两条 guardrail 文案。
+- 实际页面是否看到 Cold-start Status Bar:
+	- 是。顶层固定显示 `冷启动状态`；在无 job 时也显示 `当前无冷启动任务`、readiness、blocking_reason、next_action 和 `Rule-only 冷启动` 按钮。
+- 新建并切换是否真实生效:
+	- 是。通过真实浏览器创建 `/Users/Admin/LTClawVisibleWorkspaceTest` 后，页面顶层 `Current Workspace Root` 立即切换为该路径，成功提示 `已切换工作区：/Users/Admin/LTClawVisibleWorkspaceTest` 可见。
+- 页面切换回来是否保留数据:
+	- 是。通过真实浏览器从 `/game/project` 切到 `/numeric-workbench` 再切回 `/game/project`，顶层 Workspace Bar 与 Cold-start Status Bar 立即可见，没有先清空成白屏后再回填。
+- 是否仍建议替换 main:
+	- 不建议。虽然这次 UI 可见性与切换体验问题已收口，但 foundation 仍未完成用户明确禁止执行的写链路人工验收项，当前不建议替换 main。

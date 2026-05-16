@@ -119,6 +119,9 @@ export interface FrontendRuntimeInfo {
   console_static_source: string | null;
   console_index: string | null;
   console_index_mtime: string | null;
+  backend_git_branch?: string | null;
+  backend_git_commit?: string | null;
+  backend_git_ref?: string | null;
   api_base: string;
 }
 

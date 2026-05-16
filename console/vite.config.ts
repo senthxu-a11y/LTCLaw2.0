@@ -1,6 +1,27 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { execSync } from "node:child_process";
+
+function readGitRef(cwd: string): string {
+  try {
+    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+      cwd,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+    const commit = execSync("git rev-parse --short HEAD", {
+      cwd,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+    return branch && commit ? `${branch}@${commit}` : branch || commit || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -8,7 +29,8 @@ export default defineConfig(({ mode }) => {
   // Use a dedicated Vite-prefixed key so unrelated shell BASE_URL values don't leak into the build.
   const apiBaseUrl = env.VITE_API_BASE_URL ?? "";
   const apiProxyTarget = env.VITE_API_PROXY_TARGET || apiBaseUrl || "http://127.0.0.1:18080";
-  const frontendBuildId = env.VITE_FRONTEND_BUILD_ID || `${mode}-frontend`;
+  const frontendGitRef = env.VITE_FRONTEND_GIT_REF || readGitRef(process.cwd());
+  const frontendBuildId = env.VITE_FRONTEND_BUILD_ID || frontendGitRef || `${mode}-frontend`;
   const frontendBuildTime = env.VITE_FRONTEND_BUILD_TIME || new Date().toISOString();
   console.log(`[LTClaw] Vite API proxy target: ${apiProxyTarget}`);
 
@@ -17,6 +39,7 @@ export default defineConfig(({ mode }) => {
       VITE_API_BASE_URL: JSON.stringify(apiBaseUrl),
       'import.meta.env.VITE_FRONTEND_BUILD_ID': JSON.stringify(frontendBuildId),
       'import.meta.env.VITE_FRONTEND_BUILD_TIME': JSON.stringify(frontendBuildTime),
+      'import.meta.env.VITE_FRONTEND_GIT_REF': JSON.stringify(frontendGitRef),
       TOKEN: JSON.stringify(env.TOKEN || ""),
       MOBILE: false,
     },

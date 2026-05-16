@@ -323,3 +323,42 @@
 - 当前结论:
   - 就本轮限定范围而言，Workspace Switch UI 和切换后的状态刷新闭环已经完成。
   - 这轮 follow-up 不改变第 19 节对更大范围 foundation 替换 main 的结论；它只证明 workspace switch 这一条 UX / state loop 已经收口。
+
+## 24. UI Reality Check
+- 背景:
+  - 用户实际反馈看不到 `切换工作区` 按钮、看不到冷启动状态、切页回来像整页重刷，因此之前仅凭源码和旧 smoke 的结论不成立。
+- 修复 commit:
+  - `foundation: make workspace switcher and cold-start status visible`
+- 本轮 UI 收口:
+  - 在 Project 页面 PageHeader 下方新增顶层 Workspace Bar，明确显示 Current Workspace Root / Project Root / Project Bundle Root / Current Agent / Current Role。
+  - 顶层按钮改为 `切换工作区` / `新建工作区`，并统一进入 `打开 / 切换工作区` Modal，而不是只依赖卡片里的输入框。
+  - 在 Workspace Bar 下方新增常驻 `冷启动状态` Bar；无 job 时显示 `当前无冷启动任务` 和 readiness，存在 job 时显示 progress、status、stage、message、counts、candidate_refs 与 Map/Formal Map 入口。
+  - 新增 Project runtime Zustand cache，切换到 NumericWorkbench 再切回 Project 时优先显示缓存，再后台 refresh，避免整页先清空。
+  - 新增 Frontend/Backend Git Ref、Frontend Build ID/Time、Backend Static Source/Dir、Index MTime 诊断字段，确保浏览器里能确认当前页面命中的就是 foundation 这版代码。
+- 真实浏览器验证:
+  - 前端地址: http://127.0.0.1:5175/game/project
+  - 后端地址: http://127.0.0.1:18082
+  - 页面命中标识:
+    - Frontend Build ID = `foundation-ui-2b40c40`
+    - Frontend Build Time = `2026-05-17T00:00:00+08:00`
+    - Frontend Git Ref = `foundation/workspace-agent-storage-from-m1@2b40c40`
+    - Backend Git Ref = `foundation/workspace-agent-storage-from-m1@2b40c40`
+    - Backend Static Source = `packaged`
+    - Backend Static Dir = `/Users/Admin/LTCLaw2.0-foundation/src/ltclaw_gy_x/console`
+    - Index MTime = `2026-05-16T10:59:03.247690+00:00`
+  - 顶层 Workspace Bar: 可见
+  - `切换工作区` 按钮: 可见
+  - 点击后 Modal: 可见，标题 `打开 / 切换工作区`
+  - `新建并切换`: 可用，已真实创建并切换 `/Users/Admin/LTClawVisibleWorkspaceTest`
+  - 顶层 Cold-start Status Bar: 可见
+  - 无 job 空态: 可见，显示 `当前无冷启动任务`
+  - 从 NumericWorkbench 切回 Project: 顶层 Bar 保持可见，不再先白掉再回填
+- 自动化验证:
+  - 后端 pytest: 26 passed
+  - M1 smoke: 通过
+  - 前端 tsc: 通过
+  - 前端 node test: 15 passed
+  - 前端 eslint: 通过
+- 结论:
+  - 这次问题的根因不是单纯“源码里有文案”，而是入口不够顶层、冷启动状态不常驻、且必须用真实浏览器验证。
+  - 当前仍不建议替换 main；剩余阻塞项依然是用户明确不执行的写链路人工验收，而不是本轮 UI 可见性问题。

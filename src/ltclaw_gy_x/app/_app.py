@@ -4,6 +4,7 @@ import inspect
 import asyncio
 import mimetypes
 import os
+import subprocess
 import sys
 import time
 import uuid
@@ -576,6 +577,33 @@ _CONSOLE_STATIC_DIR, _CONSOLE_STATIC_SOURCE = _resolve_console_static_info()
 _CONSOLE_INDEX = (
     Path(_CONSOLE_STATIC_DIR) / "index.html" if _CONSOLE_STATIC_DIR else None
 )
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _read_git_value(*args: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=_REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    return value or None
+
+
+_BACKEND_GIT_BRANCH = _read_git_value("rev-parse", "--abbrev-ref", "HEAD")
+_BACKEND_GIT_COMMIT = _read_git_value("rev-parse", "--short", "HEAD")
+_BACKEND_GIT_REF = (
+    f"{_BACKEND_GIT_BRANCH}@{_BACKEND_GIT_COMMIT}"
+    if _BACKEND_GIT_BRANCH and _BACKEND_GIT_COMMIT
+    else _BACKEND_GIT_BRANCH or _BACKEND_GIT_COMMIT
+)
 _CONSOLE_INDEX_MTIME = (
     datetime.fromtimestamp(_CONSOLE_INDEX.stat().st_mtime, timezone.utc).isoformat()
     if _CONSOLE_INDEX and _CONSOLE_INDEX.exists()
@@ -632,6 +660,9 @@ def get_frontend_runtime_info():
         "console_static_source": _CONSOLE_STATIC_SOURCE,
         "console_index": str(_CONSOLE_INDEX) if _CONSOLE_INDEX is not None else None,
         "console_index_mtime": _CONSOLE_INDEX_MTIME,
+        "backend_git_branch": _BACKEND_GIT_BRANCH,
+        "backend_git_commit": _BACKEND_GIT_COMMIT,
+        "backend_git_ref": _BACKEND_GIT_REF,
         "api_base": "/api",
     }
 

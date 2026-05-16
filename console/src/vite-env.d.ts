@@ -19,6 +19,7 @@ interface PyWebViewAPI {
 interface ImportMetaEnv {
   readonly VITE_FRONTEND_BUILD_ID?: string;
   readonly VITE_FRONTEND_BUILD_TIME?: string;
+  readonly VITE_FRONTEND_GIT_REF?: string;
 }
 
 declare global {

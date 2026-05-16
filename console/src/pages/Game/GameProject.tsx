@@ -22,6 +22,7 @@ import type {
   WorkspaceRootStatus,
 } from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
+import { useProjectSetupStore } from "../../stores/projectSetupStore";
 import { copyText } from "../Chat/utils";
 import FormalMapWorkspace from "./components/FormalMapWorkspace";
 import {
@@ -86,34 +87,40 @@ export default function GameProject() {
   const { message } = useAppMessage();
   const navigate = useNavigate();
   const { selectedAgent, addAgent, setSelectedAgent, updateAgent } = useAgentStore();
+  const cachedProjectRuntime = useProjectSetupStore((state) => (selectedAgent ? state.runtimeByAgent[selectedAgent] ?? null : null));
+  const upsertProjectRuntimeCache = useProjectSetupStore((state) => state.upsertRuntimeCache);
+  const getProjectRuntimeCache = useProjectSetupStore((state) => state.getRuntimeCache);
   const [form] = Form.useForm<GameProjectFormData>();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedProjectRuntime);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [storageSummary, setStorageSummary] = useState<GameStorageSummary | null>(null);
-  const [frontendRuntimeInfo, setFrontendRuntimeInfo] = useState<FrontendRuntimeInfo | null>(null);
-  const [projectCapabilityStatus, setProjectCapabilityStatus] = useState<ProjectCapabilityStatus | null>(null);
-  const [workspaceRootStatus, setWorkspaceRootStatus] = useState<WorkspaceRootStatus | null>(null);
-  const [workspaceAgentProfile, setWorkspaceAgentProfile] = useState<LocalAgentProfile | null>(null);
+  const [storageSummary, setStorageSummary] = useState<GameStorageSummary | null>(cachedProjectRuntime?.storageSummary ?? null);
+  const [frontendRuntimeInfo, setFrontendRuntimeInfo] = useState<FrontendRuntimeInfo | null>(cachedProjectRuntime?.frontendRuntimeInfo ?? null);
+  const [projectCapabilityStatus, setProjectCapabilityStatus] = useState<ProjectCapabilityStatus | null>(cachedProjectRuntime?.projectCapabilityStatus ?? null);
+  const [workspaceRootStatus, setWorkspaceRootStatus] = useState<WorkspaceRootStatus | null>(cachedProjectRuntime?.workspaceRootStatus ?? null);
+  const [workspaceAgentProfile, setWorkspaceAgentProfile] = useState<LocalAgentProfile | null>(cachedProjectRuntime?.workspaceAgentProfile ?? null);
   const [savingWorkspaceAgentProfile, setSavingWorkspaceAgentProfile] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardSaving, setWizardSaving] = useState(false);
+  const [workspaceModalOpen, setWorkspaceModalOpen] = useState(false);
+  const [workspaceModalPreferredAction, setWorkspaceModalPreferredAction] = useState<"open" | "create">("open");
   const [wizardForm] = Form.useForm<{ id?: string; name: string }>();
-  const [setupStatus, setSetupStatus] = useState<ProjectSetupStatusResponse | null>(null);
-  const [discoveryResult, setDiscoveryResult] = useState<ProjectTableSourceDiscoveryResponse | null>(null);
-  const [workspaceRootInput, setWorkspaceRootInput] = useState("");
-  const [projectRootInput, setProjectRootInput] = useState("");
-  const [tablesRootsInput, setTablesRootsInput] = useState("");
-  const [tablesIncludeInput, setTablesIncludeInput] = useState("");
-  const [tablesExcludeInput, setTablesExcludeInput] = useState("");
-  const [tablesHeaderRow, setTablesHeaderRow] = useState(1);
-  const [tablesPrimaryKeysInput, setTablesPrimaryKeysInput] = useState("");
+  const [setupStatus, setSetupStatus] = useState<ProjectSetupStatusResponse | null>(cachedProjectRuntime?.setupStatus ?? null);
+  const [discoveryResult, setDiscoveryResult] = useState<ProjectTableSourceDiscoveryResponse | null>(cachedProjectRuntime?.discoveryResult ?? null);
+  const [workspaceRootInput, setWorkspaceRootInput] = useState(cachedProjectRuntime?.setupStatus?.active_workspace_root ?? cachedProjectRuntime?.workspaceRootStatus?.active_workspace_root ?? "");
+  const [projectRootInput, setProjectRootInput] = useState(cachedProjectRuntime?.setupStatus?.project_root ?? "");
+  const [tablesRootsInput, setTablesRootsInput] = useState(joinProjectSetupLines(cachedProjectRuntime?.setupStatus?.tables_config.roots));
+  const [tablesIncludeInput, setTablesIncludeInput] = useState(joinProjectSetupLines(cachedProjectRuntime?.setupStatus?.tables_config.include));
+  const [tablesExcludeInput, setTablesExcludeInput] = useState(joinProjectSetupLines(cachedProjectRuntime?.setupStatus?.tables_config.exclude));
+  const [tablesHeaderRow, setTablesHeaderRow] = useState(cachedProjectRuntime?.setupStatus?.tables_config.header_row || 1);
+  const [tablesPrimaryKeysInput, setTablesPrimaryKeysInput] = useState(joinProjectSetupLines(cachedProjectRuntime?.setupStatus?.tables_config.primary_key_candidates));
   const [savingProjectSetupRoot, setSavingProjectSetupRoot] = useState(false);
   const [savingWorkspaceRoot, setSavingWorkspaceRoot] = useState(false);
   const [savingProjectSetupTables, setSavingProjectSetupTables] = useState(false);
   const [discoveringSources, setDiscoveringSources] = useState(false);
-  const [activeColdStartJobId, setActiveColdStartJobId] = useState("");
-  const [coldStartJob, setColdStartJob] = useState<ColdStartJobState | null>(null);
+  const [activeColdStartJobId, setActiveColdStartJobId] = useState(cachedProjectRuntime?.activeColdStartJobId ?? "");
+  const [coldStartJob, setColdStartJob] = useState<ColdStartJobState | null>(cachedProjectRuntime?.coldStartJob ?? null);
   const [creatingColdStartJob, setCreatingColdStartJob] = useState(false);
   const [cancellingColdStartJob, setCancellingColdStartJob] = useState(false);
   const [restoringColdStartJob, setRestoringColdStartJob] = useState(false);
@@ -139,6 +146,51 @@ export default function GameProject() {
     setTablesPrimaryKeysInput(joinProjectSetupLines(status.tables_config.primary_key_candidates));
   }, []);
 
+  useEffect(() => {
+    if (!selectedAgent || !cachedProjectRuntime) {
+      return;
+    }
+    setStorageSummary(cachedProjectRuntime.storageSummary ?? null);
+    setFrontendRuntimeInfo(cachedProjectRuntime.frontendRuntimeInfo ?? null);
+    setProjectCapabilityStatus(cachedProjectRuntime.projectCapabilityStatus ?? null);
+    setWorkspaceRootStatus(cachedProjectRuntime.workspaceRootStatus ?? null);
+    setWorkspaceAgentProfile(cachedProjectRuntime.workspaceAgentProfile ?? null);
+    setDiscoveryResult(cachedProjectRuntime.discoveryResult ?? null);
+    setColdStartJob(cachedProjectRuntime.coldStartJob ?? null);
+    setActiveColdStartJobId(cachedProjectRuntime.activeColdStartJobId ?? "");
+    applySetupStatus(cachedProjectRuntime.setupStatus ?? null);
+    setLoading(false);
+  }, [applySetupStatus, cachedProjectRuntime, selectedAgent]);
+
+  useEffect(() => {
+    if (!selectedAgent) {
+      return;
+    }
+    upsertProjectRuntimeCache(selectedAgent, {
+      workspaceRootStatus,
+      setupStatus,
+      projectCapabilityStatus,
+      workspaceAgentProfile,
+      storageSummary,
+      discoveryResult,
+      coldStartJob,
+      activeColdStartJobId,
+      frontendRuntimeInfo,
+    });
+  }, [
+    activeColdStartJobId,
+    coldStartJob,
+    discoveryResult,
+    frontendRuntimeInfo,
+    projectCapabilityStatus,
+    selectedAgent,
+    setupStatus,
+    storageSummary,
+    upsertProjectRuntimeCache,
+    workspaceAgentProfile,
+    workspaceRootStatus,
+  ]);
+
   const loadProjectData = useCallback(async () => {
     if (!selectedAgent) {
       applySetupStatus(null);
@@ -151,9 +203,12 @@ export default function GameProject() {
       setColdStartJob(null);
       setActiveColdStartJobId("");
       setLoading(false);
+      setRefreshing(false);
       return;
     }
-    setLoading(true);
+    const hasCachedData = Boolean(getProjectRuntimeCache(selectedAgent));
+    setLoading(!hasCachedData);
+    setRefreshing(hasCachedData);
     setError(null);
     try {
       const [projectConfig, userConfig, storage, projectSetupStatus, capabilityStatus, workspaceProfile, workspaceStatus] = await Promise.all([
@@ -246,12 +301,11 @@ export default function GameProject() {
       setError(errMsg);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [applySetupStatus, form, selectedAgent, t, updateAgent]);
+  }, [applySetupStatus, form, getProjectRuntimeCache, selectedAgent, t, updateAgent]);
 
   const canWriteColdStart = projectCapabilityStatus?.required_for_cold_start["knowledge.candidate.write"] ?? true;
-  const hasActiveProjectRoot = Boolean(setupStatus?.active_workspace_project_root || setupStatus?.project_root);
-
   const handleSaveWorkspaceAgentProfile = async () => {
     if (!selectedAgent || !workspaceAgentProfile) {
       return;
@@ -318,6 +372,7 @@ export default function GameProject() {
         create_if_missing: createIfMissing,
       });
       await loadProjectData();
+      setWorkspaceModalOpen(false);
       message.success(
         t("gameProject.workspaceRootSaved", {
           defaultValue: `已切换工作区：${targetPath}`,
@@ -440,6 +495,11 @@ export default function GameProject() {
 
   const handleRetryColdStartJob = async () => {
     await handleStartColdStartJob();
+  };
+
+  const openWorkspaceModal = (preferredAction: "open" | "create") => {
+    setWorkspaceModalPreferredAction(preferredAction);
+    setWorkspaceModalOpen(true);
   };
 
   const storageGroups = storageSummary
@@ -734,7 +794,18 @@ export default function GameProject() {
     return () => window.clearInterval(timer);
   }, [activeColdStartJobId, coldStartJob, fetchColdStartJob, selectedAgent]);
 
-  if (loading) {
+  const hasProjectRuntimeSnapshot = Boolean(
+    setupStatus ||
+    workspaceRootStatus ||
+    storageSummary ||
+    frontendRuntimeInfo ||
+    projectCapabilityStatus ||
+    workspaceAgentProfile ||
+    discoveryResult ||
+    coldStartJob,
+  );
+
+  if (loading && !hasProjectRuntimeSnapshot) {
     return (
       <div className={styles.gamePage}>
         <div className={styles.centerState}>
@@ -744,7 +815,7 @@ export default function GameProject() {
     );
   }
 
-  if (error) {
+  if (error && !hasProjectRuntimeSnapshot) {
     return (
       <div className={styles.gamePage}>
         <div className={styles.centerState}>
@@ -758,19 +829,249 @@ export default function GameProject() {
   }
 
   const currentWorkspaceRoot = workspaceRootStatus?.active_workspace_root || setupStatus?.active_workspace_root || "-";
-  const currentWorkspaceConfigPath = workspaceRootStatus?.workspace_config_path || setupStatus?.workspace_config_path || "-";
-  const currentActiveProjectKey = workspaceRootStatus?.active_project_key || setupStatus?.active_workspace_project_key || setupStatus?.project_key || "-";
   const currentActiveProjectRoot = workspaceRootStatus?.active_workspace_project_root || setupStatus?.active_workspace_project_root || setupStatus?.project_root || "-";
   const currentProjectBundleRoot = setupStatus?.project_bundle_root || "-";
   const coldStartWarnings = coldStartJob?.warnings || [];
   const coldStartErrors = coldStartJob?.errors || [];
   const coldStartCandidateRefs = coldStartJob?.candidate_refs || [];
+  const frontendGitRef = import.meta.env.VITE_FRONTEND_GIT_REF || "unknown";
+  const backendGitRef = frontendRuntimeInfo?.backend_git_ref || [frontendRuntimeInfo?.backend_git_branch, frontendRuntimeInfo?.backend_git_commit].filter(Boolean).join("@") || "-";
+  const coldStartBlockedReason = !canStartColdStartBuild
+    ? t("gameProject.projectSetupRuleOnlyBuildBlocked", {
+        defaultValue: "未配置有效 Project Root / Tables Source，或当前 Source Discovery 没有可用于 Rule-only 冷启动的 CSV 表，因此构建按钮不可用。",
+      })
+    : !canWriteColdStart
+      ? t("gameProject.projectSetupRuleOnlyBuildPermissionBlocked", {
+          defaultValue: "当前 agent 缺少 knowledge.candidate.write，构建入口已在前端预先禁用。",
+        })
+      : "";
+  const coldStartStatusTitle = t("gameProject.projectSetupColdStartStatusTitle", { defaultValue: "冷启动状态" });
+  const workspaceBarTitle = t("gameProject.workspaceBarTitle", { defaultValue: "当前工作区" });
+  const workspaceBarEyebrow = t("gameProject.workspaceBarEyebrow", { defaultValue: "工作区 / Workspace" });
+  const workspaceBarGuardrail = t("gameProject.workspaceBarGuardrail", {
+    defaultValue: "切换工作区会切换 Project Data / Agent Profiles / Sessions / Cache，不会删除旧数据；切换 agent 只切换权限和 session，不切 Project Data。",
+  });
 
   return (
     <div className={styles.gamePage}>
       <PageHeader parent={t("nav.game")} current={t("gameProject.title")} />
 
       <div className={styles.content}>
+        <div className={styles.topBars}>
+          <Card className={styles.topBarCard}>
+            <div className={styles.topBarHeader}>
+              <div className={styles.topBarTitleGroup}>
+                <Text className={styles.topBarEyebrow}>{workspaceBarEyebrow}</Text>
+                <Text strong className={styles.topBarTitle}>{workspaceBarTitle}</Text>
+                <div className={styles.topBarHint}>{workspaceBarGuardrail}</div>
+                <div className={styles.topBarHint}>
+                  {t("gameProject.workspaceBarModalHint", {
+                    defaultValue: "主入口：打开/切换工作区 或 新建工作区。用户无需先滚到 Project setup 卡片内部再找入口。",
+                  })}
+                </div>
+              </div>
+              <Space wrap>
+                <Button size="small" onClick={() => openWorkspaceModal("open")}>
+                  {t("gameProject.workspaceBarOpenButton", { defaultValue: "切换工作区" })}
+                </Button>
+                <Button size="small" type="primary" onClick={() => openWorkspaceModal("create")}>
+                  {t("gameProject.workspaceBarCreateButton", { defaultValue: "新建工作区" })}
+                </Button>
+              </Space>
+            </div>
+            {error ? (
+              <Alert
+                type="warning"
+                showIcon
+                message={t("gameProject.projectSetupRefreshWarning", { defaultValue: "后台刷新失败，当前先显示上次缓存的数据。" })}
+                description={error}
+                className={styles.topBarAlert}
+              />
+            ) : null}
+            {refreshing ? <div className={styles.refreshingHint}>{t("gameProject.projectSetupRefreshing", { defaultValue: "正在刷新" })}</div> : null}
+            <div className={styles.topBarStatsGrid}>
+              <div className={styles.topBarStatCard}><span>{t("gameProject.projectSetupWorkspaceRoot", { defaultValue: "Current Workspace Root" })}</span><strong>{currentWorkspaceRoot}</strong></div>
+              <div className={styles.topBarStatCard}><span>{t("gameProject.projectSetupProjectRootShort", { defaultValue: "Current Project Root" })}</span><strong>{currentActiveProjectRoot}</strong></div>
+              <div className={styles.topBarStatCard}><span>{t("gameProject.projectBundleRoot", { defaultValue: "Current Project Bundle Root" })}</span><strong>{currentProjectBundleRoot}</strong></div>
+              <div className={styles.topBarStatCard}><span>{t("gameProject.projectSetupCurrentAgent", { defaultValue: "Current Agent" })}</span><strong>{selectedAgent || storageSummary?.current_agent_id || "-"}</strong></div>
+              <div className={styles.topBarStatCard}><span>{t("gameProject.projectSetupCapabilityRole", { defaultValue: "Current Role" })}</span><strong>{projectCapabilityStatus?.role || "-"}</strong></div>
+            </div>
+            <Descriptions column={2} size="small" className={styles.topBarMeta}>
+              <Descriptions.Item label={t("gameProject.projectSetupFrontendBuildId", { defaultValue: "Frontend Build ID" })}>
+                {import.meta.env.VITE_FRONTEND_BUILD_ID || "dev"}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("gameProject.projectSetupFrontendBuildTime", { defaultValue: "Frontend Build Time" })}>
+                {import.meta.env.VITE_FRONTEND_BUILD_TIME || "dev"}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("gameProject.projectSetupFrontendGitRef", { defaultValue: "Frontend Git Ref" })}>
+                {frontendGitRef}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("gameProject.projectSetupBackendGitRef", { defaultValue: "Backend Git Ref" })}>
+                {backendGitRef}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("gameProject.projectSetupFrontendStaticSource", { defaultValue: "Backend Static Source" })}>
+                {frontendRuntimeInfo?.console_static_source || "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("gameProject.projectSetupFrontendStaticDir", { defaultValue: "Backend Static Dir" })}>
+                {frontendRuntimeInfo?.console_static_dir || "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("gameProject.projectSetupFrontendIndexMtime", { defaultValue: "Index MTime" })}>
+                {frontendRuntimeInfo?.console_index_mtime || "-"}
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+
+          <Card className={styles.topBarCard}>
+            <div className={styles.topBarHeader}>
+              <div className={styles.topBarTitleGroup}>
+                <Text strong className={styles.topBarTitle}>{coldStartStatusTitle}</Text>
+                <div className={styles.topBarHint}>
+                  {t("gameProject.projectSetupColdStartStatusHint", {
+                    defaultValue: "无 job 时也会显示当前 readiness / blocking_reason / next_action；有 job 时持续显示进度与结果入口。",
+                  })}
+                </div>
+              </div>
+              <Space wrap>
+                <Button
+                  size="small"
+                  type="primary"
+                  onClick={handleStartColdStartJob}
+                  disabled={!canStartColdStartBuild || coldStartProgress.isRunning || !canWriteColdStart}
+                  loading={creatingColdStartJob}
+                >
+                  {t("gameProject.workspaceBarColdStartButton", { defaultValue: "Rule-only 冷启动" })}
+                </Button>
+                {coldStartJob ? (
+                  <Button
+                    size="small"
+                    onClick={handleCancelColdStartJob}
+                    disabled={!coldStartProgress.canCancel}
+                    loading={cancellingColdStartJob}
+                  >
+                    {t("common.cancel")}
+                  </Button>
+                ) : null}
+              </Space>
+            </div>
+            <Descriptions column={3} size="small" className={styles.topBarMeta}>
+              <Descriptions.Item label={t("gameProject.projectSetupBlockingReason", { defaultValue: "Blocking Reason" })}>
+                {effectiveReadiness.blocking_reason || "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("gameProject.projectSetupNextAction", { defaultValue: "Next Action" })}>
+                {effectiveReadiness.next_action || "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("gameProject.projectSetupReadinessSource", { defaultValue: "Readiness Source" })}>
+                {effectiveReadiness.source}
+              </Descriptions.Item>
+            </Descriptions>
+            {coldStartBlockedReason ? (
+              <Alert type="info" showIcon message={coldStartBlockedReason} className={styles.topBarAlert} />
+            ) : null}
+            {restoringColdStartJob ? (
+              <Alert
+                type="info"
+                showIcon
+                message={t("gameProject.projectSetupRestoringJob", { defaultValue: "正在恢复上次冷启动任务状态。" })}
+                className={styles.topBarAlert}
+              />
+            ) : null}
+            {coldStartJob ? (
+              <div className={styles.projectSetupJobPanel}>
+                <Progress percent={coldStartProgress.percent} status={coldStartProgress.statusTone} />
+                <Descriptions column={2} size="small" className={styles.topBarMeta}>
+                  <Descriptions.Item label={t("gameProject.projectSetupJobId", { defaultValue: "Job ID" })}>{coldStartJob.job_id}</Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupJobStatus", { defaultValue: "Status" })}>{coldStartJob.status}</Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupJobStage", { defaultValue: "Stage" })}>{coldStartJob.stage}</Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupJobMessage", { defaultValue: "Message" })}>{coldStartJob.message}</Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupJobCurrentFile", { defaultValue: "Current File" })}>{coldStartJob.current_file || "-"}</Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupJobNextAction", { defaultValue: "Next Action" })}>{coldStartJob.next_action || "-"}</Descriptions.Item>
+                </Descriptions>
+                <div className={styles.topBarStatsGrid}>
+                  <div className={styles.topBarStatCard}><span>progress</span><strong>{`${Math.max(0, Math.min(100, coldStartJob.progress || 0))}%`}</strong></div>
+                  <div className={styles.topBarStatCard}><span>discovered</span><strong>{coldStartJob.counts.discovered_table_count}</strong></div>
+                  <div className={styles.topBarStatCard}><span>raw</span><strong>{coldStartJob.counts.raw_table_index_count}</strong></div>
+                  <div className={styles.topBarStatCard}><span>canonical</span><strong>{coldStartJob.counts.canonical_table_count}</strong></div>
+                  <div className={styles.topBarStatCard}><span>candidate</span><strong>{coldStartJob.counts.candidate_table_count}</strong></div>
+                  <div className={styles.topBarStatCard}><span>warnings</span><strong>{coldStartWarnings.length}</strong></div>
+                  <div className={styles.topBarStatCard}><span>errors</span><strong>{coldStartErrors.length}</strong></div>
+                  <div className={styles.topBarStatCard}><span>candidate_refs</span><strong>{coldStartCandidateRefs.length}</strong></div>
+                </div>
+                <div className={styles.projectSetupJobActions}>
+                  <Button size="small" onClick={handleRetryColdStartJob} disabled={!coldStartProgress.canRetry}>
+                    {t("common.retry")}
+                  </Button>
+                  <Button size="small" onClick={() => navigate("/game/map")} disabled={coldStartJob.status !== "succeeded"}>
+                    {t("gameProject.projectSetupOpenCandidateMap", { defaultValue: "查看 Candidate Map" })}
+                  </Button>
+                  <Button size="small" onClick={() => navigate("/game/map")} disabled={coldStartJob.status !== "succeeded"}>
+                    {t("gameProject.projectSetupSaveFormalMapEntry", { defaultValue: "保存 Formal Map" })}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Alert
+                type="info"
+                showIcon
+                message={t("gameProject.projectSetupNoColdStartJob", { defaultValue: "当前无冷启动任务" })}
+                description={`${effectiveReadiness.blocking_reason || "ready"} / ${effectiveReadiness.next_action}`}
+                className={styles.topBarAlert}
+              />
+            )}
+          </Card>
+        </div>
+
+        <Modal
+          open={workspaceModalOpen}
+          title={t("gameProject.workspaceSwitchModalTitle", { defaultValue: "打开 / 切换工作区" })}
+          onCancel={() => setWorkspaceModalOpen(false)}
+          footer={[
+            <Button key="cancel" onClick={() => setWorkspaceModalOpen(false)}>
+              {t("common.cancel")}
+            </Button>,
+            <Button
+              key="open"
+              type={workspaceModalPreferredAction === "open" ? "primary" : "default"}
+              onClick={() => void handleSaveWorkspaceRoot(false)}
+              loading={savingWorkspaceRoot && workspaceModalPreferredAction === "open"}
+            >
+              {t("gameProject.workspaceSwitchModalOpenExisting", { defaultValue: "打开已有工作区" })}
+            </Button>,
+            <Button
+              key="create"
+              type={workspaceModalPreferredAction === "create" ? "primary" : "default"}
+              onClick={() => void handleSaveWorkspaceRoot(true)}
+              loading={savingWorkspaceRoot && workspaceModalPreferredAction === "create"}
+            >
+              {t("gameProject.workspaceSwitchModalCreate", { defaultValue: "新建并切换" })}
+            </Button>,
+          ]}
+        >
+          <div className={styles.workspaceModalContent}>
+            <div className={styles.workspaceModalHint}>
+              {t("gameProject.workspaceSwitchModalCurrent", { defaultValue: "当前 Workspace Root" })}: {currentWorkspaceRoot}
+            </div>
+            <Input
+              value={workspaceRootInput}
+              onChange={(event) => setWorkspaceRootInput(event.target.value)}
+              placeholder={t("gameProject.projectSetupWorkspaceRootPlaceholder", { defaultValue: "/Users/Admin/LTClawWorkspace" })}
+            />
+            <Alert
+              type="info"
+              showIcon
+              message={t("gameProject.workspaceSwitchGuardrailInline", {
+                defaultValue: "切换工作区会切换 Project Data / Agent Profiles / Sessions / Cache，不会删除旧数据。",
+              })}
+            />
+            <Alert
+              type="info"
+              showIcon
+              message={t("gameProject.workspaceSwitchAgentGuardrailInline", {
+                defaultValue: "切换 agent 只切换权限和 session，不切 Project Data。",
+              })}
+            />
+          </div>
+        </Modal>
+
         <Form form={form} layout="vertical" className={styles.form}>
           <Card
             title={t("gameProject.projectSetupTitle", { defaultValue: "Project setup" })}
@@ -783,98 +1084,6 @@ export default function GameProject() {
                   defaultValue:
                     "Project keeps onboarding and configuration ownership. Daily knowledge runtime and formal map editing now live on their dedicated workspace pages.",
                 })}
-              </div>
-            </div>
-
-            <div className={styles.workspaceSwitcherCard}>
-              <div className={styles.workspaceSwitcherHeader}>
-                <div>
-                  <Text strong className={styles.workspaceSwitcherTitle}>
-                    {t("gameProject.workspaceCardTitle", { defaultValue: "工作区 / Workspace" })}
-                  </Text>
-                  <div className={styles.workspaceSwitcherSubtitle}>
-                    {t("gameProject.workspaceCardSubtitle", {
-                      defaultValue: "当前工作区决定 Project Data、Agent Profiles、Sessions、Audit、Cache 的存储位置。",
-                    })}
-                  </div>
-                </div>
-              </div>
-              <Alert
-                type="info"
-                showIcon
-                message={t("gameProject.workspaceSwitchGuardrailTitle", { defaultValue: "Workspace Switch" })}
-                description={t("gameProject.workspaceSwitchGuardrailBody", {
-                  defaultValue: "切换工作区会切换 Project Data / Agent Profiles / Sessions / Cache，但不会删除旧工作区数据。切换 agent 只切换权限和 session，不切换 Project Data。",
-                })}
-                className={styles.mapReviewAlert}
-              />
-              <div className={styles.workspaceSwitcherGrid}>
-                <div className={styles.workspaceSwitcherPanel}>
-                  <Text strong>{t("gameProject.workspaceCurrentPanelTitle", { defaultValue: "当前工作区" })}</Text>
-                  <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
-                    <Descriptions.Item label={t("gameProject.projectSetupWorkspaceRoot", { defaultValue: "Current Workspace Root" })}>
-                      {currentWorkspaceRoot}
-                    </Descriptions.Item>
-                    <Descriptions.Item label={t("gameProject.projectSetupWorkspaceConfigPath", { defaultValue: "workspace.yaml 路径" })}>
-                      {currentWorkspaceConfigPath}
-                    </Descriptions.Item>
-                    <Descriptions.Item label={t("gameProject.workspaceActiveProjectKey", { defaultValue: "active_project_key" })}>
-                      {currentActiveProjectKey}
-                    </Descriptions.Item>
-                    <Descriptions.Item label={t("gameProject.workspaceActiveProjectRoot", { defaultValue: "active_project_root" })}>
-                      {currentActiveProjectRoot}
-                    </Descriptions.Item>
-                    <Descriptions.Item label={t("gameProject.projectBundleRoot", { defaultValue: "Project Bundle Root" })}>
-                      {currentProjectBundleRoot}
-                    </Descriptions.Item>
-                    <Descriptions.Item label={t("gameProject.projectSetupCurrentAgent", { defaultValue: "当前 agent" })}>
-                      {selectedAgent || storageSummary?.current_agent_id || "-"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label={t("gameProject.projectSetupCapabilityRole", { defaultValue: "当前 role" })}>
-                      {projectCapabilityStatus?.role || "-"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label={t("gameProject.projectSetupCapabilitySource", { defaultValue: "capability_source" })}>
-                      {projectCapabilityStatus?.capability_source || "-"}
-                    </Descriptions.Item>
-                  </Descriptions>
-                  {!hasActiveProjectRoot ? (
-                    <Alert
-                      type="warning"
-                      showIcon
-                      message={t("gameProject.workspaceMissingProjectRoot", { defaultValue: "请设置 Project Root" })}
-                    />
-                  ) : null}
-                </div>
-                <div className={styles.workspaceSwitcherPanel}>
-                  <Text strong>{t("gameProject.workspaceSwitchPanelTitle", { defaultValue: "切换工作区" })}</Text>
-                  <div className={styles.projectSetupHint}>
-                    {t("gameProject.workspaceSwitchPrimaryHint", {
-                      defaultValue: "打开/切换工作区是主流程；目录不存在时请使用新建工作区。",
-                    })}
-                  </div>
-                  <Input
-                    value={workspaceRootInput}
-                    onChange={(event) => setWorkspaceRootInput(event.target.value)}
-                    placeholder={t("gameProject.projectSetupWorkspaceRootPlaceholder", { defaultValue: "/Users/Admin/LTClawWorkspace" })}
-                  />
-                  <Space wrap>
-                    <Button size="small" type="primary" onClick={() => void handleSaveWorkspaceRoot(false)} loading={savingWorkspaceRoot}>
-                      {t("gameProject.projectSetupOpenWorkspaceRoot", { defaultValue: "打开/切换工作区" })}
-                    </Button>
-                    <Button size="small" onClick={() => void handleSaveWorkspaceRoot(true)} loading={savingWorkspaceRoot}>
-                      {t("gameProject.projectSetupCreateWorkspaceRoot", { defaultValue: "新建工作区" })}
-                    </Button>
-                    <Button size="small" icon={<CopyOutlined />} onClick={() => copyText(workspaceRootStatus?.active_workspace_root || setupStatus?.active_workspace_root || workspaceRootInput || "") }>
-                      {t("gameProject.projectSetupCopyWorkspaceRoot", { defaultValue: "复制当前工作区路径" })}
-                    </Button>
-                    <Button size="small" disabled title={t("gameProject.projectSetupOpenWorkspaceFolderUnsupported", { defaultValue: "当前客户端暂不支持打开文件夹" })}>
-                      {t("gameProject.projectSetupOpenWorkspaceFolder", { defaultValue: "打开工作区文件夹" })}
-                    </Button>
-                  </Space>
-                  <div className={styles.workspaceSwitcherUnsupportedHint}>
-                    {t("gameProject.projectSetupOpenWorkspaceFolderUnsupported", { defaultValue: "当前客户端暂不支持打开文件夹" })}
-                  </div>
-                </div>
               </div>
             </div>
 

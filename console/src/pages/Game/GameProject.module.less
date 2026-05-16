@@ -4,6 +4,111 @@
   height: 100%;
   padding: 0;
 
+  .topBars {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 1120px;
+    margin: 0 auto 16px;
+    padding: 16px 0 0;
+  }
+
+  .topBarCard {
+    border-radius: 14px;
+
+    :global(.ant-card-body) {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 18px 20px;
+    }
+  }
+
+  .topBarHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .topBarTitleGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .topBarEyebrow {
+    color: var(--ant-color-text-secondary);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .topBarTitle {
+    display: block;
+    font-size: 20px;
+  }
+
+  .topBarHint,
+  .refreshingHint,
+  .workspaceModalHint {
+    color: var(--ant-color-text-secondary);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .topBarAlert {
+    margin: 0;
+  }
+
+  .topBarStatsGrid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .topBarStatCard {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding: 12px 14px;
+    border: 1px solid var(--ant-color-border-secondary);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--ant-color-fill-quaternary) 70%, var(--ant-color-bg-container));
+
+    span {
+      color: var(--ant-color-text-secondary);
+      font-size: 12px;
+      line-height: 1.5;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    strong {
+      color: var(--ant-color-text);
+      font-size: 14px;
+      line-height: 1.6;
+      word-break: break-word;
+    }
+  }
+
+  .topBarMeta {
+    :global(.ant-descriptions-item-label) {
+      color: var(--ant-color-text-secondary);
+    }
+
+    :global(.ant-descriptions-item-content) {
+      word-break: break-word;
+    }
+  }
+
+  .workspaceModalContent {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
   .centerState {
     display: flex;
     flex-direction: column;
@@ -210,10 +315,15 @@
         }
 
         @media (max-width: 900px) {
+          .topBarHeader,
           .workspaceSwitcherGrid,
           .workspaceEntryGrid,
           .projectSetupListGroup,
           .projectSetupSummaryGrid {
+            grid-template-columns: 1fr;
+          }
+
+          .topBarStatsGrid {
             grid-template-columns: 1fr;
           }
         }
