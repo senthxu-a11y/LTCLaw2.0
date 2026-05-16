@@ -28,7 +28,6 @@ export async function registerHostModulesDynamic(): Promise<void> {
       "../pages/*/*/index.ts",
       "../pages/*/*/index.tsx",
       "!../pages/Chat/**",
-      "../pages/Game/GameProject.tsx",
       "../pages/Game/SvnSync.tsx",
       "../pages/Game/IndexMap.tsx",
       "../pages/Game/DocLibrary.tsx",

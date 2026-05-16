@@ -45,7 +45,6 @@ const PAGE_MODULES = import.meta.glob<ComponentType<unknown>>(
     "../pages/*/*/index.ts",
     "../pages/*/*/index.tsx",
     "!../pages/Chat/**",
-    "../pages/Game/GameProject.tsx",
     "../pages/Game/SvnSync.tsx",
     "../pages/Game/IndexMap.tsx",
     "../pages/Game/DocLibrary.tsx",

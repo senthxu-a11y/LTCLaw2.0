@@ -362,3 +362,44 @@
 - 结论:
   - 这次问题的根因不是单纯“源码里有文案”，而是入口不够顶层、冷启动状态不常驻、且必须用真实浏览器验证。
   - 当前仍不建议替换 main；剩余阻塞项依然是用户明确不执行的写链路人工验收，而不是本轮 UI 可见性问题。
+
+## 25. Frontend Route Hygiene
+- 执行日期: 2026-05-17
+- 本次范围:
+  - 清理 `/game/project` 的重复页面实现歧义
+  - 断开 stale `GameProject` 运行时页面入口
+  - 保持 `/game/workbench` 为 redirect-only
+  - 以真实浏览器验证 `/game/project`、`/game/workbench`、`/numeric-workbench`、`/game/map` 和 Sidebar 命中
+- 关键代码收口:
+  - 新增 canonical Project UI source: `console/src/pages/Game/ProjectPage.tsx`
+  - `console/src/pages/Game/Project/index.tsx` 保留为唯一真实 Project route entry，并导入 `../ProjectPage`
+  - `console/src/pages/Game/GameProject.tsx` 收敛为兼容 re-export：`export { default } from "./Project";`
+  - `console/src/pages/Game/index.ts` 的 `GameProject` export 指向 `./Project`
+  - `console/src/plugins/dynamicModuleRegistry.ts` 与 `console/src/utils/lazyWithRetry.ts` 不再把 `GameProject.tsx` 当作独立 patchable page entry
+  - 新增源码级 route manifest test: `console/src/pages/Game/routeManifest.test.ts`
+- route manifest:
+  - `/game/project` -> `console/src/pages/Game/Project/index.tsx` -> `../ProjectPage`
+  - `/game/knowledge` -> `console/src/pages/Game/Knowledge/index.tsx`
+  - `/game/map` -> `console/src/pages/Game/MapEditor/index.tsx`
+  - `/numeric-workbench` -> `console/src/pages/Game/NumericWorkbench.tsx`
+  - `/game/workbench` -> redirect to `/numeric-workbench`
+  - Sidebar `项目配置` -> `/game/project`
+- 真实浏览器验证:
+  - 前端: `http://127.0.0.1:5175`
+  - 后端: `http://127.0.0.1:18082`
+  - 注入 `Frontend Build ID = foundation-route-hygiene-ad3e16d`
+  - 注入 `Frontend Git Ref = foundation/workspace-agent-storage-from-m1@ad3e16d`
+  - `/game/project` 页面可见 `当前工作区`、`切换工作区`、`冷启动状态`、`Frontend Git Ref`、`Backend Git Ref`
+  - 点击 `切换工作区` 后可见 `打开 / 切换工作区` Modal
+  - `/game/workbench` 最终 URL 为 `/numeric-workbench`
+  - `/numeric-workbench` 非空白，显示 `数值工作台`
+  - `/game/map` 非空白，显示 `地图编辑器 / Map Editor`
+  - Sidebar 点击 `项目配置` 后回到同一个 `/game/project` 页面，并继续显示当前 foundation git ref
+- 自动化验证:
+  - `pnpm exec tsc --noEmit`: pass
+  - `node --test src/pages/Game/routeManifest.test.ts src/pages/Game/projectSetupSurface.test.ts src/pages/Game/components/projectSetupHelpers.test.ts`: pass
+  - `PYTHONPATH=$PWD/src /Users/Admin/LTCLaw2.0/.venv/bin/python scripts/run_map_cold_start_smoke.py --project examples/minimal_project --rule-only`: pass
+  - `pnpm exec eslint --quiet src/pages/Game/**/*.tsx src/layouts/**/*.tsx src/api/modules/game.ts src/api/types/game.ts src/stores/projectSetupStore.ts`: fail，仅命中未触及的既有问题 `console/src/pages/Game/IndexMap.tsx` 与 `console/src/pages/Game/SvnSync.tsx`
+- 剩余风险:
+  - active route 视角下，本轮没有再发现可命中的错误 Project / Workbench 界面
+  - 但 route hygiene 结果不等于可以替换 main；旧的 rollout 阻塞项和未触及的既有 eslint 问题仍在

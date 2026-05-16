@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const consoleRoot = resolve(currentDir, "..", "..");
 
-const pageSource = readFileSync(resolve(currentDir, "GameProject.tsx"), "utf-8");
+const pageSource = readFileSync(resolve(currentDir, "ProjectPage.tsx"), "utf-8");
 const apiSource = readFileSync(resolve(consoleRoot, "api", "modules", "game.ts"), "utf-8");
 
 describe("project setup UI surface", () => {

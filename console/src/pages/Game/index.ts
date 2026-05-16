@@ -1,4 +1,4 @@
-export { default as GameProject } from './GameProject';
+export { default as GameProject } from './Project';
 export { default as ProjectPage } from './Project';
 export { default as KnowledgePage } from './Knowledge';
 export { default as MapEditorPage } from './MapEditor';

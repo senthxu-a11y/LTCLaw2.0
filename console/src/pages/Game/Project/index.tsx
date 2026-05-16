@@ -1,5 +1,5 @@
-import GameProject from "../GameProject";
+import CanonicalProjectPage from "../ProjectPage";
 
 export default function ProjectPage() {
-  return <GameProject />;
+  return <CanonicalProjectPage />;
 }
