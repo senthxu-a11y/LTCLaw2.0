@@ -205,3 +205,29 @@
 - 先按 manual smoke 模板执行人工验收，确认 Workspace 切换 / Agent 切换 / NumericWorkbench / Release 读写权限。
 - 在不扩新 source type 的前提下，再决定是否补 docs/scripts 的正式 raw/canonical rebuild。
 - 在人工 smoke 和必要 E2E 补齐前，暂不建议替换 main。
+
+## 19. Manual Smoke Result
+- 执行日期: 2026-05-16
+- 当前 commit: 34f2ecc53ff7833323e3f2b3426d79609c06d61c
+- 前端地址: http://127.0.0.1:5175
+- 后端地址: http://127.0.0.1:18082
+- Workspace Root: /Users/Admin/LTClawSmokeWorkspace
+- Project Root: /Users/Admin/LTCLaw2.0-foundation/examples/minimal_project
+- 使用的 agent:
+  - default
+  - LTCLAW-GY.X_QA_Agent_0.2
+- 23 项汇总:
+  - passed: 8
+  - failed: 7
+  - blocked: 8
+- 关键结论:
+  - Workspace Root / Project Root / Source Discovery 读链路通过。
+  - /game/workbench -> /numeric-workbench redirect 通过。
+  - viewer 写入口未完全前置 disabled；cold-start 和本地索引重建在请求期才返回 403。
+  - agent 切换到 QA 后 project_root / project_bundle_root 丢失，导致 map / workbench / project 数据链路断裂。
+  - 当前没有 maintainer agent，也没有可见的 role / capability 配置入口，因此 Save Formal Map / Build Release / Publish Current 无法完成人工验证。
+- 是否建议替换 main: 不建议。
+- 阻塞替换 main 的主要问题:
+  - viewer 权限 gating 不完整，写入口仍可点击后 403
+  - agent 切换破坏 project-scoped 数据保持
+  - maintainer 写链路没有可执行的产品化入口，无法完成地图/发布链路验收
