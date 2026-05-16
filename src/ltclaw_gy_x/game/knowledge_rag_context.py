@@ -460,10 +460,12 @@ def _build_record_text(source_type: str, record: dict[str, Any]) -> str:
     if source_type == 'doc_knowledge':
         related_tables = ', '.join(str(item) for item in list(record.get('related_tables') or [])[:8] if item)
         tags = ', '.join(str(item) for item in list(record.get('tags') or [])[:8] if item)
+        chunks = ' '.join(str(item) for item in list(record.get('chunks') or [])[:4] if item)
         parts = (
             f"Document {record.get('title') or ''}.",
             f"Category {record.get('category') or ''}." if record.get('category') else '',
             f"Summary {record.get('summary') or ''}." if record.get('summary') else '',
+            f"Chunks {chunks}." if chunks else '',
             f"Related tables {related_tables}." if related_tables else '',
             f"Tags {tags}." if tags else '',
         )

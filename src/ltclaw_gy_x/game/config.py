@@ -16,6 +16,8 @@ from .paths import (
     get_legacy_project_config_path,
     get_legacy_user_config_path,
     get_project_config_path,
+    get_project_docs_source_path,
+    get_project_scripts_source_path,
     get_project_tables_source_path,
     get_user_config_path,
 )
@@ -44,6 +46,10 @@ SUPPORTED_MODEL_TYPES = (
 DEFAULT_TABLES_INCLUDE_PATTERNS = ["**/*.csv", "**/*.xlsx", "**/*.txt"]
 DEFAULT_TABLES_EXCLUDE_PATTERNS = ["**/~$*", "**/.backup/**"]
 DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES = ["ID", "Id", "id"]
+DEFAULT_DOCS_INCLUDE_PATTERNS = ["**/*.md"]
+DEFAULT_DOCS_EXCLUDE_PATTERNS = ["**/~$*", "**/.backup/**"]
+DEFAULT_SCRIPTS_INCLUDE_PATTERNS = ["**/*.cs", "**/*.lua", "**/*.py"]
+DEFAULT_SCRIPTS_EXCLUDE_PATTERNS = ["**/~$*", "**/.backup/**", "**/__pycache__/**"]
 
 
 class ProjectMeta(BaseModel):
@@ -215,6 +221,22 @@ class ProjectTablesSourceConfig(BaseModel):
     )
 
 
+class ProjectDocsSourceConfig(BaseModel):
+    """Project-local docs source config persisted under the project bundle."""
+
+    roots: list[str] = Field(default_factory=list)
+    include: list[str] = Field(default_factory=lambda: list(DEFAULT_DOCS_INCLUDE_PATTERNS))
+    exclude: list[str] = Field(default_factory=lambda: list(DEFAULT_DOCS_EXCLUDE_PATTERNS))
+
+
+class ProjectScriptsSourceConfig(BaseModel):
+    """Project-local scripts source config persisted under the project bundle."""
+
+    roots: list[str] = Field(default_factory=list)
+    include: list[str] = Field(default_factory=lambda: list(DEFAULT_SCRIPTS_INCLUDE_PATTERNS))
+    exclude: list[str] = Field(default_factory=lambda: list(DEFAULT_SCRIPTS_EXCLUDE_PATTERNS))
+
+
 class UserGameConfig(BaseModel):
     """??????"""
     my_role: Literal["maintainer", "planner", "consumer"] = Field(default="consumer", description="Legacy local role shortcut")
@@ -267,6 +289,32 @@ def load_project_tables_source_config(project_root: Path) -> ProjectTablesSource
         return None
 
 
+def load_project_docs_source_config(project_root: Path) -> ProjectDocsSourceConfig | None:
+    """Load project-local docs source config from the project bundle."""
+    config_path = get_project_docs_source_path(project_root)
+    if not config_path.exists():
+        return None
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        return ProjectDocsSourceConfig.model_validate(data)
+    except Exception:
+        return None
+
+
+def load_project_scripts_source_config(project_root: Path) -> ProjectScriptsSourceConfig | None:
+    """Load project-local scripts source config from the project bundle."""
+    config_path = get_project_scripts_source_path(project_root)
+    if not config_path.exists():
+        return None
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        return ProjectScriptsSourceConfig.model_validate(data)
+    except Exception:
+        return None
+
+
 def save_project_config(svn_root: Path, cfg: ProjectConfig) -> None:
     """???????????"""
     config_path = get_project_config_path(svn_root)
@@ -292,6 +340,50 @@ def save_project_config(svn_root: Path, cfg: ProjectConfig) -> None:
 def save_project_tables_source_config(project_root: Path, cfg: ProjectTablesSourceConfig) -> None:
     """Persist project-local tables source config under the project bundle."""
     config_path = get_project_tables_source_path(project_root)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=config_path.parent,
+        delete=False,
+        suffix=".tmp"
+    ) as tmp:
+        yaml.dump(
+            cfg.model_dump(exclude_defaults=False),
+            tmp,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=True
+        )
+        tmp_path = tmp.name
+    Path(tmp_path).replace(config_path)
+
+
+def save_project_docs_source_config(project_root: Path, cfg: ProjectDocsSourceConfig) -> None:
+    """Persist project-local docs source config under the project bundle."""
+    config_path = get_project_docs_source_path(project_root)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=config_path.parent,
+        delete=False,
+        suffix=".tmp"
+    ) as tmp:
+        yaml.dump(
+            cfg.model_dump(exclude_defaults=False),
+            tmp,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=True
+        )
+        tmp_path = tmp.name
+    Path(tmp_path).replace(config_path)
+
+
+def save_project_scripts_source_config(project_root: Path, cfg: ProjectScriptsSourceConfig) -> None:
+    """Persist project-local scripts source config under the project bundle."""
+    config_path = get_project_scripts_source_path(project_root)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         mode="w",

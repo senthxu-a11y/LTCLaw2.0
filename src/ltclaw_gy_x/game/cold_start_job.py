@@ -14,7 +14,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from .canonical_facts_committer import CanonicalFactsCommitter
-from .config import load_project_tables_source_config
+from .config import load_project_docs_source_config, load_project_scripts_source_config, load_project_tables_source_config
+from .doc_source_discovery import discover_document_sources
 from .knowledge_formal_map_store import load_formal_knowledge_map
 from .knowledge_source_candidate_store import save_latest_source_candidate
 from .knowledge_map_candidate import (
@@ -22,16 +23,23 @@ from .knowledge_map_candidate import (
     build_map_diff_review,
     resolve_map_diff_base,
 )
+from .markdown_doc_rebuild import rebuild_markdown_doc_indexes
 from .models import KnowledgeMap
 from .paths import (
+    get_project_canonical_docs_dir,
+    get_project_canonical_scripts_dir,
     get_project_canonical_tables_dir,
+    get_project_docs_source_path,
     get_project_key,
     get_project_raw_table_indexes_path,
     get_project_runtime_build_job_path,
     get_project_runtime_build_jobs_dir,
+    get_project_scripts_source_path,
     get_project_tables_source_path,
 )
 from .raw_index_rebuild import rebuild_raw_table_indexes
+from .script_evidence_rebuild import rebuild_script_evidence
+from .script_source_discovery import discover_script_sources
 from .source_discovery import discover_table_sources
 
 
@@ -45,9 +53,17 @@ _JOB_LOCK = threading.Lock()
 
 class ColdStartJobCounts(BaseModel):
     discovered_table_count: int = 0
+    discovered_doc_count: int = 0
+    discovered_script_count: int = 0
     raw_table_index_count: int = 0
+    raw_doc_index_count: int = 0
+    raw_script_index_count: int = 0
     canonical_table_count: int = 0
+    canonical_doc_count: int = 0
+    canonical_script_count: int = 0
     candidate_table_count: int = 0
+    candidate_doc_count: int = 0
+    candidate_script_count: int = 0
 
 
 class ColdStartJobError(BaseModel):
@@ -115,7 +131,12 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
 def _serialize_candidate_refs(candidate_map: KnowledgeMap | None) -> list[str]:
     if candidate_map is None:
         return []
-    return sorted(f"table:{table.table_id}" for table in candidate_map.tables)
+    refs = [
+        *(f'table:{table.table_id}' for table in candidate_map.tables),
+        *(f'doc:{doc.doc_id}' for doc in candidate_map.docs),
+        *(f'script:{script.script_id}' for script in candidate_map.scripts),
+    ]
+    return sorted(refs)
 
 
 def load_cold_start_job(project_root: Path, job_id: str) -> ColdStartJobState | None:
@@ -315,6 +336,8 @@ def _run_cold_start_job(project_root: Path, job_id: str, cancel_requested: threa
             return
 
         tables_config = load_project_tables_source_config(project_root)
+        docs_config = load_project_docs_source_config(project_root)
+        scripts_config = load_project_scripts_source_config(project_root)
         if tables_config is None:
             state.status = "failed"
             state.stage = "discovering_sources"
@@ -366,6 +389,48 @@ def _run_cold_start_job(project_root: Path, job_id: str, cancel_requested: threa
             state.finished_at = _now()
             save_cold_start_job(project_root, state)
             return
+
+        if docs_config is not None and docs_config.roots:
+            doc_discovery = discover_document_sources(project_root, docs_config)
+            available_docs = [item for item in doc_discovery['doc_files'] if item.get('status') == 'available']
+            state.counts.discovered_doc_count = len(available_docs)
+            state.partial_outputs['docs_config_path'] = str(get_project_docs_source_path(project_root))
+            state.partial_outputs['doc_discovery_summary'] = doc_discovery['summary']
+            for item in doc_discovery.get('excluded_files', []):
+                _append_warning(state, f"excluded:{item.get('source_path')}")
+            for item in doc_discovery.get('errors', []):
+                _append_error(
+                    state,
+                    stage='discovering_docs',
+                    error=str(item.get('reason') or 'doc_source_discovery_error'),
+                    source_path=item.get('source_path'),
+                )
+            if not available_docs:
+                state.status = 'failed'
+                state.stage = 'discovering_docs'
+                state.message = 'No available document sources were discovered.'
+                state.next_action = str(doc_discovery.get('next_action') or 'configure_docs_source')
+                state.finished_at = _now()
+                save_cold_start_job(project_root, state)
+                return
+        if scripts_config is not None and scripts_config.roots:
+            script_discovery = discover_script_sources(project_root, scripts_config)
+            available_scripts = [item for item in script_discovery['script_files'] if item.get('status') == 'available']
+            state.counts.discovered_script_count = len(available_scripts)
+            state.partial_outputs['scripts_config_path'] = str(get_project_scripts_source_path(project_root))
+            state.partial_outputs['script_discovery_summary'] = script_discovery['summary']
+            for item in script_discovery.get('excluded_files', []):
+                _append_warning(state, f"excluded:{item.get('source_path')}")
+            for item in script_discovery.get('errors', []):
+                _append_error(state, stage='discovering_scripts', error=str(item.get('reason') or 'script_source_discovery_error'), source_path=item.get('source_path'))
+            if not available_scripts:
+                state.status = 'failed'
+                state.stage = 'discovering_scripts'
+                state.message = 'No available script sources were discovered.'
+                state.next_action = str(script_discovery.get('next_action') or 'configure_scripts_source')
+                state.finished_at = _now()
+                save_cold_start_job(project_root, state)
+                return
         save_cold_start_job(project_root, state)
 
         current_stage = "building_raw_index"
@@ -400,6 +465,64 @@ def _run_cold_start_job(project_root: Path, job_id: str, cancel_requested: threa
             save_cold_start_job(project_root, state)
             return
         save_cold_start_job(project_root, state)
+
+        if docs_config is not None and docs_config.roots:
+            current_stage = 'building_doc_indexes'
+            state = _update_job_state(
+                project_root,
+                job_id,
+                cancel_requested,
+                started_at,
+                stage=current_stage,
+                progress=50,
+                message='Building markdown document indexes.',
+                next_action='run_doc_index_rebuild',
+            )
+            doc_result = asyncio.run(rebuild_markdown_doc_indexes(project_root, docs_config))
+            state = _load_state_or_raise(project_root, job_id)
+            _ensure_not_cancelled(state, cancel_requested)
+            _ensure_not_timed_out(state, started_at)
+            state.counts.raw_doc_index_count = int(doc_result.get('raw_doc_index_count') or 0)
+            state.counts.canonical_doc_count = int(doc_result.get('canonical_doc_count') or 0)
+            state.partial_outputs['canonical_docs_dir'] = str(get_project_canonical_docs_dir(project_root))
+            for item in doc_result.get('errors', []):
+                error_text = str(item.get('error') or 'doc_index_error')
+                if state.counts.canonical_doc_count > 0:
+                    _append_warning(state, error_text)
+                else:
+                    _append_error(state, stage=current_stage, error=error_text, source_path=item.get('source_path'))
+            if state.counts.canonical_doc_count <= 0:
+                state.status = 'failed'
+                state.message = 'Markdown document rebuild failed.'
+                state.next_action = str(doc_result.get('next_action') or 'run_doc_index_rebuild')
+                state.finished_at = _now()
+                save_cold_start_job(project_root, state)
+                return
+            save_cold_start_job(project_root, state)
+        if scripts_config is not None and scripts_config.roots:
+            current_stage = 'building_script_indexes'
+            state = _update_job_state(project_root, job_id, cancel_requested, started_at, stage=current_stage, progress=55, message='Building script evidence indexes.', next_action='run_script_index_rebuild')
+            script_result = asyncio.run(rebuild_script_evidence(project_root, scripts_config))
+            state = _load_state_or_raise(project_root, job_id)
+            _ensure_not_cancelled(state, cancel_requested)
+            _ensure_not_timed_out(state, started_at)
+            state.counts.raw_script_index_count = int(script_result.get('raw_script_index_count') or 0)
+            state.counts.canonical_script_count = int(script_result.get('canonical_script_count') or 0)
+            state.partial_outputs['canonical_scripts_dir'] = str(get_project_canonical_scripts_dir(project_root))
+            for item in script_result.get('errors', []):
+                error_text = str(item.get('error') or 'script_index_error')
+                if state.counts.canonical_script_count > 0:
+                    _append_warning(state, error_text)
+                else:
+                    _append_error(state, stage=current_stage, error=error_text, source_path=item.get('source_path'))
+            if state.counts.canonical_script_count <= 0:
+                state.status = 'failed'
+                state.message = 'Script evidence rebuild failed.'
+                state.next_action = str(script_result.get('next_action') or 'run_script_index_rebuild')
+                state.finished_at = _now()
+                save_cold_start_job(project_root, state)
+                return
+            save_cold_start_job(project_root, state)
 
         current_stage = "building_canonical_facts"
         state = _update_job_state(
@@ -456,6 +579,8 @@ def _run_cold_start_job(project_root: Path, job_id: str, cancel_requested: threa
         _ensure_not_timed_out(state, started_at)
         state.warnings.extend([item for item in candidate_result.warnings if item not in state.warnings])
         state.counts.candidate_table_count = len(candidate_result.map.tables) if candidate_result.map is not None else 0
+        state.counts.candidate_doc_count = len(candidate_result.map.docs) if candidate_result.map is not None else 0
+        state.counts.candidate_script_count = len(candidate_result.map.scripts) if candidate_result.map is not None else 0
         state.candidate_refs = _serialize_candidate_refs(candidate_result.map)
         state.partial_outputs["candidate_mode"] = candidate_result.mode
         if candidate_result.map is None or candidate_result.mode == "no_canonical_facts":

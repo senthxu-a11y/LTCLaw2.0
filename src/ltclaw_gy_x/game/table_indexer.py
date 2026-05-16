@@ -174,9 +174,11 @@ class TableIndexer:
 
     def _read_excel_file(self, file_path: Path) -> tuple:
         wb = openpyxl.load_workbook(file_path, data_only=True)
-        ws = wb.active
-        data = [list(row) for row in ws.iter_rows(values_only=True)]
-        return data, len(data)
+        for ws in wb.worksheets:
+            data = [list(row) for row in ws.iter_rows(values_only=True)]
+            if any(cell is not None and str(cell).strip() for row in data for cell in row):
+                return data, len(data)
+        return [], 0
 
     def _read_csv_file(self, file_path: Path) -> tuple:
         encodings = ["utf-8-sig", "utf-8", "gbk", "gb2312"]
@@ -240,12 +242,13 @@ class TableIndexer:
         return ranges
 
     def _read_txt_file(self, source: Path) -> tuple[list[list[Any]], dict[str, str]]:
-        """Read a TAB-separated game-config txt file with ┇-encoded headers.
+        """Read a TAB-separated txt table.
 
-        Row 1: ``<FieldName>┇Type=...;...;Doc=<desc>`` (TAB separated).
-        Row 2: human-readable comment/label row.
-        Row 3+: data rows.
+        Supported forms:
+        - First non-comment row is a plain TAB header row.
+        - Legacy ┇-encoded header cells are still normalized when present.
 
+        Lines starting with # or // are ignored. Blank lines are ignored.
         Returns (rows_with_normalized_header, field_doc_map).
         """
         raw_bytes = source.read_bytes()
@@ -260,20 +263,27 @@ class TableIndexer:
                 continue
         if text is None:
             raise ValueError(f"unable to decode txt file: {source}")
-        sep = "\r\n" if "\r\n" in text else "\n"
-        lines = text.split(sep)
-        if lines and lines[-1] == "":
-            lines = lines[:-1]
-        rows: list[list[Any]] = [line.split("\t") for line in lines]
+        lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        filtered_lines: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("#") or stripped.startswith("//"):
+                continue
+            filtered_lines.append(line)
+        rows: list[list[Any]] = [line.split("\t") for line in filtered_lines]
         docs: dict[str, str] = {}
         if rows:
             header_cells = rows[0]
             norm: list[str] = []
+            uses_encoded_header = False
             for i, cell in enumerate(header_cells):
                 cell_s = (cell or "").strip()
                 name = ""
                 doc = ""
                 if "┇" in cell_s:
+                    uses_encoded_header = True
                     name, _, meta = cell_s.partition("┇")
                     name = name.strip()
                     for seg in meta.split(";"):
@@ -289,6 +299,10 @@ class TableIndexer:
                 if doc:
                     docs[name] = doc
             rows[0] = norm
+            if uses_encoded_header and len(rows) > 1:
+                label_row = rows[1]
+                if len(label_row) == len(norm) and not any("┇" in str(cell or "") for cell in label_row):
+                    rows = [rows[0], *rows[2:]]
         return rows, docs
 
     def _determine_system_from_path(self, source_path: Path) -> Optional[str]:

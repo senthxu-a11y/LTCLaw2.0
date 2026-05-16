@@ -31,7 +31,12 @@ def _safe_job_id(job_id: str) -> str:
 def _candidate_refs(candidate: KnowledgeMapCandidateResult) -> list[str]:
     if candidate.map is None:
         return []
-    return sorted(f'table:{table.table_id}' for table in candidate.map.tables)
+    refs = [
+        *(f'table:{table.table_id}' for table in candidate.map.tables),
+        *(f'doc:{doc.doc_id}' for doc in candidate.map.docs),
+        *(f'script:{script.script_id}' for script in candidate.map.scripts),
+    ]
+    return sorted(refs)
 
 
 def save_latest_source_candidate(
@@ -50,6 +55,8 @@ def save_latest_source_candidate(
         'created_at': now_iso,
         'candidate': candidate.model_dump(mode='json'),
         'candidate_table_count': len(candidate.map.tables),
+        'candidate_doc_count': len(candidate.map.docs),
+        'candidate_script_count': len(candidate.map.scripts),
         'candidate_refs': _candidate_refs(candidate),
     }
     content = json.dumps(payload, indent=2, ensure_ascii=False)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from pathlib import Path
 from typing import Iterable
 
 from .models import (
@@ -167,4 +168,8 @@ def _stable_doc_id(source_path: str) -> str:
 
 
 def _stable_script_id(source_path: str) -> str:
-    return 'script-' + hashlib.sha1(source_path.encode('utf-8')).hexdigest()[:12]
+    stem = Path(str(source_path or '')).stem.strip()
+    normalized = _NON_ALNUM_RE.sub('_', stem).strip('_')
+    if normalized:
+        return normalized
+    return 'script_' + hashlib.sha1(source_path.encode('utf-8')).hexdigest()[:12]

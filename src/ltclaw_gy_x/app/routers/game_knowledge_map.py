@@ -82,6 +82,8 @@ class CandidateDiagnostics(BaseModel):
 class SourceCandidateResponse(KnowledgeMapCandidateResult):
     diagnostics: CandidateDiagnostics | None = None
     candidate_table_count: int | None = None
+    candidate_doc_count: int | None = None
+    candidate_script_count: int | None = None
     candidate_refs: list[str] = Field(default_factory=list)
 
 
@@ -279,7 +281,12 @@ def _build_readiness_payload(project_root: Path | None) -> BuildReadinessRespons
 def _candidate_refs(candidate_map: KnowledgeMap | None) -> list[str]:
     if candidate_map is None:
         return []
-    return sorted(f'table:{table.table_id}' for table in candidate_map.tables)
+    refs = [
+        *(f'table:{table.table_id}' for table in candidate_map.tables),
+        *(f'doc:{doc.doc_id}' for doc in candidate_map.docs),
+        *(f'script:{script.script_id}' for script in candidate_map.scripts),
+    ]
+    return sorted(refs)
 
 
 def _serialize_source_candidate_response(
@@ -291,6 +298,8 @@ def _serialize_source_candidate_response(
         **candidate.model_dump(mode='json'),
         diagnostics=diagnostics,
         candidate_table_count=(len(candidate.map.tables) if candidate.map is not None else None),
+        candidate_doc_count=(len(candidate.map.docs) if candidate.map is not None else None),
+        candidate_script_count=(len(candidate.map.scripts) if candidate.map is not None else None),
         candidate_refs=_candidate_refs(candidate.map),
     )
 

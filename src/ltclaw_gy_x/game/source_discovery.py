@@ -12,7 +12,7 @@ AVAILABLE_TABLE_FORMATS: dict[str, str] = {
     ".txt": "txt",
 }
 
-COLD_START_SUPPORTED_FORMATS: frozenset[str] = frozenset({"csv"})
+COLD_START_SUPPORTED_FORMATS: frozenset[str] = frozenset({"csv", "xlsx", "txt"})
 
 UNSUPPORTED_TABLE_FORMATS: dict[str, str] = {
     ".xls": "xls",
@@ -39,7 +39,11 @@ def _classify_format(path: Path) -> tuple[str | None, str | None]:
 
 def _entry(source_path: str, fmt: str, status: str, reason: str) -> dict:
     cold_start_supported = fmt in COLD_START_SUPPORTED_FORMATS and status == "available"
-    cold_start_reason = "rule_only_supported_csv" if cold_start_supported else f"rule_only_cold_start_not_supported_for_{fmt}"
+    cold_start_reason = (
+        f"rule_only_supported_{fmt}"
+        if cold_start_supported
+        else f"rule_only_cold_start_not_supported_for_{fmt}"
+    )
     return {
         "source_path": _normalize_path_for_match(source_path),
         "format": fmt,

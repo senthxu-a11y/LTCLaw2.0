@@ -20,6 +20,9 @@ from .paths import (
 )
 
 
+RULE_ONLY_SUPPORTED_TABLE_FORMATS: frozenset[str] = frozenset({'csv', 'xlsx', 'txt'})
+
+
 def _write_text_atomic(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.with_suffix(path.suffix + '.tmp')
@@ -45,7 +48,7 @@ def _build_rule_only_project_config(project_root: Path, tables_config: ProjectTa
         project=ProjectMeta(name=project_root.name, engine='rule_only', language='zh'),
         svn=SvnConfig(root=str(project_root), poll_interval_seconds=300, jitter_seconds=30),
         paths=[],
-        filters=FilterConfig(include_ext=['.csv'], exclude_glob=list(tables_config.exclude)),
+        filters=FilterConfig(include_ext=['.csv', '.xlsx', '.txt'], exclude_glob=list(tables_config.exclude)),
         table_convention=TableConvention(
             header_row=tables_config.header_row,
             primary_key_field=primary_key,
@@ -62,10 +65,10 @@ def _error_entry(source_path: str | None, error: str) -> dict:
     return payload
 
 
-def _is_rule_only_available_csv(item: dict) -> bool:
+def _is_rule_only_available_table(item: dict) -> bool:
     return (
         item.get('status') == 'available'
-        and item.get('format') == 'csv'
+        and item.get('format') in RULE_ONLY_SUPPORTED_TABLE_FORMATS
         and item.get('cold_start_supported', True) is True
     )
 
@@ -73,16 +76,16 @@ def _is_rule_only_available_csv(item: dict) -> bool:
 def _recognized_but_not_supported_entries(discovery: dict) -> list[dict]:
     entries: list[dict] = []
     for item in discovery.get('table_files', []):
-        if _is_rule_only_available_csv(item):
+        if _is_rule_only_available_table(item):
             continue
         status = item.get('status')
         fmt = item.get('format')
         source_path = item.get('source_path')
-        if status in {'recognized', 'available'} and fmt != 'csv':
+        if status in {'recognized', 'available'} and fmt not in RULE_ONLY_SUPPORTED_TABLE_FORMATS:
             entries.append(
                 _error_entry(
                     source_path,
-                    item.get('cold_start_reason') or 'rule_only_cold_start_currently_supports_csv',
+                    item.get('cold_start_reason') or 'rule_only_cold_start_currently_supports_csv_xlsx_txt',
                 )
             )
     return entries
@@ -112,12 +115,12 @@ async def rebuild_raw_table_indexes(
             result['errors'] = [_error_entry(None, 'no_available_table_files')]
         return result
 
-    available_csv_items = [
+    available_table_items = [
         item
         for item in discovery['table_files']
-        if _is_rule_only_available_csv(item)
+        if _is_rule_only_available_table(item)
     ]
-    if not available_csv_items:
+    if not available_table_items:
         recognized_errors = _recognized_but_not_supported_entries(discovery)
         unsupported_errors = [
             _error_entry(item.get('source_path'), item.get('reason', 'unsupported_table_format'))
@@ -128,7 +131,7 @@ async def rebuild_raw_table_indexes(
             for item in discovery.get('errors', [])
         ]
         errors = [
-            _error_entry(None, 'no_csv_table_files_available_for_rule_only_cold_start'),
+            _error_entry(None, 'no_supported_table_files_available_for_rule_only_cold_start'),
             *discovery_errors,
             *recognized_errors,
             *unsupported_errors,
@@ -139,7 +142,7 @@ async def rebuild_raw_table_indexes(
                 'raw_table_index_count': 0,
                 'indexed_tables': [],
                 'errors': errors,
-                'next_action': 'configure_csv_tables_source',
+                'next_action': 'configure_tables_source',
                 'discovery_summary': discovery.get('summary', {}),
             }
         )
@@ -156,11 +159,11 @@ async def rebuild_raw_table_indexes(
     written_tables = []
     indexed_tables = []
     errors = []
-    for item in available_csv_items:
+    for item in available_table_items:
         source_path = item['source_path']
         fmt = item['format']
-        if fmt != 'csv':
-            errors.append(_error_entry(source_path, 'rule_only_raw_index_currently_supports_csv'))
+        if fmt not in RULE_ONLY_SUPPORTED_TABLE_FORMATS:
+            errors.append(_error_entry(source_path, 'rule_only_raw_index_currently_supports_csv_xlsx_txt'))
             continue
         source_file = project_root / source_path
         try:

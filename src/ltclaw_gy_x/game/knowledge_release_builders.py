@@ -49,8 +49,16 @@ def export_doc_knowledge_jsonl(
     knowledge_docs: Iterable[KnowledgeDocRef] = (),
 ) -> tuple[str, KnowledgeIndexArtifact]:
     records = [_doc_index_to_release_record(doc_index) for doc_index in doc_indexes]
+    seen_doc_sources = {
+        str(record.get("source_path") or "").strip()
+        for record in records
+        if str(record.get("source_path") or "").strip()
+    }
     for knowledge_doc in knowledge_docs:
         if knowledge_doc.status == "ignored":
+            continue
+        normalized_source_path = _normalize_local_project_relative_path(knowledge_doc.source_path)
+        if normalized_source_path in seen_doc_sources:
             continue
         records.append(_knowledge_doc_to_release_record(knowledge_doc))
     records.sort(key=lambda record: (str(record.get("source_path") or ""), str(record.get("title") or "")))
@@ -270,7 +278,8 @@ def _doc_index_to_release_record(doc_index: DocIndex) -> dict[str, Any]:
         "title": doc_index.title,
         "summary": doc_index.summary,
         "category": doc_index.doc_type,
-        "tags": [],
+        "tags": sorted(doc_index.tags),
+        "chunks": list(doc_index.chunks),
         "source_path": _normalize_local_project_relative_path(doc_index.source_path),
         "related_tables": sorted(doc_index.related_tables),
         "source_hash": doc_index.source_hash,
@@ -298,11 +307,17 @@ def _knowledge_doc_to_release_record(knowledge_doc: KnowledgeDocRef) -> dict[str
 
 def _code_file_index_to_release_record(code_index: CodeFileIndex) -> dict[str, Any]:
     summary = next((symbol.summary for symbol in code_index.symbols if symbol.summary), None)
+    suffix = Path(str(code_index.source_path or '')).suffix.lower()
+    language = {
+        '.cs': 'csharp',
+        '.lua': 'lua',
+        '.py': 'python',
+    }.get(suffix, 'script')
     record = {
         "schema_version": SCRIPT_EVIDENCE_RECORD_SCHEMA_VERSION,
         "source_path": _normalize_local_project_relative_path(code_index.source_path),
         "source_hash": code_index.source_hash,
-        "language": "csharp",
+        "language": language,
         "kind": "code_index",
         "symbols": [symbol.model_dump(mode="json") for symbol in code_index.symbols],
         "references": [reference.model_dump(mode="json") for reference in code_index.references],

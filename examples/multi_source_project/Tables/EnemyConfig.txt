@@ -1,0 +1,4 @@
+# Enemy config table
+ID	Name	HP	Attack
+2001	Slime	30	5
+2002	Goblin	50	8

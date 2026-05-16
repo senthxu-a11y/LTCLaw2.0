@@ -12,6 +12,7 @@
 
 快速入口：
 
+- M2 多源冷启动冻结结论看 `milestones/milestone-2-multi-source-cold-start-e2e-ready.md`。
 - 当前知识库与数值工作台架构主线看 `plans/knowledge-architecture-handover-2026-05-06.md`。
 - P1 本地优先范围决策看 `plans/knowledge-p1-local-first-scope-2026-05-06.md`。
 - P0-P3 精确施工清单看 `tasks/knowledge-p0-p3-implementation-checklist.md`。

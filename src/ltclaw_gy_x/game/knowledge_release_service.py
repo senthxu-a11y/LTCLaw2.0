@@ -21,6 +21,7 @@ from .knowledge_release_builders import (
 from .knowledge_release_store import CurrentKnowledgeReleaseNotSetError, create_release, get_current_release_map
 from .local_project_paths import normalize_local_project_relative_path
 from .models import (
+    CanonicalDocFacts,
     CodeFileIndex,
     DocIndex,
     KnowledgeDocRef,
@@ -36,7 +37,13 @@ from .models import (
     ReleaseMapSource,
     TableIndex,
 )
-from .paths import get_code_index_dir, get_project_raw_table_indexes_path, get_table_indexes_path
+from .paths import (
+    get_code_index_dir,
+    get_project_canonical_doc_facts_path,
+    get_project_raw_scripts_dir,
+    get_project_raw_table_indexes_path,
+    get_table_indexes_path,
+)
 
 
 class KnowledgeReleaseBuildServiceError(RuntimeError):
@@ -206,7 +213,7 @@ def build_knowledge_release_from_current_indexes(
     release_time = created_at or datetime.now(timezone.utc)
     table_indexes = _select_current_table_indexes(table_index_inventory, resolved_map.knowledge_map)
     code_indexes = _select_current_code_indexes(code_index_inventory, resolved_map.knowledge_map)
-    doc_indexes, knowledge_docs = _build_release_docs(resolved_map.knowledge_map, release_time)
+    doc_indexes, knowledge_docs = _build_release_docs(root, resolved_map.knowledge_map, release_time)
 
     return build_knowledge_release(
         root,
@@ -421,11 +428,24 @@ def _select_current_table_indexes(table_indexes: Iterable[TableIndex], knowledge
 
 def _load_current_code_indexes(workspace_dir: Path, project_root: Path) -> list[CodeFileIndex]:
     index_dir = get_code_index_dir(workspace_dir, project_root)
-    if not index_dir.exists():
-        return []
+    indexes: list[CodeFileIndex] = []
+    if index_dir.exists():
+        store = CodeIndexStore(index_dir)
+        indexes.extend(store.load_all())
+    if indexes:
+        return indexes
 
-    store = CodeIndexStore(index_dir)
-    return list(store.load_all())
+    raw_scripts_dir = get_project_raw_scripts_dir(project_root)
+    if not raw_scripts_dir.exists() or not raw_scripts_dir.is_dir():
+        return []
+    for candidate in sorted(raw_scripts_dir.glob('*.json')):
+        if candidate.name == 'script_indexes.json':
+            continue
+        try:
+            indexes.append(CodeFileIndex.model_validate_json(candidate.read_text(encoding='utf-8')))
+        except Exception:
+            continue
+    return indexes
 
 
 def _select_current_code_indexes(code_indexes: Iterable[CodeFileIndex], knowledge_map: KnowledgeMap) -> list[CodeFileIndex]:
@@ -460,7 +480,11 @@ def _stable_doc_id(source_path: str) -> str:
 
 
 def _stable_script_id(source_path: str) -> str:
-    return 'script-' + hashlib.sha1(source_path.encode('utf-8')).hexdigest()[:12]
+    stem = Path(str(source_path or '')).stem.strip()
+    normalized = re.sub(r'[^0-9A-Za-z_]+', '_', stem).strip('_')
+    if normalized:
+        return normalized
+    return 'script_' + hashlib.sha1(source_path.encode('utf-8')).hexdigest()[:12]
 
 
 def _script_system_id(code_index: CodeFileIndex, table_indexes: Iterable[TableIndex]) -> str | None:
@@ -529,7 +553,18 @@ def _build_bootstrap_systems(
     ]
 
 
+def _load_canonical_doc_facts(project_root: Path, doc_ref: KnowledgeDocRef) -> CanonicalDocFacts | None:
+    doc_path = get_project_canonical_doc_facts_path(project_root, doc_ref.doc_id)
+    if not doc_path.exists() or not doc_path.is_file():
+        return None
+    try:
+        return CanonicalDocFacts.model_validate_json(doc_path.read_text(encoding='utf-8'))
+    except Exception:
+        return None
+
+
 def _build_release_docs(
+    project_root: Path,
     knowledge_map: KnowledgeMap,
     indexed_at: datetime,
 ) -> tuple[list[DocIndex], list[KnowledgeDocRef]]:
@@ -539,7 +574,13 @@ def _build_release_docs(
 
     for doc_ref in knowledge_map.docs:
         knowledge_docs.append(doc_ref)
-        doc_title = str(doc_ref.title or Path(doc_ref.source_path).stem or doc_ref.doc_id)
+        canonical = _load_canonical_doc_facts(project_root, doc_ref)
+        doc_title = str((canonical.title if canonical is not None else doc_ref.title) or Path(doc_ref.source_path).stem or doc_ref.doc_id)
+        canonical_related_tables = {
+            ref.split(':', 1)[1]
+            for ref in list(getattr(canonical, 'related_refs', []) or [])
+            if str(ref).startswith('table:')
+        }
         doc_indexes.append(
             DocIndex(
                 source_path=doc_ref.source_path,
@@ -547,8 +588,10 @@ def _build_release_docs(
                 svn_revision=0,
                 doc_type=_infer_doc_type(doc_ref.source_path),
                 title=doc_title,
-                summary=doc_title,
-                related_tables=related_tables.get(doc_ref.doc_id, []),
+                summary=(canonical.summary if canonical is not None else '') or doc_title,
+                chunks=list(getattr(canonical, 'chunks', []) or []),
+                tags=list(getattr(canonical, 'semantic_tags', []) or []),
+                related_tables=sorted({*related_tables.get(doc_ref.doc_id, []), *canonical_related_tables}),
                 last_indexed_at=indexed_at,
             )
         )

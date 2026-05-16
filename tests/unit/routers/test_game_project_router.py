@@ -14,6 +14,10 @@ from ltclaw_gy_x.app.routers import game_knowledge_release as release_router_mod
 from ltclaw_gy_x.app.routers.game_project import router
 from ltclaw_gy_x.app.routers.game_knowledge_release import router as release_router
 from ltclaw_gy_x.game.config import (
+    DEFAULT_DOCS_EXCLUDE_PATTERNS,
+    DEFAULT_DOCS_INCLUDE_PATTERNS,
+    DEFAULT_SCRIPTS_EXCLUDE_PATTERNS,
+    DEFAULT_SCRIPTS_INCLUDE_PATTERNS,
     DEFAULT_TABLES_EXCLUDE_PATTERNS,
     DEFAULT_TABLES_INCLUDE_PATTERNS,
     DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES,
@@ -165,10 +169,24 @@ async def test_setup_status_returns_defaults_before_project_root_is_configured(a
         'header_row': 1,
         'primary_key_candidates': DEFAULT_TABLES_PRIMARY_KEY_CANDIDATES,
     }
+    assert payload['docs_config'] == {
+        'roots': [],
+        'include': DEFAULT_DOCS_INCLUDE_PATTERNS,
+        'exclude': DEFAULT_DOCS_EXCLUDE_PATTERNS,
+    }
+    assert payload['scripts_config'] == {
+        'roots': [],
+        'include': DEFAULT_SCRIPTS_INCLUDE_PATTERNS,
+        'exclude': DEFAULT_SCRIPTS_EXCLUDE_PATTERNS,
+    }
     assert payload['discovery'] == {
         'status': 'not_scanned',
         'discovered_table_count': 0,
         'available_table_count': 0,
+        'discovered_doc_count': 0,
+        'available_doc_count': 0,
+        'discovered_script_count': 0,
+        'available_script_count': 0,
         'unsupported_table_count': 0,
         'excluded_table_count': 0,
         'error_count': 0,

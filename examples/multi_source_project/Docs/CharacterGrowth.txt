@@ -1,0 +1,11 @@
+Character Growth Design
+
+Overview
+Characters grow by increasing level, HP, and Attack.
+
+Related Tables
+HeroTable is used as the base character table.
+
+Rules
+HP grows faster than Attack.
+Early levels should be cheap.

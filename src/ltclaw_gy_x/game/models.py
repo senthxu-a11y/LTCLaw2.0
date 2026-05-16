@@ -74,6 +74,7 @@ class CanonicalDocFacts(BaseModel):
     source_hash: str = Field(description='Source hash copied from raw doc index')
     title: str = Field(description='Document title')
     summary: str = Field(default='', description='Deterministic summary draft')
+    chunks: list[str] = Field(default_factory=list, description='Deterministic document chunks used for release grounding')
     semantic_tags: list[str] = Field(default_factory=list, description='Deterministic semantic tags')
     related_refs: list[str] = Field(default_factory=list, description='Canonical references related to this document')
     confidence: float = Field(default=0.0, description='Deterministic confidence score in range 0..1')
@@ -100,6 +101,8 @@ class DocIndex(BaseModel):
     doc_type: str = Field(description='Document type')
     title: str = Field(description='Document title')
     summary: str = Field(description='Document summary')
+    chunks: list[str] = Field(default_factory=list, description='Document chunks for release grounding')
+    tags: list[str] = Field(default_factory=list, description='Deterministic document tags')
     related_tables: list[str] = Field(default_factory=list, description='Related tables')
     last_indexed_at: datetime = Field(description='Last indexed at')
 
