@@ -1,5 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Button, Select, Space, Tag, Tooltip, Typography } from "antd";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  AlertOutlined,
+  ClockCircleOutlined,
+  ExclamationCircleOutlined,
+  NodeIndexOutlined,
+  RightOutlined,
+  ApartmentOutlined,
+  ReloadOutlined,
+} from "@ant-design/icons";
+import { Alert, Button, Drawer, Empty, Select, Space, Tabs, Tag, Tooltip, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAppMessage } from "@/hooks/useAppMessage";
@@ -11,7 +20,6 @@ import type {
   KnowledgeDocRef,
   KnowledgeMap,
   KnowledgeMapCandidateResponse,
-  KnowledgeRelationship,
   KnowledgeScriptRef,
   KnowledgeStatus,
   KnowledgeSystem,
@@ -37,6 +45,14 @@ const FORMAL_MAP_STATUS_OPTIONS: Array<{ label: KnowledgeStatus; value: Knowledg
   { label: "deprecated", value: "deprecated" },
   { label: "ignored", value: "ignored" },
 ];
+
+type MapTabKey = "candidate" | "formal" | "release" | "warnings";
+
+type DetailDrawerState = {
+  title: string;
+  subtitle?: string;
+  lines: Array<{ label: string; value: string }>;
+};
 
 interface FormalMapWorkspaceProps {
   mode: "summary" | "full";
@@ -64,18 +80,10 @@ function buildRelationshipWarningMessages(map: KnowledgeMap | null): string[] {
     }
   };
 
-  for (const item of map.systems) {
-    appendWarning(`system:${item.system_id}`, item.title, item.status);
-  }
-  for (const item of map.tables) {
-    appendWarning(`table:${item.table_id}`, item.title, item.status);
-  }
-  for (const item of map.docs) {
-    appendWarning(`doc:${item.doc_id}`, item.title, item.status);
-  }
-  for (const item of map.scripts) {
-    appendWarning(`script:${item.script_id}`, item.title, item.status);
-  }
+  for (const item of map.systems) appendWarning(`system:${item.system_id}`, item.title, item.status);
+  for (const item of map.tables) appendWarning(`table:${item.table_id}`, item.title, item.status);
+  for (const item of map.docs) appendWarning(`doc:${item.doc_id}`, item.title, item.status);
+  for (const item of map.scripts) appendWarning(`script:${item.script_id}`, item.title, item.status);
 
   return warnings;
 }
@@ -105,11 +113,13 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
   const [formalMapDraft, setFormalMapDraft] = useState<KnowledgeMap | null>(null);
   const [savingFormalMap, setSavingFormalMap] = useState(false);
   const [savingFormalMapDraft, setSavingFormalMapDraft] = useState(false);
+  const [activeMapTab, setActiveMapTab] = useState<MapTabKey>("candidate");
+  const [detailDrawer, setDetailDrawer] = useState<DetailDrawerState | null>(null);
+  const [expandedDiffKeys, setExpandedDiffKeys] = useState<Record<string, boolean>>({});
 
   const permissionDeniedMessage = t("gameProject.permissionDenied", {
     defaultValue: "You do not have permission to perform this action.",
   });
-
   const candidateReadReason =
     hasExplicitCapabilityContext && !canReadCandidate
       ? t("gameProject.releaseCandidatePermissionRequired", {
@@ -136,8 +146,7 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
       : null;
 
   const getErrorText = useCallback(
-    (error: unknown, fallbackMessage: string) =>
-      error instanceof Error ? error.message : fallbackMessage,
+    (error: unknown, fallbackMessage: string) => (error instanceof Error ? error.message : fallbackMessage),
     [],
   );
 
@@ -163,19 +172,18 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
       return "-";
     }
     const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      return value;
-    }
-    return parsed.toLocaleString();
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
   };
+
+  const formatStatusLabel = (value: KnowledgeStatus) =>
+    t(`gameWorkspaceUi.map.statusValues.${value}`, { defaultValue: value });
 
   const fetchReleaseSnapshot = useCallback(
     async (agentId: string) => {
       setReleaseSnapshotLoading(true);
       setReleaseSnapshotError(null);
       try {
-        const response = await gameKnowledgeReleaseApi.getMapCandidate(agentId);
-        setReleaseSnapshotResult(response);
+        setReleaseSnapshotResult(await gameKnowledgeReleaseApi.getMapCandidate(agentId));
       } catch (err) {
         setReleaseSnapshotResult(null);
         setReleaseSnapshotError(
@@ -198,8 +206,7 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
       setFormalMapLoading(true);
       setFormalMapError(null);
       try {
-        const response = await gameKnowledgeReleaseApi.getFormalMap(agentId);
-        setFormalMap(response);
+        setFormalMap(await gameKnowledgeReleaseApi.getFormalMap(agentId));
       } catch (err) {
         setFormalMap(null);
         setFormalMapError(
@@ -220,8 +227,7 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
       setSourceCandidateLoading(true);
       setSourceCandidateError(null);
       try {
-        const response = await gameKnowledgeReleaseApi.getLatestSourceCandidate(agentId);
-        setSourceCandidateResult(response);
+        setSourceCandidateResult(await gameKnowledgeReleaseApi.getLatestSourceCandidate(agentId));
       } catch (err) {
         const messageText = resolveMapLoadError(
           err,
@@ -230,11 +236,7 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
           }),
         );
         setSourceCandidateResult(null);
-        if (messageText.includes(NO_SOURCE_CANDIDATE_DETAIL)) {
-          setSourceCandidateError(null);
-        } else {
-          setSourceCandidateError(messageText);
-        }
+        setSourceCandidateError(messageText.includes(NO_SOURCE_CANDIDATE_DETAIL) ? null : messageText);
       } finally {
         setSourceCandidateLoading(false);
       }
@@ -316,6 +318,7 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
           defaultValue: "Saved formal map. This does not build, publish, or set the current release.",
         }),
       );
+      setActiveMapTab("formal");
     } catch (err) {
       message.warning(
         isPermissionDeniedError(err)
@@ -370,7 +373,6 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
       if (!currentDraft) {
         return currentDraft;
       }
-
       if (section === "systems") {
         return {
           ...currentDraft,
@@ -379,7 +381,6 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
           ),
         };
       }
-
       if (section === "tables") {
         return {
           ...currentDraft,
@@ -388,7 +389,6 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
           ),
         };
       }
-
       if (section === "docs") {
         return {
           ...currentDraft,
@@ -397,7 +397,6 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
           ),
         };
       }
-
       return {
         ...currentDraft,
         scripts: currentDraft.scripts.map((item) =>
@@ -406,201 +405,6 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
       };
     });
   };
-
-  const renderStatusControl = (
-    value: KnowledgeStatus,
-    onChange: (nextStatus: KnowledgeStatus) => void,
-    disabled: boolean,
-    disabledReason: string | null,
-  ) => (
-    <div className={styles.mapReviewItemActions}>
-      <Text type="secondary">{t("gameProject.formalMapStatusLabel", { defaultValue: "status" })}</Text>
-      <Tooltip title={disabledReason || undefined}>
-        <span className={styles.mapReviewStatusControlWrap}>
-          <Select
-            size="small"
-            value={value}
-            options={FORMAL_MAP_STATUS_OPTIONS}
-            onChange={(nextValue) => onChange(nextValue as KnowledgeStatus)}
-            disabled={disabled}
-            className={styles.mapReviewStatusSelect}
-          />
-        </span>
-      </Tooltip>
-    </div>
-  );
-
-  const renderSystemList = (
-    items: KnowledgeSystem[],
-    options?: {
-      editable?: boolean;
-      statusControlDisabled?: boolean;
-      statusControlDisabledReason?: string | null;
-      onStatusChange?: (systemId: string, nextStatus: KnowledgeStatus) => void;
-    },
-  ) => {
-    if (items.length === 0) {
-      return <div className={styles.mapReviewEmpty}>{t("gameProject.mapReviewEmptySystems", { defaultValue: "No systems" })}</div>;
-    }
-    return items.map((item) => (
-      <div key={item.system_id} className={styles.mapReviewItemRow}>
-        <div className={styles.mapReviewItemMain}>
-          <Text strong>{item.title}</Text>
-          <div className={styles.mapReviewItemMeta}>
-            <span>system_id: {item.system_id}</span>
-            {!options?.editable ? <span>status: {item.status}</span> : null}
-          </div>
-          {options?.editable && options.onStatusChange
-            ? renderStatusControl(
-                item.status,
-                (nextStatus) => options.onStatusChange?.(item.system_id, nextStatus),
-                !!options.statusControlDisabled,
-                options.statusControlDisabledReason || null,
-              )
-            : null}
-        </div>
-      </div>
-    ));
-  };
-
-  const renderTableList = (
-    items: KnowledgeTableRef[],
-    options?: {
-      editable?: boolean;
-      statusControlDisabled?: boolean;
-      statusControlDisabledReason?: string | null;
-      onStatusChange?: (tableId: string, nextStatus: KnowledgeStatus) => void;
-    },
-  ) => {
-    if (items.length === 0) {
-      return <div className={styles.mapReviewEmpty}>{t("gameProject.mapReviewEmptyTables", { defaultValue: "No tables" })}</div>;
-    }
-    return items.map((item) => (
-      <div key={item.table_id} className={styles.mapReviewItemRow}>
-        <div className={styles.mapReviewItemMain}>
-          <Text strong>{item.title}</Text>
-          <div className={styles.mapReviewItemMeta}>
-            <span>table_id: {item.table_id}</span>
-            <span>source_path: {item.source_path}</span>
-            {!options?.editable ? <span>status: {item.status}</span> : null}
-          </div>
-          {options?.editable && options.onStatusChange
-            ? renderStatusControl(
-                item.status,
-                (nextStatus) => options.onStatusChange?.(item.table_id, nextStatus),
-                !!options.statusControlDisabled,
-                options.statusControlDisabledReason || null,
-              )
-            : null}
-        </div>
-      </div>
-    ));
-  };
-
-  const renderDocList = (
-    items: KnowledgeDocRef[],
-    options?: {
-      editable?: boolean;
-      statusControlDisabled?: boolean;
-      statusControlDisabledReason?: string | null;
-      onStatusChange?: (docId: string, nextStatus: KnowledgeStatus) => void;
-    },
-  ) => {
-    if (items.length === 0) {
-      return <div className={styles.mapReviewEmpty}>{t("gameProject.mapReviewEmptyDocs", { defaultValue: "No docs" })}</div>;
-    }
-    return items.map((item) => (
-      <div key={item.doc_id} className={styles.mapReviewItemRow}>
-        <div className={styles.mapReviewItemMain}>
-          <Text strong>{item.title}</Text>
-          <div className={styles.mapReviewItemMeta}>
-            <span>doc_id: {item.doc_id}</span>
-            <span>source_path: {item.source_path}</span>
-            {!options?.editable ? <span>status: {item.status}</span> : null}
-          </div>
-          {options?.editable && options.onStatusChange
-            ? renderStatusControl(
-                item.status,
-                (nextStatus) => options.onStatusChange?.(item.doc_id, nextStatus),
-                !!options.statusControlDisabled,
-                options.statusControlDisabledReason || null,
-              )
-            : null}
-        </div>
-      </div>
-    ));
-  };
-
-  const renderScriptList = (
-    items: KnowledgeScriptRef[],
-    options?: {
-      editable?: boolean;
-      statusControlDisabled?: boolean;
-      statusControlDisabledReason?: string | null;
-      onStatusChange?: (scriptId: string, nextStatus: KnowledgeStatus) => void;
-    },
-  ) => {
-    if (items.length === 0) {
-      return <div className={styles.mapReviewEmpty}>{t("gameProject.mapReviewEmptyScripts", { defaultValue: "No scripts" })}</div>;
-    }
-    return items.map((item) => (
-      <div key={item.script_id} className={styles.mapReviewItemRow}>
-        <div className={styles.mapReviewItemMain}>
-          <Text strong>{item.title}</Text>
-          <div className={styles.mapReviewItemMeta}>
-            <span>script_id: {item.script_id}</span>
-            <span>source_path: {item.source_path}</span>
-            {!options?.editable ? <span>status: {item.status}</span> : null}
-          </div>
-          {options?.editable && options.onStatusChange
-            ? renderStatusControl(
-                item.status,
-                (nextStatus) => options.onStatusChange?.(item.script_id, nextStatus),
-                !!options.statusControlDisabled,
-                options.statusControlDisabledReason || null,
-              )
-            : null}
-        </div>
-      </div>
-    ));
-  };
-
-  const renderRelationshipList = (items: KnowledgeRelationship[]) => {
-    if (items.length === 0) {
-      return <div className={styles.mapReviewEmpty}>{t("gameProject.mapReviewEmptyRelationships", { defaultValue: "No relationships" })}</div>;
-    }
-    return items.map((item) => (
-      <div key={item.relationship_id} className={styles.mapReviewItemRow}>
-        <div className={styles.mapReviewItemMain}>
-          <Text strong>{item.relationship_id}</Text>
-          <div className={styles.mapReviewItemMeta}>
-            <span>type: {item.relation_type}</span>
-            <span>from: {item.from_ref}</span>
-            <span>to: {item.to_ref}</span>
-          </div>
-        </div>
-      </div>
-    ));
-  };
-
-  const renderDiffReviewSection = (
-    label: string,
-    refs: string[],
-    emptyLabel: string,
-  ) => (
-    <div className={styles.mapReviewBlock}>
-      <Text strong>{label}</Text>
-      {refs.length === 0 ? (
-        <div className={styles.mapReviewEmpty}>{emptyLabel}</div>
-      ) : (
-        <div className={styles.mapReviewRefList}>
-          {refs.map((ref) => (
-            <Tag key={ref}>{ref}</Tag>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 
   const savedFormalMap = useMemo(
     () => (formalMap?.mode === NO_FORMAL_MAP_MODE ? null : formalMap?.map ?? null),
@@ -613,10 +417,7 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
   });
   const candidateSummary = summarizeKnowledgeMap(sourceCandidateResult?.map ?? null);
   const releaseSummary = summarizeKnowledgeMap(releaseSnapshotResult?.map ?? null);
-  const savedFormalSummary = summarizeKnowledgeMap(savedFormalMap);
   const formalSummary = summarizeKnowledgeMap(formalMapDraft);
-  const hasCandidateMapSummary = !!sourceCandidateResult?.map && !sourceCandidateError;
-  const hasFormalMapSummary = !!savedFormalMap && !formalMapError;
   const formalMapDraftDirty =
     !!savedFormalMap && !!formalMapDraft && JSON.stringify(formalMapDraft) !== JSON.stringify(savedFormalMap);
   const formalMapRelationshipWarnings = buildRelationshipWarningMessages(formalMapDraft);
@@ -634,7 +435,6 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
     canReadMap,
     canEditMap,
   });
-  const statusEditDisabledReason = mapEditReason || saveFormalMapFirstReason;
   const canEditFormalMapStatuses =
     !!savedFormalMap && (!hasExplicitCapabilityContext || (canReadMap && canEditMap));
   const canSaveFormalMapDraft =
@@ -654,9 +454,6 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
       setFormalMapLoading(false);
       return;
     }
-
-    setSourceCandidateResult(null);
-    setSourceCandidateError(null);
     void fetchMapReviewData(selectedAgent);
   }, [fetchMapReviewData, selectedAgent]);
 
@@ -664,205 +461,480 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
     setFormalMapDraft(savedFormalMap ? cloneKnowledgeMap(savedFormalMap) : null);
   }, [savedFormalMap]);
 
-  const renderSummaryText = (
-    summary: ReturnType<typeof summarizeKnowledgeMap>,
-    fallback: string,
-  ) =>
-    summary.systems || summary.tables || summary.docs || summary.scripts || summary.relationships
-      ? t("gameProject.formalMapCompactCounts", {
-          defaultValue: "{{systems}} systems / {{tables}} tables / {{docs}} docs / {{scripts}} scripts / {{relationships}} relationships",
-          systems: summary.systems,
-          tables: summary.tables,
-          docs: summary.docs,
-          scripts: summary.scripts,
-          relationships: summary.relationships,
-        })
-      : fallback;
+  const openDetailDrawer = (title: string, subtitle: string, lines: Array<{ label: string; value: string }>) => {
+    setDetailDrawer({ title, subtitle, lines });
+  };
+
+  const renderNumberBadge = (value: number) => <span className={styles.mapWorkspaceSectionNumber}>{value}</span>;
+
+  const renderStatusCard = (options: {
+    icon: ReactNode;
+    label: string;
+    value: string;
+    detail: string;
+  }) => (
+    <div className={styles.mapWorkspaceStatusCard}>
+      <div className={styles.mapWorkspaceStatusIcon}>{options.icon}</div>
+      <div className={styles.mapWorkspaceStatusContent}>
+        <span className={styles.mapWorkspaceStatusLabel}>{options.label}</span>
+        <strong className={styles.mapWorkspaceStatusValue}>{options.value}</strong>
+        <small className={styles.mapWorkspaceStatusMeta}>{options.detail}</small>
+      </div>
+      <RightOutlined className={styles.mapWorkspaceStatusArrow} />
+    </div>
+  );
+
+  const renderMetricCard = (label: string, value: string | number, detail?: string) => (
+    <div className={styles.metricItem}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {detail ? <span>{detail}</span> : null}
+    </div>
+  );
+
+  const renderEntitySection = <T extends KnowledgeSystem | KnowledgeTableRef | KnowledgeDocRef | KnowledgeScriptRef>(
+    title: string,
+    typeLabel: string,
+    items: T[],
+    options: {
+      getId: (item: T) => string;
+      getLines: (item: T) => Array<{ label: string; value: string }>;
+      editable?: boolean;
+      onStatusChange?: (id: string, status: KnowledgeStatus) => void;
+      statusDisabled?: boolean;
+      statusDisabledReason?: string | null;
+    },
+  ) => (
+    <div className={styles.mapWorkspaceSection}>
+      <div className={styles.mapWorkspaceSectionHeader}>
+        <Text strong>{title}</Text>
+        <Text type="secondary">{t("common.total", { count: items.length })}</Text>
+      </div>
+      {items.length > 0 ? (
+        <div className={styles.mapWorkspaceEntityList}>
+          {items.map((item) => {
+            const itemId = options.getId(item);
+            return (
+              <div key={itemId} className={styles.mapWorkspaceEntityRow}>
+                <div className={styles.mapWorkspaceEntityMain}>
+                  <Text strong>{item.title}</Text>
+                  <div className={styles.mapWorkspaceEntityMeta}>
+                    <span>{typeLabel}</span>
+                    <span>
+                      {t("gameWorkspaceUi.map.labels.status", { defaultValue: "状态" })}: {formatStatusLabel(item.status)}
+                    </span>
+                  </div>
+                </div>
+                <div className={styles.mapWorkspaceEntityActions}>
+                  {options.editable && options.onStatusChange ? (
+                    <Tooltip title={options.statusDisabledReason || undefined}>
+                      <span className={styles.mapReviewStatusControlWrap}>
+                        <Select
+                          size="small"
+                          value={item.status}
+                          options={FORMAL_MAP_STATUS_OPTIONS.map((option) => ({
+                            value: option.value,
+                            label: formatStatusLabel(option.label),
+                          }))}
+                          onChange={(nextValue) => options.onStatusChange?.(itemId, nextValue as KnowledgeStatus)}
+                          disabled={!!options.statusDisabled}
+                          className={styles.mapReviewStatusSelect}
+                        />
+                      </span>
+                    </Tooltip>
+                  ) : null}
+                  <Button
+                    size="small"
+                    onClick={() => openDetailDrawer(item.title, typeLabel, options.getLines(item))}
+                  >
+                    {t("gameWorkspaceUi.map.actions.viewDetails", { defaultValue: "查看详情" })}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={t("gameWorkspaceUi.map.emptySection", { defaultValue: "当前没有可显示的内容。" })}
+        />
+      )}
+    </div>
+  );
+
+  const renderDiffGroup = (groupKey: string, title: string, refs: string[]) => {
+    const expanded = !!expandedDiffKeys[groupKey];
+    const visibleRefs = expanded ? refs : refs.slice(0, 5);
+    return (
+      <div className={styles.mapWorkspaceDiffCard}>
+        <div className={styles.mapWorkspaceSectionHeader}>
+          <Text strong>{title}</Text>
+          <Text type="secondary">{t("common.total", { count: refs.length })}</Text>
+        </div>
+        {refs.length > 0 ? (
+          <>
+            <div className={styles.mapWorkspaceRefList}>
+              {visibleRefs.map((ref) => (
+                <Tag key={ref}>{ref}</Tag>
+              ))}
+            </div>
+            {refs.length > 5 ? (
+              <Button
+                size="small"
+                type="link"
+                onClick={() =>
+                  setExpandedDiffKeys((current) => ({ ...current, [groupKey]: !current[groupKey] }))
+                }
+              >
+                {expanded
+                  ? t("gameWorkspaceUi.map.actions.collapseChanges", { defaultValue: "收起" })
+                  : t("gameWorkspaceUi.map.actions.expandChanges", {
+                      count: refs.length,
+                      defaultValue: "查看全部 {{count}} 项变更",
+                    })}
+              </Button>
+            ) : null}
+          </>
+        ) : (
+          <div className={styles.mapReviewEmpty}>
+            {t("gameWorkspaceUi.map.emptyChanges", { defaultValue: "暂无变更。" })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (mode === "summary") {
     return (
-      <>
-        <div className={styles.mapReviewTransitionLead}>
-          <Text strong>
-            {t("gameProject.formalMapWorkspaceLead", {
-              defaultValue: "Map Build Review now lives on the dedicated Map Editor page.",
-            })}
-          </Text>
+      <div className={styles.mapWorkspaceSummaryShell}>
+        <div className={styles.mapWorkspaceSummaryLead}>
+          <Text strong>{t("gameWorkspaceUi.map.summary.title", { defaultValue: "Map 编辑器现在独立承担地图决策。" })}</Text>
           <div className={styles.mapReviewHint}>
-            {t("gameProject.formalMapWorkspaceSummaryHint", {
-              defaultValue:
-                "Build Candidate Map from canonical facts, compare it against Formal Map or Release Map, and save Formal Map only after explicit admin confirmation.",
+            {t("gameWorkspaceUi.map.summary.hint", {
+              defaultValue: "候选地图、正式地图、发布快照和关系警告已经迁移到独立页面查看。",
             })}
           </div>
         </div>
-
-        {mapReadReason ? (
-          <Alert type="info" showIcon message={mapReadReason} className={styles.mapReviewAlert} />
-        ) : null}
-        {candidateReadReason ? (
-          <Alert type="info" showIcon message={candidateReadReason} className={styles.mapReviewAlert} />
-        ) : null}
-
-        <div className={styles.mapReviewCompactSummary}>
+        <div className={styles.mapWorkspaceStatusGrid}>
           {artifactStates.map((item) => (
-            <div key={item.key} className={styles.mapReviewCompactItem}>
-              <Text type="secondary">
-                {item.key === "candidate"
-                  ? t("gameProject.mapBuildCandidateTitle", { defaultValue: "Candidate Map" })
-                  : item.key === "formal"
-                    ? t("gameProject.formalMapTitle", { defaultValue: "Formal Map" })
-                    : t("gameProject.releaseMapTitle", { defaultValue: "Release Map" })}
-              </Text>
-              <div className={styles.mapReviewCompactValue}>
-                {item.key === "candidate"
-                  ? hasCandidateMapSummary
-                    ? renderSummaryText(
-                        candidateSummary,
-                        t("gameProject.mapCandidateEmpty", { defaultValue: "No candidate map available" }),
-                      )
-                    : sourceCandidateLoading
-                      ? t("common.loading")
-                      : t("gameProject.mapBuildSummaryPending", {
-                          defaultValue: "Build candidate review explicitly in Map Editor.",
-                        })
-                  : item.key === "formal"
-                    ? hasFormalMapSummary
-                      ? renderSummaryText(
-                          savedFormalSummary,
-                          t("gameProject.noSavedFormalMapTitle", { defaultValue: "no saved formal map" }),
-                        )
-                      : formalMapLoading
-                        ? t("common.loading")
-                        : formalMapError || t("gameProject.noSavedFormalMapTitle", { defaultValue: "no saved formal map" })
-                    : releaseSnapshotLoading
-                      ? t("common.loading")
-                      : releaseSnapshotError || renderSummaryText(
-                          releaseSummary,
-                          t("gameProject.releaseMapSummaryEmpty", { defaultValue: "No release map snapshot available" }),
-                        )}
-              </div>
-              <div className={styles.mapReviewHint}>
-                {item.key === "candidate"
-                  ? t("gameProject.mapBuildCandidateSummaryHint", {
-                      defaultValue: "Suggested only. Not formal knowledge until an admin clicks save.",
-                    })
-                  : item.key === "formal"
-                    ? t("gameProject.formalMapSummaryHint", {
-                        defaultValue: "Saved structure only. It stays separate from release build and publish.",
-                      })
-                    : releaseSnapshotResult?.source_release_id || releaseSnapshotResult?.release_id
-                      ? `release_id: ${releaseSnapshotResult?.source_release_id || releaseSnapshotResult?.release_id}`
-                      : t("gameProject.releaseMapSummaryHint", {
-                          defaultValue: "Published snapshot only. It is not the editing source.",
-                        })}
-              </div>
+            <div key={item.key} className={styles.mapWorkspaceStatusCard}>
+              <span>{item.key}</span>
+              <strong>{item.summary.systems + item.summary.tables + item.summary.relationships}</strong>
+              <small>{item.source}</small>
             </div>
           ))}
         </div>
-
-        <div className={styles.mapReviewTransitionActions}>
-          <Button size="small" type="primary" onClick={() => navigate("/game/map")}>
-            {t("gameProject.openMapEditorWorkspaceButton", { defaultValue: "Open Map Editor" })}
-          </Button>
-          <Button
-            size="small"
-            onClick={() => selectedAgent && fetchMapReviewData(selectedAgent)}
-            loading={releaseSnapshotLoading || formalMapLoading}
-            disabled={!selectedAgent || !!mapReadReason || !!candidateReadReason}
-          >
-            {t("common.refresh")}
-          </Button>
-        </div>
-      </>
+        <Button type="primary" onClick={() => navigate("/game/map")}>
+          {t("gameProject.openMapEditorWorkspaceButton", { defaultValue: "Open Map Editor" })}
+        </Button>
+      </div>
     );
   }
 
-  return (
-    <div className={styles.mapReviewSection}>
-      <div className={styles.mapReviewHeader}>
-        <div>
-          <Text strong>{t("gameProject.mapBuildReviewTitle", { defaultValue: "Map Build Review" })}</Text>
-          <div className={styles.mapReviewHint}>
-            {t("gameProject.mapBuildReviewHint", {
-              defaultValue:
-                "Candidate Map is suggested only, Formal Map is saved only after explicit admin confirmation, and Release Map remains a published snapshot rather than the editing source.",
-            })}
+  const candidateTab = (
+    <div className={styles.mapWorkspaceTabGrid}>
+      <div className={styles.mapWorkspacePanel}>
+        <div className={styles.mapWorkspaceSectionHeader}>
+          <div className={styles.mapWorkspaceSectionTitleGroup}>
+            {renderNumberBadge(1)}
+            <Text strong>{t("gameWorkspaceUi.map.candidate.overview", { defaultValue: "候选地图概览" })}</Text>
           </div>
+          <Space size={8} wrap>
+            {sourceCandidateResult?.candidate_source ? <Tag>{sourceCandidateResult.candidate_source}</Tag> : null}
+            {sourceCandidateResult?.uses_existing_formal_map_as_hint ? (
+              <Tag>{t("gameWorkspaceUi.map.candidate.formalHintUsed", { defaultValue: "使用正式地图提示" })}</Tag>
+            ) : null}
+          </Space>
         </div>
-        <Space size={8} wrap>
-          <Button
+        {sourceCandidateLoading ? <div className={styles.mapReviewEmpty}>{t("common.loading")}</div> : null}
+        {sourceCandidateError ? (
+          <Alert type="warning" showIcon message={sourceCandidateError} className={styles.mapReviewAlert} />
+        ) : null}
+        <div className={styles.mapWorkspaceBlockLabel}>{t("gameWorkspaceUi.map.labels.contentStats", { defaultValue: "内容统计" })}</div>
+        <div className={styles.mapWorkspaceMetricGrid}>
+          {renderMetricCard(t("gameWorkspaceUi.map.labels.systems", { defaultValue: "系统" }), candidateSummary.systems)}
+          {renderMetricCard(t("gameWorkspaceUi.map.labels.tables", { defaultValue: "表格" }), candidateSummary.tables)}
+          {renderMetricCard(t("gameWorkspaceUi.map.labels.docs", { defaultValue: "文档" }), candidateSummary.docs)}
+          {renderMetricCard(t("gameWorkspaceUi.map.labels.scripts", { defaultValue: "脚本" }), candidateSummary.scripts)}
+          {renderMetricCard(t("gameWorkspaceUi.map.labels.relationships", { defaultValue: "关系" }), candidateSummary.relationships)}
+        </div>
+        <div className={styles.mapWorkspaceBlockLabel}>{t("gameWorkspaceUi.map.labels.changeSummary", { defaultValue: "变更摘要" })}</div>
+        <div className={styles.mapWorkspaceMetricGridCompact}>
+          {renderMetricCard(t("gameWorkspaceUi.map.labels.added", { defaultValue: "新增" }), diffReviewSections[0]?.refs.length || 0)}
+          {renderMetricCard(t("gameWorkspaceUi.map.labels.removed", { defaultValue: "删除" }), diffReviewSections[1]?.refs.length || 0)}
+          {renderMetricCard(t("gameWorkspaceUi.map.labels.changed", { defaultValue: "变更" }), diffReviewSections[2]?.refs.length || 0)}
+        </div>
+        <div className={styles.mapWorkspaceFooterMeta}>
+          <span>{t("gameWorkspaceUi.map.labels.generatedAt", { defaultValue: "生成时间" })}: -</span>
+          <span>{t("gameWorkspaceUi.map.labels.candidateSource", { defaultValue: "来源" })}: {sourceCandidateResult?.candidate_source || "-"}</span>
+        </div>
+      </div>
+      <div className={styles.mapWorkspacePanel}>
+        <div className={styles.mapWorkspaceSectionHeader}>
+          <div className={styles.mapWorkspaceSectionTitleGroup}>
+            {renderNumberBadge(2)}
+            <Text strong>{t("gameWorkspaceUi.map.candidate.diff", { defaultValue: "差异详情" })}</Text>
+          </div>
+          <Select
             size="small"
-            onClick={() => selectedAgent && fetchMapReviewData(selectedAgent)}
-            loading={releaseSnapshotLoading || formalMapLoading}
-            disabled={!selectedAgent || (!!mapReadReason && !!candidateReadReason)}
-          >
-            {t("common.refresh")}
+            value="type"
+            disabled
+            options={[{ value: "type", label: t("gameWorkspaceUi.map.actions.filterByType", { defaultValue: "按类型筛选" }) }]}
+            className={styles.mapWorkspaceFilterSelect}
+          />
+        </div>
+        <div className={styles.mapWorkspaceDiffColumn}>
+          {renderDiffGroup("added", t("gameWorkspaceUi.map.labels.added", { defaultValue: "新增" }), diffReviewSections[0]?.refs || [])}
+          {renderDiffGroup("removed", t("gameWorkspaceUi.map.labels.removed", { defaultValue: "删除" }), diffReviewSections[1]?.refs || [])}
+          {renderDiffGroup("changed", t("gameWorkspaceUi.map.labels.changed", { defaultValue: "变更" }), diffReviewSections[2]?.refs || [])}
+        </div>
+      </div>
+      <div className={styles.mapWorkspacePanel}>
+        <div className={styles.mapWorkspaceSectionHeader}>
+          <div className={styles.mapWorkspaceSectionTitleGroup}>
+            {renderNumberBadge(3)}
+            <Text strong>{t("gameWorkspaceUi.map.candidate.warningsPreview", { defaultValue: "冲突与警告（预览）" })}</Text>
+          </div>
+          <Button size="small" type="link" onClick={() => setActiveMapTab("warnings")}>
+            {t("gameWorkspaceUi.map.actions.openWarningsTab", { defaultValue: "查看全部" })}
           </Button>
-          <Tooltip title={candidateWriteReason || undefined}>
-            <span>
-              <Button
-                size="small"
-                onClick={handleBuildSourceCandidate}
-                loading={sourceCandidateLoading}
-                disabled={!selectedAgent || !!candidateWriteReason}
-              >
-                {t("gameProject.buildCandidateFromSourceButton", { defaultValue: "Build Candidate Review" })}
+        </div>
+        {formalMapRelationshipWarnings.length > 0 ? (
+          <div className={styles.mapWorkspaceWarningList}>
+            {formalMapRelationshipWarnings.slice(0, 3).map((warning) => (
+              <div key={warning} className={styles.mapWorkspaceWarningItem}>
+                {warning}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className={styles.mapReviewEmpty}>
+            {t("gameWorkspaceUi.map.warnings.empty", { defaultValue: "暂无关系警告" })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const formalTab = (
+    <div className={styles.mapWorkspacePanelStack}>
+      {formalMapLoading ? <div className={styles.mapReviewEmpty}>{t("common.loading")}</div> : null}
+      {formalMapError ? <Alert type="warning" showIcon message={formalMapError} className={styles.mapReviewAlert} /> : null}
+      {formalMap?.mode === NO_FORMAL_MAP_MODE ? (
+        <Alert
+          type="info"
+          showIcon
+          message={t("gameWorkspaceUi.map.formal.noFormalMap", { defaultValue: "当前还没有正式地图，请先从候选地图保存。" })}
+          className={styles.mapReviewAlert}
+        />
+      ) : null}
+      {formalMapDraftDirty ? (
+        <Alert
+          type="warning"
+          showIcon
+          message={t("gameWorkspaceUi.map.formal.unsavedTitle", { defaultValue: "有未保存的状态修改。" })}
+          action={
+            <Space>
+              <Button size="small" onClick={() => setFormalMapDraft(savedFormalMap ? cloneKnowledgeMap(savedFormalMap) : null)}>
+                {t("gameWorkspaceUi.map.actions.discardDraft", { defaultValue: "放弃修改" })}
               </Button>
-            </span>
-          </Tooltip>
-          <Tooltip title={saveFormalMapDisabledReason || undefined}>
-            <span>
               <Button
                 size="small"
                 type="primary"
-                onClick={handleSaveFormalMap}
-                loading={savingFormalMap}
-                disabled={!canSaveFormalMap}
+                onClick={handleSaveFormalMapDraft}
+                loading={savingFormalMapDraft}
+                disabled={!canSaveFormalMapDraft}
               >
-                {t("gameProject.saveFormalMapButton", { defaultValue: "Save Candidate as Formal Map" })}
+                {t("gameWorkspaceUi.map.actions.saveDraft", { defaultValue: "保存状态修改" })}
               </Button>
-            </span>
-          </Tooltip>
-        </Space>
+            </Space>
+          }
+        />
+      ) : null}
+      {formalMapRelationshipWarnings.length > 0 ? (
+        <Alert
+          type="warning"
+          showIcon
+          message={t("gameWorkspaceUi.map.warnings.relationships", { defaultValue: "当前正式地图存在关系警告。" })}
+          className={styles.mapReviewAlert}
+        />
+      ) : null}
+      <div className={styles.mapWorkspaceMetricGrid}>
+        {renderMetricCard(t("gameWorkspaceUi.map.labels.systems", { defaultValue: "系统" }), formalSummary.systems)}
+        {renderMetricCard(t("gameWorkspaceUi.map.labels.tables", { defaultValue: "表格" }), formalSummary.tables)}
+        {renderMetricCard(t("gameWorkspaceUi.map.labels.docs", { defaultValue: "文档" }), formalSummary.docs)}
+        {renderMetricCard(t("gameWorkspaceUi.map.labels.scripts", { defaultValue: "脚本" }), formalSummary.scripts)}
+        {renderMetricCard(t("gameWorkspaceUi.map.labels.relationships", { defaultValue: "关系" }), formalSummary.relationships)}
+        {renderMetricCard(t("gameWorkspaceUi.map.labels.updatedAt", { defaultValue: "更新时间" }), formatDateTime(formalMap?.updated_at))}
       </div>
+      {renderEntitySection(
+        t("gameWorkspaceUi.map.sections.systems", { defaultValue: "系统" }),
+        t("gameWorkspaceUi.map.labels.system", { defaultValue: "系统" }),
+        formalMapDraft?.systems ?? [],
+        {
+          getId: (item) => item.system_id,
+          getLines: (item) => [
+            { label: "system_id", value: item.system_id },
+            { label: "table_ids", value: item.table_ids.join(", ") || "-" },
+            { label: "doc_ids", value: item.doc_ids.join(", ") || "-" },
+            { label: "script_ids", value: item.script_ids.join(", ") || "-" },
+          ],
+          editable: true,
+          onStatusChange: (id, status) => updateFormalMapDraftStatus("systems", id, status),
+          statusDisabled: !canEditFormalMapStatuses,
+          statusDisabledReason: mapEditReason || saveFormalMapFirstReason,
+        },
+      )}
+      {renderEntitySection(
+        t("gameWorkspaceUi.map.sections.tables", { defaultValue: "表格" }),
+        t("gameWorkspaceUi.map.labels.table", { defaultValue: "表格" }),
+        formalMapDraft?.tables ?? [],
+        {
+          getId: (item) => item.table_id,
+          getLines: (item) => [
+            { label: "table_id", value: item.table_id },
+            { label: "source_path", value: item.source_path },
+            { label: "source_hash", value: item.source_hash },
+            { label: "system_id", value: item.system_id || "-" },
+          ],
+          editable: true,
+          onStatusChange: (id, status) => updateFormalMapDraftStatus("tables", id, status),
+          statusDisabled: !canEditFormalMapStatuses,
+          statusDisabledReason: mapEditReason || saveFormalMapFirstReason,
+        },
+      )}
+      {renderEntitySection(
+        t("gameWorkspaceUi.map.sections.docs", { defaultValue: "文档" }),
+        t("gameWorkspaceUi.map.labels.doc", { defaultValue: "文档" }),
+        formalMapDraft?.docs ?? [],
+        {
+          getId: (item) => item.doc_id,
+          getLines: (item) => [
+            { label: "doc_id", value: item.doc_id },
+            { label: "source_path", value: item.source_path },
+            { label: "source_hash", value: item.source_hash },
+            { label: "system_id", value: item.system_id || "-" },
+          ],
+          editable: true,
+          onStatusChange: (id, status) => updateFormalMapDraftStatus("docs", id, status),
+          statusDisabled: !canEditFormalMapStatuses,
+          statusDisabledReason: mapEditReason || saveFormalMapFirstReason,
+        },
+      )}
+      {renderEntitySection(
+        t("gameWorkspaceUi.map.sections.scripts", { defaultValue: "脚本" }),
+        t("gameWorkspaceUi.map.labels.script", { defaultValue: "脚本" }),
+        formalMapDraft?.scripts ?? [],
+        {
+          getId: (item) => item.script_id,
+          getLines: (item) => [
+            { label: "script_id", value: item.script_id },
+            { label: "source_path", value: item.source_path },
+            { label: "source_hash", value: item.source_hash },
+            { label: "system_id", value: item.system_id || "-" },
+          ],
+          editable: true,
+          onStatusChange: (id, status) => updateFormalMapDraftStatus("scripts", id, status),
+          statusDisabled: !canEditFormalMapStatuses,
+          statusDisabledReason: mapEditReason || saveFormalMapFirstReason,
+        },
+      )}
+    </div>
+  );
 
-      <div className={styles.mapReviewHint}>
-        {t("gameProject.mapEditorPrimaryHint", {
-          defaultValue:
-            "Map Editor owns source candidate review, diff review, saved formal map review, explicit save-as-formal-map, status-only edits, and release snapshot comparison.",
-        })}
-      </div>
-
-      <div className={styles.mapReviewCompactSummary}>
-        {artifactStates.map((item) => (
-          <div key={item.key} className={styles.mapReviewCompactItem}>
-            <Text strong>
-              {item.key === "candidate"
-                ? t("gameProject.mapBuildCandidateTitle", { defaultValue: "Candidate Map" })
-                : item.key === "formal"
-                  ? t("gameProject.formalMapTitle", { defaultValue: "Formal Map" })
-                  : t("gameProject.releaseMapTitle", { defaultValue: "Release Map" })}
-            </Text>
-            <div className={styles.mapReviewCompactValue}>
-              {renderSummaryText(item.summary, t("gameProject.mapBuildArtifactEmpty", { defaultValue: "No map available" }))}
-            </div>
-            <div className={styles.mapReviewHint}>
-              {item.key === "candidate"
-                ? t("gameProject.mapBuildCandidateRoleHint", {
-                    defaultValue: "Suggested structure only. It is never formal knowledge by itself.",
-                  })
-                : item.key === "formal"
-                  ? t("gameProject.formalMapRoleHint", {
-                      defaultValue: "Saved by explicit admin action only. It does not auto-build or auto-publish release.",
-                    })
-                  : t("gameProject.releaseMapRoleHint", {
-                      defaultValue: "Published snapshot only. It is not the editing source for map review.",
-                    })}
-            </div>
+  const releaseTab = (
+    <div className={styles.mapWorkspacePanelStack}>
+      {releaseSnapshotLoading ? <div className={styles.mapReviewEmpty}>{t("common.loading")}</div> : null}
+      {releaseSnapshotError ? (
+        <Alert
+          type={releaseSnapshotError === NO_CURRENT_RELEASE_DETAIL ? "info" : "warning"}
+          showIcon
+          message={releaseSnapshotError}
+          className={styles.mapReviewAlert}
+        />
+      ) : null}
+      {!releaseSnapshotLoading && !releaseSnapshotError && !releaseSnapshotResult?.map ? (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={t("gameWorkspaceUi.map.release.empty", { defaultValue: "暂无发布快照" })}
+        />
+      ) : null}
+      {releaseSnapshotResult?.map ? (
+        <>
+          <div className={styles.mapWorkspaceMetricGrid}>
+            {renderMetricCard(t("gameWorkspaceUi.map.labels.systems", { defaultValue: "系统" }), releaseSummary.systems)}
+            {renderMetricCard(t("gameWorkspaceUi.map.labels.tables", { defaultValue: "表格" }), releaseSummary.tables)}
+            {renderMetricCard(t("gameWorkspaceUi.map.labels.docs", { defaultValue: "文档" }), releaseSummary.docs)}
+            {renderMetricCard(t("gameWorkspaceUi.map.labels.scripts", { defaultValue: "脚本" }), releaseSummary.scripts)}
+            {renderMetricCard(t("gameWorkspaceUi.map.labels.relationships", { defaultValue: "关系" }), releaseSummary.relationships)}
+            {renderMetricCard(
+              t("gameWorkspaceUi.map.labels.releaseId", { defaultValue: "发布 ID" }),
+              releaseSnapshotResult.source_release_id || releaseSnapshotResult.release_id || "-",
+            )}
           </div>
-        ))}
-      </div>
+          {renderEntitySection(
+            t("gameWorkspaceUi.map.sections.systems", { defaultValue: "系统" }),
+            t("gameWorkspaceUi.map.labels.system", { defaultValue: "系统" }),
+            releaseSnapshotResult.map.systems,
+            {
+              getId: (item) => item.system_id,
+              getLines: (item) => [
+                { label: "system_id", value: item.system_id },
+                { label: "status", value: formatStatusLabel(item.status) },
+              ],
+            },
+          )}
+          {renderEntitySection(
+            t("gameWorkspaceUi.map.sections.tables", { defaultValue: "表格" }),
+            t("gameWorkspaceUi.map.labels.table", { defaultValue: "表格" }),
+            releaseSnapshotResult.map.tables,
+            {
+              getId: (item) => item.table_id,
+              getLines: (item) => [
+                { label: "table_id", value: item.table_id },
+                { label: "source_path", value: item.source_path },
+                { label: "source_hash", value: item.source_hash },
+              ],
+            },
+          )}
+        </>
+      ) : null}
+    </div>
+  );
 
+  const warningsTab = (
+    <div className={styles.mapWorkspacePanelStack}>
+      <div className={styles.mapWorkspacePanel}>
+        <div className={styles.mapWorkspaceSectionHeader}>
+          <Text strong>{t("gameWorkspaceUi.map.warnings.title", { defaultValue: "冲突与警告" })}</Text>
+          <Text type="secondary">
+            {t("gameWorkspaceUi.map.warnings.countHint", {
+              count: formalMapRelationshipWarnings.length,
+              defaultValue: `当前发现 ${formalMapRelationshipWarnings.length} 个问题`,
+            })}
+          </Text>
+        </div>
+        {formalMapRelationshipWarnings.length > 0 ? (
+          <div className={styles.mapWorkspaceWarningList}>
+            {formalMapRelationshipWarnings.map((warning) => (
+              <div key={warning} className={styles.mapWorkspaceWarningItem}>
+                {warning}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={t("gameWorkspaceUi.map.warnings.empty", { defaultValue: "暂无关系警告" })}
+          />
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className={styles.mapWorkspaceShell}>
       {!selectedAgent ? (
         <Alert
           type="info"
@@ -871,404 +943,159 @@ export default function FormalMapWorkspace({ mode }: FormalMapWorkspaceProps) {
           className={styles.mapReviewAlert}
         />
       ) : null}
+      {candidateReadReason ? <Alert type="info" showIcon message={candidateReadReason} className={styles.mapReviewAlert} /> : null}
+      {mapReadReason ? <Alert type="info" showIcon message={mapReadReason} className={styles.mapReviewAlert} /> : null}
 
-      {candidateReadReason ? (
-        <Alert
-          type="info"
-          showIcon
-          message={candidateReadReason}
-          className={styles.mapReviewAlert}
-        />
-      ) : null}
+      <div className={styles.mapWorkspaceStatusGrid}>
+        {renderStatusCard({
+          icon: <NodeIndexOutlined />,
+          label: t("gameWorkspaceUi.map.statusCards.candidate", { defaultValue: "Candidate Map" }),
+          value: sourceCandidateResult?.map
+            ? t("gameWorkspaceUi.map.states.pendingCandidate", { count: 1, defaultValue: "待确认 1" })
+            : t("gameWorkspaceUi.map.states.missing", { defaultValue: "暂无" }),
+          detail: sourceCandidateResult?.map
+            ? t("gameWorkspaceUi.map.statusDetails.candidate", { defaultValue: "发现新的候选地图" })
+            : t("gameWorkspaceUi.map.statusDetails.noCandidate", { defaultValue: "当前没有候选地图" }),
+        })}
+        {renderStatusCard({
+          icon: <ApartmentOutlined />,
+          label: t("gameWorkspaceUi.map.statusCards.formal", { defaultValue: "Formal Map" }),
+          value: savedFormalMap
+            ? t("gameWorkspaceUi.map.states.saved", { defaultValue: "已存在" })
+            : t("gameWorkspaceUi.map.states.missing", { defaultValue: "暂无" }),
+          detail: savedFormalMap
+            ? t("gameWorkspaceUi.map.statusDetails.formal", {
+                value: formatDateTime(formalMap?.updated_at),
+                defaultValue: `上次更新：${formatDateTime(formalMap?.updated_at)}`,
+              })
+            : t("gameWorkspaceUi.map.statusDetails.noFormal", { defaultValue: "还没有正式地图" }),
+        })}
+        {renderStatusCard({
+          icon: <ClockCircleOutlined />,
+          label: t("gameWorkspaceUi.map.statusCards.release", { defaultValue: "Release Map" }),
+          value: releaseSnapshotResult?.map
+            ? t("gameWorkspaceUi.map.states.readonly", { defaultValue: "只读" })
+            : t("gameWorkspaceUi.map.states.missing", { defaultValue: "暂无" }),
+          detail: releaseSnapshotResult?.map
+            ? t("gameWorkspaceUi.map.statusDetails.release", {
+                value: releaseSnapshotResult?.source_release_id || releaseSnapshotResult?.release_id || "-",
+                defaultValue: `快照：${releaseSnapshotResult?.source_release_id || releaseSnapshotResult?.release_id || "-"}`,
+              })
+            : t("gameWorkspaceUi.map.statusDetails.noRelease", { defaultValue: "当前没有发布快照" }),
+        })}
+        {renderStatusCard({
+          icon: <AlertOutlined />,
+          label: t("gameWorkspaceUi.map.statusCards.warnings", { defaultValue: "关系警告" }),
+          value: String(formalMapRelationshipWarnings.length),
+          detail: formalMapRelationshipWarnings.length > 0
+            ? t("gameWorkspaceUi.map.statusDetails.warnings", { defaultValue: "需要关注的关系问题" })
+            : t("gameWorkspaceUi.map.statusDetails.noWarnings", { defaultValue: "当前没有关系警告" }),
+        })}
+      </div>
 
-      {candidateWriteReason ? (
-        <Alert
-          type="info"
-          showIcon
-          message={candidateWriteReason}
-          className={styles.mapReviewAlert}
-        />
-      ) : null}
-
-      {mapReadReason ? (
-        <Alert
-          type="info"
-          showIcon
-          message={mapReadReason}
-          className={styles.mapReviewAlert}
-        />
-      ) : null}
-
-      {saveFormalMapDisabledReason && !mapReadReason ? (
-        <Text type="secondary">{saveFormalMapDisabledReason}</Text>
-      ) : null}
-
-      <div className={styles.mapReviewGrid}>
-        <div className={styles.mapReviewPanel}>
-          <div className={styles.mapReviewPanelHeader}>
-            <Text strong>{t("gameProject.mapBuildCandidateTitle", { defaultValue: "Candidate Map Review" })}</Text>
-            <Space size={8} wrap>
-              {sourceCandidateResult?.candidate_source ? <Tag color="blue">{sourceCandidateResult.candidate_source}</Tag> : null}
-              {typeof sourceCandidateResult?.uses_existing_formal_map_as_hint === "boolean" ? (
-                <Tag color={sourceCandidateResult.uses_existing_formal_map_as_hint ? "gold" : "default"}>
-                  {sourceCandidateResult.uses_existing_formal_map_as_hint
-                    ? t("gameProject.formalHintUsedTag", { defaultValue: "formal map used as hint" })
-                    : t("gameProject.formalHintSkippedTag", { defaultValue: "formal map hint skipped" })}
-                </Tag>
-              ) : null}
-              {sourceCandidateResult ? (
-                <Tag color={sourceCandidateResult.is_formal_map ? "error" : "default"}>
-                  {sourceCandidateResult.is_formal_map
-                    ? t("gameProject.mapBuildFormalTag", { defaultValue: "formal" })
-                    : t("gameProject.mapBuildCandidateTag", { defaultValue: "candidate only" })}
-                </Tag>
-              ) : null}
-            </Space>
-          </div>
-
-          {sourceCandidateLoading ? (
-            <div className={styles.mapReviewEmpty}>{t("common.loading")}</div>
-          ) : sourceCandidateError ? (
-            <Alert
-              type="warning"
-              showIcon
-              message={t("gameProject.mapBuildReviewWarning", { defaultValue: "Candidate review is temporarily unavailable" })}
-              description={sourceCandidateError}
-              className={styles.mapReviewAlert}
-            />
-          ) : !sourceCandidateResult ? (
-            <Alert
-              type="info"
-              showIcon
-              message={t("gameProject.mapBuildReviewStartTitle", { defaultValue: "Build a candidate review from source" })}
-              description={t("gameProject.mapBuildReviewStartDescription", {
-                defaultValue: "This reads canonical facts only, compares Candidate Map against Formal Map or Release Map, and waits for explicit admin save before any formal change.",
-              })}
-              className={styles.mapReviewAlert}
-            />
-          ) : !sourceCandidateResult.map ? (
-            <Alert
-              type="info"
-              showIcon
-              message={t("gameProject.mapBuildNoCanonicalFactsTitle", { defaultValue: "No canonical facts available" })}
-              description={
-                sourceCandidateResult.warnings.length > 0
-                  ? sourceCandidateResult.warnings.join(" ")
-                  : t("gameProject.mapBuildNoCanonicalFactsDescription", {
-                      defaultValue: "Generate canonical facts first, then build a candidate review again.",
+      <div className={styles.mapWorkspaceRecommendation}>
+        <div>
+          <div className={styles.mapWorkspaceRecommendationLead}>
+            <ExclamationCircleOutlined className={styles.mapWorkspaceRecommendationIcon} />
+            <div>
+              <Text strong>{t("gameWorkspaceUi.map.recommendation.title", { defaultValue: "发现新的候选地图，请先查看差异，再决定是否保存为正式地图。" })}</Text>
+              <div className={styles.mapReviewHint}>
+                {sourceCandidateResult?.map
+                  ? t("gameWorkspaceUi.map.recommendation.hasCandidate", {
+                      defaultValue: "候选地图包含了新的数据变更，建议先查看差异与冲突，再进行决策。",
                     })
-              }
-              className={styles.mapReviewAlert}
-            />
-          ) : (
-            <>
-              <div className={styles.mapReviewMetaSummary}>
-                <div>candidate_source: {sourceCandidateResult.candidate_source}</div>
-                <div>is_formal_map: {String(sourceCandidateResult.is_formal_map)}</div>
-                <div>uses_existing_formal_map_as_hint: {String(sourceCandidateResult.uses_existing_formal_map_as_hint ?? false)}</div>
-                <div>base_map_source: {sourceCandidateResult.diff_review?.base_map_source || "none"}</div>
+                  : t("gameWorkspaceUi.map.recommendation.noCandidate", {
+                      defaultValue: "当前没有新的候选地图，必要时重新从 source canonical 生成。",
+                    })}
               </div>
-              {sourceCandidateResult.warnings.length > 0 ? (
-                <Alert
-                  type="warning"
-                  showIcon
-                  message={t("gameProject.mapBuildWarningsTitle", { defaultValue: "Candidate review warnings" })}
-                  description={
-                    <div className={styles.mapReviewWarningList}>
-                      {sourceCandidateResult.warnings.map((warning) => (
-                        <div key={warning}>{warning}</div>
-                      ))}
-                    </div>
-                  }
-                  className={styles.mapReviewAlert}
-                />
-              ) : null}
-              <div className={styles.mapReviewCounts}>
-                <Tag color="blue">systems {candidateSummary.systems}</Tag>
-                <Tag color="gold">tables {candidateSummary.tables}</Tag>
-                <Tag color="green">docs {candidateSummary.docs}</Tag>
-                <Tag color="purple">scripts {candidateSummary.scripts}</Tag>
-                <Tag color="cyan">relationships {candidateSummary.relationships}</Tag>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapBuildDiffReviewTitle", { defaultValue: "Diff Review" })}</Text>
-                <div className={styles.mapReviewDiffGrid}>
-                  {renderDiffReviewSection(
-                    t("gameProject.mapBuildDiffAddedTitle", { defaultValue: "added_refs" }),
-                    diffReviewSections[0]?.refs || [],
-                    t("gameProject.mapBuildDiffAddedEmpty", { defaultValue: "No added refs" }),
-                  )}
-                  {renderDiffReviewSection(
-                    t("gameProject.mapBuildDiffRemovedTitle", { defaultValue: "removed_refs" }),
-                    diffReviewSections[1]?.refs || [],
-                    t("gameProject.mapBuildDiffRemovedEmpty", { defaultValue: "No removed refs" }),
-                  )}
-                  {renderDiffReviewSection(
-                    t("gameProject.mapBuildDiffChangedTitle", { defaultValue: "changed_refs" }),
-                    diffReviewSections[2]?.refs || [],
-                    t("gameProject.mapBuildDiffChangedEmpty", { defaultValue: "No changed refs" }),
-                  )}
-                  {renderDiffReviewSection(
-                    t("gameProject.mapBuildDiffUnchangedTitle", { defaultValue: "unchanged_refs" }),
-                    diffReviewSections[3]?.refs || [],
-                    t("gameProject.mapBuildDiffUnchangedEmpty", { defaultValue: "No unchanged refs" }),
-                  )}
-                </div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapSystemsTitle", { defaultValue: "Systems" })}</Text>
-                <div className={styles.mapReviewList}>{renderSystemList(sourceCandidateResult.map.systems)}</div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapTablesTitle", { defaultValue: "Tables" })}</Text>
-                <div className={styles.mapReviewList}>{renderTableList(sourceCandidateResult.map.tables)}</div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapDocsTitle", { defaultValue: "Docs" })}</Text>
-                <div className={styles.mapReviewList}>{renderDocList(sourceCandidateResult.map.docs)}</div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapScriptsTitle", { defaultValue: "Scripts" })}</Text>
-                <div className={styles.mapReviewList}>{renderScriptList(sourceCandidateResult.map.scripts)}</div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapRelationshipsTitle", { defaultValue: "Relationships" })}</Text>
-                <div className={styles.mapReviewList}>{renderRelationshipList(sourceCandidateResult.map.relationships)}</div>
-              </div>
-            </>
-          )}
+            </div>
+          </div>
         </div>
-
-        <div className={styles.mapReviewPanel}>
-          <div className={styles.mapReviewPanelHeader}>
-            <Text strong>{t("gameProject.formalMapTitle", { defaultValue: "Formal Map" })}</Text>
-            <Space size={8} wrap>
-              {formalMapDraftDirty ? <Tag color="warning">{t("gameProject.formalMapDraftDirtyTag", { defaultValue: "unsaved status changes" })}</Tag> : null}
-              {formalMap?.map_hash ? <Tag color="success">{formalMap.map_hash}</Tag> : null}
-              <Tooltip title={statusEditDisabledReason || undefined}>
-                <span>
-                  <Button
-                    size="small"
-                    type="primary"
-                    onClick={handleSaveFormalMapDraft}
-                    loading={savingFormalMapDraft}
-                    disabled={!canSaveFormalMapDraft}
-                  >
-                    {t("gameProject.saveFormalMapStatusButton", { defaultValue: "Save status changes" })}
-                  </Button>
-                </span>
-              </Tooltip>
-            </Space>
-          </div>
-
-          <div className={styles.mapReviewHint}>
-            {t("gameProject.formalMapReviewBoundaryHint", {
-              defaultValue: "Formal Map changes persist only after explicit save. They do not auto-build, auto-publish, or set current release.",
-            })}
-          </div>
-
-          {mapReadReason ? (
-            <Alert type="info" showIcon message={mapReadReason} className={styles.mapReviewAlert} />
-          ) : formalMapLoading ? (
-            <div className={styles.mapReviewEmpty}>{t("common.loading")}</div>
-          ) : formalMapError ? (
-            <Alert
-              type="warning"
-              showIcon
-              message={t("gameProject.formalMapLoadWarning", { defaultValue: "Formal map is temporarily unavailable" })}
-              description={formalMapError}
-              className={styles.mapReviewAlert}
-            />
-          ) : formalMap?.mode === NO_FORMAL_MAP_MODE ? (
-            <Alert
-              type="info"
-              showIcon
-              message={t("gameProject.noSavedFormalMapTitle", { defaultValue: "no saved formal map" })}
-              description={t("gameProject.noSavedFormalMapDescription", {
-                defaultValue: "Use Save Candidate as Formal Map first. Status editing is available only on saved formal map.",
-              })}
-              className={styles.mapReviewAlert}
-            />
-          ) : !savedFormalMap ? (
-            <div className={styles.mapReviewEmpty}>{t("gameProject.formalMapEmpty", { defaultValue: "No saved formal map" })}</div>
-          ) : (
-            <>
-              {statusEditDisabledReason ? <Text type="secondary">{statusEditDisabledReason}</Text> : null}
-              {formalMapRelationshipWarnings.length > 0 ? (
-                <Alert
-                  type="warning"
-                  showIcon
-                  message={t("gameProject.formalMapRelationshipWarningTitle", {
-                    defaultValue: "Deprecated or ignored items may still be referenced by relationships.",
-                  })}
-                  description={
-                    <div className={styles.mapReviewWarningList}>
-                      {formalMapRelationshipWarnings.map((warning) => (
-                        <div key={warning}>{warning}</div>
-                      ))}
-                    </div>
-                  }
-                  className={styles.mapReviewAlert}
-                />
-              ) : null}
-              <div className={styles.mapReviewMetaSummary}>
-                <div>{t("gameProject.formalMapUpdatedAt", { defaultValue: "updated_at" })}: {formatDateTime(formalMap?.updated_at)}</div>
-                <div>{t("gameProject.formalMapUpdatedBy", { defaultValue: "updated_by" })}: {formalMap?.updated_by || "-"}</div>
-                <div>
-                  {formalMapDraftDirty
-                    ? t("gameProject.formalMapDraftDirtyHint", {
-                        defaultValue: "Status changes are local until you save them.",
-                      })
-                    : t("gameProject.formalMapDraftCleanHint", {
-                        defaultValue: "No unsaved status changes.",
-                      })}
-                </div>
-              </div>
-              <div className={styles.mapReviewCounts}>
-                <Tag color="blue">systems {formalSummary.systems}</Tag>
-                <Tag color="gold">tables {formalSummary.tables}</Tag>
-                <Tag color="green">docs {formalSummary.docs}</Tag>
-                <Tag color="purple">scripts {formalSummary.scripts}</Tag>
-                <Tag color="cyan">relationships {formalSummary.relationships}</Tag>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapSystemsTitle", { defaultValue: "Systems" })}</Text>
-                <div className={styles.mapReviewList}>{renderSystemList(formalMapDraft?.systems ?? [], {
-                  editable: true,
-                  statusControlDisabled: !canEditFormalMapStatuses,
-                  statusControlDisabledReason: statusEditDisabledReason,
-                  onStatusChange: (systemId, nextStatus) => updateFormalMapDraftStatus("systems", systemId, nextStatus),
-                })}</div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapTablesTitle", { defaultValue: "Tables" })}</Text>
-                <div className={styles.mapReviewList}>{renderTableList(formalMapDraft?.tables ?? [], {
-                  editable: true,
-                  statusControlDisabled: !canEditFormalMapStatuses,
-                  statusControlDisabledReason: statusEditDisabledReason,
-                  onStatusChange: (tableId, nextStatus) => updateFormalMapDraftStatus("tables", tableId, nextStatus),
-                })}</div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapDocsTitle", { defaultValue: "Docs" })}</Text>
-                <div className={styles.mapReviewList}>{renderDocList(formalMapDraft?.docs ?? [], {
-                  editable: true,
-                  statusControlDisabled: !canEditFormalMapStatuses,
-                  statusControlDisabledReason: statusEditDisabledReason,
-                  onStatusChange: (docId, nextStatus) => updateFormalMapDraftStatus("docs", docId, nextStatus),
-                })}</div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapScriptsTitle", { defaultValue: "Scripts" })}</Text>
-                <div className={styles.mapReviewList}>{renderScriptList(formalMapDraft?.scripts ?? [], {
-                  editable: true,
-                  statusControlDisabled: !canEditFormalMapStatuses,
-                  statusControlDisabledReason: statusEditDisabledReason,
-                  onStatusChange: (scriptId, nextStatus) => updateFormalMapDraftStatus("scripts", scriptId, nextStatus),
-                })}</div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapRelationshipsTitle", { defaultValue: "Relationships" })}</Text>
-                <div className={styles.mapReviewList}>{renderRelationshipList(formalMapDraft?.relationships ?? [])}</div>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className={styles.mapReviewPanel}>
-          <div className={styles.mapReviewPanelHeader}>
-            <Text strong>{t("gameProject.releaseMapTitle", { defaultValue: "Release Map" })}</Text>
-            <Space size={8} wrap>
-              {releaseSnapshotResult?.candidate_source ? <Tag color="cyan">{releaseSnapshotResult.candidate_source}</Tag> : null}
-              {releaseSnapshotResult?.source_release_id || releaseSnapshotResult?.release_id ? (
-                <Tag color="blue">release_id {releaseSnapshotResult?.source_release_id || releaseSnapshotResult?.release_id}</Tag>
-              ) : null}
-            </Space>
-          </div>
-
-          <div className={styles.mapReviewHint}>
-            {t("gameProject.releaseMapReviewHint", {
-              defaultValue: "Release Map is a published snapshot for review only. It is not used as the editing source for Map Build Review.",
-            })}
-          </div>
-
-          {candidateReadReason ? (
-            <Alert type="info" showIcon message={candidateReadReason} className={styles.mapReviewAlert} />
-          ) : releaseSnapshotLoading ? (
-            <div className={styles.mapReviewEmpty}>{t("common.loading")}</div>
-          ) : releaseSnapshotError ? (
-            <Alert
-              type={releaseSnapshotError === NO_CURRENT_RELEASE_DETAIL ? "info" : "warning"}
-              showIcon
-              message={
-                releaseSnapshotError === NO_CURRENT_RELEASE_DETAIL
-                  ? t("gameProject.mapCandidateNoCurrentTitle", { defaultValue: "No current knowledge release" })
-                  : t("gameProject.mapReleaseSnapshotWarning", { defaultValue: "Release map snapshot is temporarily unavailable" })
-              }
-              description={
-                releaseSnapshotError === NO_CURRENT_RELEASE_DETAIL
-                  ? t("gameProject.mapCandidateNoCurrentDescription", {
-                      defaultValue: "Set a current release first if you want to compare against a release snapshot.",
-                    })
-                  : releaseSnapshotError
-              }
-              className={styles.mapReviewAlert}
-            />
-          ) : !releaseSnapshotResult?.map ? (
-            <div className={styles.mapReviewEmpty}>{t("gameProject.releaseMapSummaryEmpty", { defaultValue: "No release map snapshot available" })}</div>
-          ) : (
-            <>
-              <div className={styles.mapReviewMetaSummary}>
-                <div>candidate_source: {releaseSnapshotResult.candidate_source}</div>
-                <div>is_formal_map: {String(releaseSnapshotResult.is_formal_map)}</div>
-                <div>source_release_id: {releaseSnapshotResult.source_release_id || releaseSnapshotResult.release_id || "-"}</div>
-              </div>
-              <div className={styles.mapReviewCounts}>
-                <Tag color="blue">systems {releaseSummary.systems}</Tag>
-                <Tag color="gold">tables {releaseSummary.tables}</Tag>
-                <Tag color="green">docs {releaseSummary.docs}</Tag>
-                <Tag color="purple">scripts {releaseSummary.scripts}</Tag>
-                <Tag color="cyan">relationships {releaseSummary.relationships}</Tag>
-              </div>
-              {releaseSnapshotResult.warnings.length > 0 ? (
-                <Alert
-                  type="warning"
-                  showIcon
-                  message={t("gameProject.releaseMapWarningsTitle", { defaultValue: "Release snapshot warnings" })}
-                  description={
-                    <div className={styles.mapReviewWarningList}>
-                      {releaseSnapshotResult.warnings.map((warning) => (
-                        <div key={warning}>{warning}</div>
-                      ))}
-                    </div>
-                  }
-                  className={styles.mapReviewAlert}
-                />
-              ) : null}
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapSystemsTitle", { defaultValue: "Systems" })}</Text>
-                <div className={styles.mapReviewList}>{renderSystemList(releaseSnapshotResult.map.systems)}</div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapTablesTitle", { defaultValue: "Tables" })}</Text>
-                <div className={styles.mapReviewList}>{renderTableList(releaseSnapshotResult.map.tables)}</div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapDocsTitle", { defaultValue: "Docs" })}</Text>
-                <div className={styles.mapReviewList}>{renderDocList(releaseSnapshotResult.map.docs)}</div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapScriptsTitle", { defaultValue: "Scripts" })}</Text>
-                <div className={styles.mapReviewList}>{renderScriptList(releaseSnapshotResult.map.scripts)}</div>
-              </div>
-              <div className={styles.mapReviewBlock}>
-                <Text strong>{t("gameProject.mapRelationshipsTitle", { defaultValue: "Relationships" })}</Text>
-                <div className={styles.mapReviewList}>{renderRelationshipList(releaseSnapshotResult.map.relationships)}</div>
-              </div>
-            </>
-          )}
+        <div className={styles.mapWorkspaceRecommendationActions}>
+          <Button onClick={() => setActiveMapTab("candidate") }>
+            {t("gameWorkspaceUi.map.actions.viewDiff", { defaultValue: "查看差异" })}
+          </Button>
+          <Tooltip title={saveFormalMapDisabledReason || undefined}>
+            <span>
+              <Button type="primary" onClick={handleSaveFormalMap} loading={savingFormalMap} disabled={!canSaveFormalMap}>
+                {t("gameWorkspaceUi.map.actions.saveFormal", { defaultValue: "保存为正式地图" })}
+              </Button>
+            </span>
+          </Tooltip>
+          <Tooltip title={candidateWriteReason || undefined}>
+            <span>
+              <Button
+                onClick={handleBuildSourceCandidate}
+                loading={sourceCandidateLoading}
+                disabled={!selectedAgent || !!candidateWriteReason}
+              >
+                {t("gameWorkspaceUi.map.actions.rebuildCandidate", { defaultValue: "重新生成候选地图" })}
+              </Button>
+            </span>
+          </Tooltip>
         </div>
       </div>
+
+      <Tabs
+        className={styles.mapWorkspaceTabs}
+        activeKey={activeMapTab}
+        onChange={(nextKey) => setActiveMapTab(nextKey as MapTabKey)}
+        tabBarExtraContent={
+          <Button
+            type="text"
+            icon={<ReloadOutlined />}
+            onClick={() => selectedAgent && fetchMapReviewData(selectedAgent)}
+            loading={releaseSnapshotLoading || formalMapLoading || sourceCandidateLoading}
+            disabled={!selectedAgent}
+          >
+            {t("common.refresh")}
+          </Button>
+        }
+        items={[
+          {
+            key: "candidate",
+            label: t("gameWorkspaceUi.map.tabs.candidate", { defaultValue: "候选地图" }),
+            children: candidateTab,
+          },
+          {
+            key: "formal",
+            label: t("gameWorkspaceUi.map.tabs.formal", { defaultValue: "正式地图" }),
+            children: formalTab,
+          },
+          {
+            key: "release",
+            label: t("gameWorkspaceUi.map.tabs.release", { defaultValue: "发布快照" }),
+            children: releaseTab,
+          },
+          {
+            key: "warnings",
+            label: t("gameWorkspaceUi.map.tabs.warnings", { defaultValue: "冲突与警告" }),
+            children: warningsTab,
+          },
+        ]}
+      />
+
+      <Drawer
+        title={detailDrawer?.title || t("gameWorkspaceUi.map.labels.details", { defaultValue: "详情" })}
+        open={!!detailDrawer}
+        onClose={() => setDetailDrawer(null)}
+        width={560}
+        destroyOnHidden={false}
+      >
+        {detailDrawer ? (
+          <div className={styles.drawerLayout}>
+            {detailDrawer.subtitle ? <Text type="secondary">{detailDrawer.subtitle}</Text> : null}
+            <div className={styles.drawerList}>
+              {detailDrawer.lines.map((line) => (
+                <div key={`${line.label}-${line.value}`} className={styles.drawerListItem}>
+                  <Text strong>{line.label}</Text>
+                  <div className={styles.drawerListDetail}>{line.value || "-"}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </Drawer>
     </div>
   );
 }

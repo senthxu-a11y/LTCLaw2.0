@@ -16,6 +16,7 @@
     "disabled": "已禁用",
     "preview": "预览",
     "view": "查看",
+    "retry": "重试",
     "content": "内容",
     "loading": "加载中...",
     "copy": "复制",
@@ -1889,6 +1890,234 @@
       "done": "已完成",
       "abandoned": "已放弃"
     }
+  },
+  "gameWorkspaceUi": {
+    "project": {
+      "title": "项目配置",
+      "currentProject": "当前项目",
+      "labels": {
+        "suggestion": "建议操作",
+        "localProjectRoot": "本地项目目录",
+        "tablesRoot": "数据表目录",
+        "discovered": "已发现",
+        "available": "可用",
+        "issues": "异常",
+        "lastChecked": "最近检查",
+        "effectiveProjectRoot": "Effective Project Root",
+        "projectRootSource": "Project Root Source",
+        "projectKey": "Project Key",
+        "projectBundleRoot": "Project Bundle Root",
+        "userConfigRoot": "user_config.svn_local_root",
+        "projectConfigRoot": "project_config.svn.root",
+        "blockingReason": "Blocking Reason",
+        "nextAction": "Next Action",
+        "frontendBuild": "Frontend Build",
+        "frontendBuildTime": "Frontend Build Time",
+        "apiBase": "API Base",
+        "capabilityRole": "Role",
+        "capabilitySource": "Capability Source"
+      },
+      "actions": {
+        "saveAndContinue": "保存并继续",
+        "discover": "检查数据源",
+        "viewIssues": "查看异常",
+        "startColdStart": "进入冷启动构建",
+        "viewJob": "查看构建状态",
+        "browse": "浏览",
+        "manualInputOnly": "请手动输入目录路径",
+        "saveConfig": "保存配置",
+        "openAdvanced": "高级配置",
+        "openMap": "进入 Map 编辑器",
+        "copyDiagnostics": "复制诊断",
+        "newProjectName": "新项目"
+      },
+      "access": {
+        "title": "项目接入",
+        "hint": "只保留会影响接入与冷启动判断的核心字段。",
+        "multiRootSummary": "{{first}} 等共 {{count}} 个目录",
+        "unsaved": "当前输入与已保存配置不一致，保存后才会生效。"
+      },
+      "sourceStatus": {
+        "title": "数据源状态",
+        "hint": "首屏只看结论、异常数量和下一步，不展开完整文件清单。",
+        "notChecked": "尚未检查数据源。",
+        "noAvailable": "当前没有可用于冷启动的可用数据表。"
+      },
+      "nextStep": {
+        "title": "下一步操作",
+        "hint": "请按以下建议步骤完成项目准备，以便顺利进入冷启动构建流程。"
+      },
+      "advanced": {
+        "title": "高级配置",
+        "baseInfo": "项目基础信息",
+        "tablesRules": "数据源规则",
+        "pathsAndDiagnostics": "项目路径与诊断",
+        "automation": "自动化与兼容设置",
+        "storage": "存储路径",
+        "coldStartJob": "冷启动任务状态"
+      },
+      "sourceDrawer": {
+        "title": "数据源详情",
+        "empty": "当前没有可显示的项目。",
+        "tabs": {
+          "issues": "异常",
+          "all": "全部",
+          "available": "可用",
+          "excluded": "已排除",
+          "unsupported": "不支持",
+          "errors": "错误"
+        }
+      },
+      "status": {
+        "defaultReason": "当前状态",
+        "emptyTitle": "项目尚未接入完成",
+        "emptyReason": "阻塞原因",
+        "emptyReasonText": "尚未填写本地项目目录。",
+        "emptySuggestion": "先填写并保存本地项目目录与数据表目录。",
+        "dirtyTitle": "配置尚未保存",
+        "dirtyReason": "阻塞原因",
+        "dirtyReasonText": "当前输入与已保存配置不一致。",
+        "dirtySuggestion": "先保存当前修改，再继续检查数据源。",
+        "notScannedTitle": "尚未检查数据源",
+        "notScannedReason": "阻塞原因",
+        "notScannedReasonText": "尚未执行数据源检查。",
+        "notScannedSuggestion": "先执行一次数据源检查，确认可用表和异常项。",
+        "warningTitle": "发现需要处理的数据源问题",
+        "warningReason": "阻塞原因",
+        "warningReasonText": "当前共有 {{count}} 个异常或待处理项。",
+        "warningSuggestion": "先查看异常，再决定是否继续进入冷启动构建。",
+        "blockedTitle": "冷启动构建暂时不可继续",
+        "blockedReason": "阻塞原因",
+        "blockedSuggestion": "先补齐数据源或重新检查，直到出现可用表。",
+        "readyTitle": "项目已准备好进入冷启动构建",
+        "readyReason": "当前状态",
+        "readyReasonText": "数据源已满足冷启动构建条件。",
+        "readySuggestion": "可以直接进入冷启动构建，然后转到 Map 编辑器评审结果。",
+        "runningTitle": "冷启动构建进行中",
+        "runningReason": "当前阶段",
+        "runningSuggestion": "等待构建完成，或查看当前任务状态和告警。",
+        "errorTitle": "冷启动任务需要人工处理",
+        "errorReason": "当前状态",
+        "errorSuggestion": "先查看任务状态，再决定是重试还是返回修正数据源。",
+        "unknownTitle": "当前状态待确认",
+        "unknownReasonText": "当前状态还不能明确判断。",
+        "unknownSuggestion": "先检查数据源或查看高级诊断信息。"
+      }
+    },
+    "map": {
+      "title": "Map 编辑器",
+      "pageHint": "候选地图只用于评审，正式地图只在明确保存后更新，发布快照保持只读对比。",
+      "currentProject": "当前项目：{{project}}",
+      "summary": {
+        "title": "Map 编辑器现在独立承担地图决策。",
+        "hint": "候选地图、正式地图、发布快照和关系警告已经迁移到独立页面查看。"
+      },
+      "statusCards": {
+        "candidate": "候选地图",
+        "formal": "正式地图",
+        "release": "发布快照",
+        "warnings": "关系警告"
+      },
+      "states": {
+        "available": "可查看",
+        "saved": "已存在",
+        "snapshot": "可查看",
+        "missing": "暂无",
+        "pendingCandidate": "待确认 {{count}}",
+        "readonly": "只读"
+      },
+      "statusDetails": {
+        "candidate": "发现新的候选地图",
+        "noCandidate": "当前没有候选地图",
+        "formal": "上次更新：{{value}}",
+        "noFormal": "还没有正式地图",
+        "release": "快照：{{value}}",
+        "noRelease": "当前没有发布快照",
+        "warnings": "需要关注的关系问题",
+        "noWarnings": "当前没有关系警告"
+      },
+      "recommendation": {
+        "title": "发现新的候选地图，请先查看差异，再决定是否保存为正式地图。",
+        "hasCandidate": "候选地图包含了新的数据变更，建议先查看差异与冲突，再进行决策。",
+        "noCandidate": "当前没有新的候选地图，必要时重新从 source canonical 生成。"
+      },
+      "actions": {
+        "viewDiff": "查看差异",
+        "saveFormal": "保存为正式地图",
+        "rebuildCandidate": "重新生成候选地图",
+        "openWarningsTab": "查看全部",
+        "filterByType": "按类型筛选",
+        "viewDetails": "查看详情",
+        "collapseChanges": "收起",
+        "expandChanges": "查看全部 {{count}} 项变更",
+        "discardDraft": "放弃修改",
+        "saveDraft": "保存状态修改"
+      },
+      "tabs": {
+        "candidate": "候选地图",
+        "formal": "正式地图",
+        "release": "发布快照",
+        "warnings": "冲突与警告"
+      },
+      "candidate": {
+        "overview": "候选地图概览",
+        "diff": "差异详情",
+        "warningsPreview": "冲突与警告（预览）",
+        "formalHintUsed": "使用正式地图提示"
+      },
+      "formal": {
+        "noFormalMap": "当前还没有正式地图，请先从候选地图保存。",
+        "unsavedTitle": "有未保存的状态修改。"
+      },
+      "release": {
+        "empty": "暂无发布快照"
+      },
+      "warnings": {
+        "title": "冲突与警告",
+        "empty": "暂无关系警告",
+        "relationships": "当前正式地图存在关系警告。",
+        "countHint": "当前发现 {{count}} 个问题"
+      },
+      "labels": {
+        "status": "状态",
+        "details": "详情",
+        "systems": "系统",
+        "tables": "表格",
+        "docs": "文档",
+        "scripts": "脚本",
+        "relationships": "关系",
+        "generatedAt": "生成时间",
+        "updatedAt": "更新时间",
+        "releaseId": "发布 ID",
+        "baseSource": "对比基线",
+        "candidateSource": "候选来源",
+        "contentStats": "内容统计",
+        "changeSummary": "变更摘要",
+        "added": "新增",
+        "removed": "删除",
+        "changed": "变更",
+        "system": "系统",
+        "table": "表格",
+        "doc": "文档",
+        "script": "脚本"
+      },
+      "sections": {
+        "systems": "系统",
+        "tables": "表格",
+        "docs": "文档",
+        "scripts": "脚本"
+      },
+      "statusValues": {
+        "active": "有效",
+        "deprecated": "已弃用",
+        "ignored": "已忽略"
+      },
+      "emptySection": "当前没有可显示的内容。",
+      "emptyChanges": "暂无变更。"
+    }
+  },
+  "gameWorkbench": {
+    "emptyTablesCatalog": "当前没有可用表。可先重建本地表索引，再重新加载需要的数据表。"
   },
   "gameProject": {
     "title": "项目配置",

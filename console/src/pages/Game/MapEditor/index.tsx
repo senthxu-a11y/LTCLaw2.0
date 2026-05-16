@@ -1,28 +1,32 @@
-import { Card, Typography } from "antd";
+import { DownOutlined } from "@ant-design/icons";
+import { Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
+import { useAgentStore } from "@/stores/agentStore";
 import FormalMapWorkspace from "../components/FormalMapWorkspace";
+import styles from "../GameProject.module.less";
 
-const { Paragraph } = Typography;
+const { Text } = Typography;
 
 export default function MapEditorPage() {
   const { t } = useTranslation();
+  const { selectedAgent, agents } = useAgentStore();
+  const selectedAgentSummary = agents.find((agent) => agent.id === selectedAgent);
+  const currentProjectName = selectedAgentSummary?.name || selectedAgent || "-";
 
   return (
-    <div style={{ padding: "0 0 16px" }}>
+    <div className={styles.mapEditorPage}>
       <PageHeader
-        parent={t("nav.game")}
-        current={t("nav.gameMapEditor", "Map Editor")}
+        items={[{ title: t("gameWorkspaceUi.map.title", { defaultValue: "Map 编辑器" }) }]}
+        className={styles.mapEditorHeader}
+        extra={
+          <div className={styles.mapHeaderSelector}>
+            <Text strong>{currentProjectName}</Text>
+            <DownOutlined />
+          </div>
+        }
       />
-      <Card>
-        <Paragraph type="secondary" style={{ marginBottom: 0, maxWidth: 720 }}>
-          {t(
-            "gameProject.mapEditorLandingHint",
-            "Map Editor now owns source Candidate Map review, Diff Review, explicit Save as Formal Map, release snapshot comparison, status-only edits, and relationship warnings. Candidate Map is suggested only, Formal Map is saved only after admin confirmation, and Release Map remains a review snapshot rather than the editing source.",
-          )}
-        </Paragraph>
-        <FormalMapWorkspace mode="full" />
-      </Card>
+      <FormalMapWorkspace mode="full" />
     </div>
   );
 }

@@ -1836,7 +1836,7 @@ export default function NumericWorkbench() {
               <Empty
                 style={{ padding: 24 }}
                 description={t("gameWorkbench.emptyTablesCatalog", {
-                  defaultValue: "当前没有可用表。可先重建本地表索引，再重新加载 HeroTable 等数据表。",
+                  defaultValue: "当前没有可用表。可先重建本地表索引，再重新加载需要的数据表。",
                 })}
               >
                 <Button

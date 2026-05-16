@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
-import { Form, Input, Switch, Button, Card } from "@agentscope-ai/design";
-import { CopyOutlined } from "@ant-design/icons";
-import { Alert, Descriptions, Empty, InputNumber, Modal, Progress, Space, Tag, Typography } from "antd";
-import { useNavigate } from "react-router-dom";
+import { Form, Input, Switch, Button } from "@agentscope-ai/design";
+import {
+  CheckCircleOutlined,
+  CopyOutlined,
+  DatabaseOutlined,
+  DownOutlined,
+  ExclamationCircleOutlined,
+  FolderOpenOutlined,
+  LoadingOutlined,
+  SettingOutlined,
+} from "@ant-design/icons";
+import { Alert, Descriptions, Drawer, Empty, InputNumber, Modal, Progress, Space, Tabs, Tooltip, Typography } from "antd";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { useAppMessage } from "@/hooks/useAppMessage";
 import { gameApi } from "../../api/modules/game";
@@ -21,7 +30,6 @@ import type {
 } from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
 import { copyText } from "../Chat/utils";
-import FormalMapWorkspace from "./components/FormalMapWorkspace";
 import {
   buildProjectSetupDiagnosticsText,
   canStartRuleOnlyColdStartBuild,
@@ -41,6 +49,15 @@ import styles from "./GameProject.module.less";
 
 const { TextArea } = Input;
 const { Text } = Typography;
+
+type ProjectSetupViewState = {
+  level: "empty" | "dirty" | "notScanned" | "warning" | "blocked" | "ready" | "running" | "error" | "unknown";
+  titleKey: string;
+  suggestionKey: string;
+  reasonKey?: string;
+  reasonText?: string;
+  primaryAction: "save" | "discover" | "viewIssues" | "coldStart" | "viewJob" | null;
+};
 
 interface GameProjectFormData {
   name: string;
@@ -66,7 +83,7 @@ export default function GameProject() {
   const { t } = useTranslation();
   const { message } = useAppMessage();
   const navigate = useNavigate();
-  const { selectedAgent, addAgent, setSelectedAgent } = useAgentStore();
+  const { selectedAgent, agents, addAgent, setSelectedAgent } = useAgentStore();
   const [form] = Form.useForm<GameProjectFormData>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -92,7 +109,8 @@ export default function GameProject() {
   const [coldStartJob, setColdStartJob] = useState<ColdStartJobState | null>(null);
   const [creatingColdStartJob, setCreatingColdStartJob] = useState(false);
   const [cancellingColdStartJob, setCancellingColdStartJob] = useState(false);
-  const [restoringColdStartJob, setRestoringColdStartJob] = useState(false);
+  const [advancedDrawerOpen, setAdvancedDrawerOpen] = useState(false);
+  const [sourceDrawerOpen, setSourceDrawerOpen] = useState(false);
 
   const applySetupStatus = useCallback((status: ProjectSetupStatusResponse | null) => {
     setSetupStatus(status);
@@ -367,39 +385,6 @@ export default function GameProject() {
       ]
     : [];
 
-  const workspaceEntries = [
-    {
-      key: "knowledge",
-      title: t("nav.gameKnowledge", { defaultValue: "Knowledge" }),
-      description: t("gameProject.workspaceEntryKnowledgeDescription", {
-        defaultValue: "Release status, RAG, citations, and readonly knowledge summaries live on the dedicated Knowledge page.",
-      }),
-      actionLabel: t("gameProject.openKnowledgeWorkspaceButton", { defaultValue: "Open Knowledge page" }),
-      path: "/game/knowledge",
-      tone: t("gameProject.workspaceEntryKnowledgeTone", { defaultValue: "Daily knowledge runtime" }),
-    },
-    {
-      key: "map",
-      title: t("nav.gameMapEditor", { defaultValue: "Map Editor" }),
-      description: t("gameProject.workspaceEntryMapDescription", {
-        defaultValue: "Formal map review, save-as-formal-map, and status-only edits now live on the dedicated Map Editor page.",
-      }),
-      actionLabel: t("gameProject.openMapEditorWorkspaceButton", { defaultValue: "Open Map Editor" }),
-      path: "/game/map",
-      tone: t("gameProject.workspaceEntryMapTone", { defaultValue: "Formal map workspace" }),
-    },
-    {
-      key: "numeric-workbench",
-      title: t("gameProject.workspaceEntryNumericWorkbenchTitle", { defaultValue: "Numeric Workbench" }),
-      description: t("gameProject.workspaceEntryWorkbenchDescription", {
-        defaultValue: "Use NumericWorkbench for draft-only table edits and citation-targeted numeric changes.",
-      }),
-      actionLabel: t("gameProject.openNumericWorkbenchButton", { defaultValue: "Open NumericWorkbench" }),
-      path: "/numeric-workbench",
-      tone: t("gameProject.workspaceEntryWorkbenchTone", { defaultValue: "Draft editing workspace" }),
-    },
-  ];
-
   const discoverySummary = getProjectSetupDiscoverySummary(setupStatus, discoveryResult);
   const discoveryNotScanned = discoverySummary.status === "not_scanned";
   const effectiveReadiness = getEffectiveProjectSetupBuildReadiness(setupStatus, discoveryResult);
@@ -412,6 +397,115 @@ export default function GameProject() {
   const unsupportedFiles = discoveryResult?.unsupported_files ?? [];
   const excludedFiles = discoveryResult?.excluded_files ?? [];
   const discoveryErrors = discoveryResult?.errors ?? [];
+  const selectedAgentSummary = agents.find((agent) => agent.id === selectedAgent);
+  const currentProjectName = selectedAgentSummary?.name || setupStatus?.project_key || selectedAgent || "-";
+  const tablesConfigDirty =
+    joinProjectSetupLines(splitProjectSetupLines(tablesRootsInput)) !== joinProjectSetupLines(setupStatus?.tables_config.roots) ||
+    joinProjectSetupLines(splitProjectSetupLines(tablesIncludeInput)) !== joinProjectSetupLines(setupStatus?.tables_config.include) ||
+    joinProjectSetupLines(splitProjectSetupLines(tablesExcludeInput)) !== joinProjectSetupLines(setupStatus?.tables_config.exclude) ||
+    tablesHeaderRow !== (setupStatus?.tables_config.header_row || 1) ||
+    joinProjectSetupLines(splitProjectSetupLines(tablesPrimaryKeysInput)) !== joinProjectSetupLines(setupStatus?.tables_config.primary_key_candidates);
+  const sourceIssueCount = recognizedButNotSupportedFiles.length + unsupportedFiles.length + excludedFiles.length + discoveryErrors.length;
+  const latestDiscoveryLabel = "-";
+  const advancedStorageItems = [
+    [t("gameWorkspaceUi.project.labels.effectiveProjectRoot", { defaultValue: "Effective Project Root" }), setupStatus?.project_root || "-"],
+    [t("gameWorkspaceUi.project.labels.projectRootSource", { defaultValue: "Project Root Source" }), setupStatus?.project_root_source || "-"],
+    [t("gameWorkspaceUi.project.labels.projectKey", { defaultValue: "Project Key" }), setupStatus?.project_key || "-"],
+    [t("gameWorkspaceUi.project.labels.projectBundleRoot", { defaultValue: "Project Bundle Root" }), setupStatus?.project_bundle_root || "-"],
+    [t("gameWorkspaceUi.project.labels.userConfigRoot", { defaultValue: "user_config.svn_local_root" }), setupStatus?.user_config_svn_local_root || "-"],
+    [t("gameWorkspaceUi.project.labels.projectConfigRoot", { defaultValue: "project_config.svn.root" }), setupStatus?.project_config_svn_root || "-"],
+    [t("gameWorkspaceUi.project.labels.blockingReason", { defaultValue: "Blocking Reason" }), effectiveReadiness.blocking_reason || "-"],
+    [t("gameWorkspaceUi.project.labels.nextAction", { defaultValue: "Next Action" }), effectiveReadiness.next_action || "-"],
+  ] as const;
+  const projectSetupViewState: ProjectSetupViewState = (() => {
+    if (coldStartJob && coldStartProgress.isRunning) {
+      return {
+        level: "running",
+        titleKey: "gameWorkspaceUi.project.status.runningTitle",
+        reasonKey: "gameWorkspaceUi.project.status.runningReason",
+        reasonText: coldStartJob.message || coldStartJob.stage,
+        suggestionKey: "gameWorkspaceUi.project.status.runningSuggestion",
+        primaryAction: "viewJob",
+      };
+    }
+    if (coldStartJob && (coldStartJob.status === "failed" || coldStartJob.status === "cancelled")) {
+      return {
+        level: "error",
+        titleKey: "gameWorkspaceUi.project.status.errorTitle",
+        reasonKey: "gameWorkspaceUi.project.status.errorReason",
+        reasonText: coldStartJob.message || coldStartJob.status,
+        suggestionKey: "gameWorkspaceUi.project.status.errorSuggestion",
+        primaryAction: "viewJob",
+      };
+    }
+    if (projectRootDirty || tablesConfigDirty) {
+      return {
+        level: "dirty",
+        titleKey: "gameWorkspaceUi.project.status.dirtyTitle",
+        reasonKey: "gameWorkspaceUi.project.status.dirtyReason",
+        reasonText: t("gameWorkspaceUi.project.status.dirtyReasonText", { defaultValue: "当前输入与已保存配置不一致。" }),
+        suggestionKey: "gameWorkspaceUi.project.status.dirtySuggestion",
+        primaryAction: "save",
+      };
+    }
+    if (!setupStatus?.project_root) {
+      return {
+        level: "empty",
+        titleKey: "gameWorkspaceUi.project.status.emptyTitle",
+        reasonKey: "gameWorkspaceUi.project.status.emptyReason",
+        reasonText: t("gameWorkspaceUi.project.status.emptyReasonText", { defaultValue: "尚未填写本地项目目录。" }),
+        suggestionKey: "gameWorkspaceUi.project.status.emptySuggestion",
+        primaryAction: "save",
+      };
+    }
+    if (discoveryNotScanned) {
+      return {
+        level: "notScanned",
+        titleKey: "gameWorkspaceUi.project.status.notScannedTitle",
+        reasonKey: "gameWorkspaceUi.project.status.notScannedReason",
+        reasonText: t("gameWorkspaceUi.project.status.notScannedReasonText", { defaultValue: "尚未执行数据源检查。" }),
+        suggestionKey: "gameWorkspaceUi.project.status.notScannedSuggestion",
+        primaryAction: "discover",
+      };
+    }
+    if (sourceIssueCount > 0) {
+      return {
+        level: "warning",
+        titleKey: "gameWorkspaceUi.project.status.warningTitle",
+        reasonKey: "gameWorkspaceUi.project.status.warningReason",
+        reasonText: t("gameWorkspaceUi.project.status.warningReasonText", { count: sourceIssueCount }),
+        suggestionKey: "gameWorkspaceUi.project.status.warningSuggestion",
+        primaryAction: "viewIssues",
+      };
+    }
+    if (buildBlocked) {
+      return {
+        level: "blocked",
+        titleKey: "gameWorkspaceUi.project.status.blockedTitle",
+        reasonKey: "gameWorkspaceUi.project.status.blockedReason",
+        reasonText: effectiveReadiness.blocking_reason || undefined,
+        suggestionKey: "gameWorkspaceUi.project.status.blockedSuggestion",
+        primaryAction: "discover",
+      };
+    }
+    if (canStartColdStartBuild) {
+      return {
+        level: "ready",
+        titleKey: "gameWorkspaceUi.project.status.readyTitle",
+        reasonKey: "gameWorkspaceUi.project.status.readyReason",
+        reasonText: t("gameWorkspaceUi.project.status.readyReasonText", { defaultValue: "数据源已满足冷启动构建条件。" }),
+        suggestionKey: "gameWorkspaceUi.project.status.readySuggestion",
+        primaryAction: "coldStart",
+      };
+    }
+    return {
+      level: "unknown",
+      titleKey: "gameWorkspaceUi.project.status.unknownTitle",
+      reasonText: t("gameWorkspaceUi.project.status.unknownReasonText", { defaultValue: "当前状态还不能明确判断。" }),
+      suggestionKey: "gameWorkspaceUi.project.status.unknownSuggestion",
+      primaryAction: null,
+    };
+  })();
 
   const handleSave = async () => {
     try {
@@ -580,14 +674,12 @@ export default function GameProject() {
       return;
     }
     setActiveColdStartJobId(savedJobId);
-    setRestoringColdStartJob(true);
     fetchColdStartJob(savedJobId)
       .catch(() => {
         clearColdStartActiveJobId(selectedAgent);
         setActiveColdStartJobId("");
         setColdStartJob(null);
-      })
-      .finally(() => setRestoringColdStartJob(false));
+      });
   }, [fetchColdStartJob, selectedAgent]);
 
   useEffect(() => {
@@ -604,6 +696,63 @@ export default function GameProject() {
 
     return () => window.clearInterval(timer);
   }, [activeColdStartJobId, coldStartJob, fetchColdStartJob, selectedAgent]);
+
+  const handleSaveAndContinue = async () => {
+    if (projectRootDirty) {
+      await handleSaveProjectRoot();
+    }
+    if (tablesConfigDirty) {
+      await handleSaveTablesSource();
+    }
+  };
+
+  const sourceDrawerTabs = [
+    {
+      key: "issues",
+      label: t("gameWorkspaceUi.project.sourceDrawer.tabs.issues", { defaultValue: "异常" }),
+      items: [
+        ...recognizedButNotSupportedFiles.map((item) => ({ key: `recognized-${item.source_path}`, title: item.source_path, detail: item.cold_start_reason })),
+        ...unsupportedFiles.map((item) => ({ key: `unsupported-${item.source_path}`, title: item.source_path, detail: item.reason })),
+        ...excludedFiles.map((item) => ({ key: `excluded-${item.source_path}`, title: item.source_path, detail: item.reason })),
+        ...discoveryErrors.map((item, index) => ({ key: `error-${index}`, title: item.source_path || "-", detail: item.reason })),
+      ],
+    },
+    {
+      key: "all",
+      label: t("gameWorkspaceUi.project.sourceDrawer.tabs.all", { defaultValue: "全部" }),
+      items: discoveryResult?.table_files.map((item) => ({ key: `all-${item.source_path}`, title: item.source_path, detail: `${item.status} / ${item.cold_start_reason}` })) ?? [],
+    },
+    {
+      key: "available",
+      label: t("gameWorkspaceUi.project.sourceDrawer.tabs.available", { defaultValue: "可用" }),
+      items: availableTableFiles.map((item) => ({ key: `available-${item.source_path}`, title: item.source_path, detail: item.cold_start_reason })),
+    },
+    {
+      key: "excluded",
+      label: t("gameWorkspaceUi.project.sourceDrawer.tabs.excluded", { defaultValue: "已排除" }),
+      items: excludedFiles.map((item) => ({ key: `excluded-drawer-${item.source_path}`, title: item.source_path, detail: item.reason })),
+    },
+    {
+      key: "unsupported",
+      label: t("gameWorkspaceUi.project.sourceDrawer.tabs.unsupported", { defaultValue: "不支持" }),
+      items: unsupportedFiles.map((item) => ({ key: `unsupported-drawer-${item.source_path}`, title: item.source_path, detail: item.reason })),
+    },
+    {
+      key: "errors",
+      label: t("gameWorkspaceUi.project.sourceDrawer.tabs.errors", { defaultValue: "错误" }),
+      items: discoveryErrors.map((item, index) => ({ key: `errors-drawer-${index}`, title: item.source_path || "-", detail: item.reason })),
+    },
+  ];
+
+  const renderProjectStatusIcon = () => {
+    if (projectSetupViewState.level === "ready") {
+      return <CheckCircleOutlined />;
+    }
+    if (projectSetupViewState.level === "running") {
+      return <LoadingOutlined />;
+    }
+    return <ExclamationCircleOutlined />;
+  };
 
   if (loading) {
     return (
@@ -630,461 +779,272 @@ export default function GameProject() {
 
   return (
     <div className={styles.gamePage}>
-      <PageHeader parent={t("nav.game")} current={t("gameProject.title")} />
+      <PageHeader
+        items={[{ title: t("gameWorkspaceUi.project.title", { defaultValue: "项目配置" }) }]}
+        className={styles.projectPageHeader}
+        extra={
+          <div className={styles.projectHeaderSelector}>
+            <FolderOpenOutlined />
+            <Text strong>{currentProjectName}</Text>
+            <DownOutlined />
+          </div>
+        }
+      />
 
       <div className={styles.content}>
         <Form form={form} layout="vertical" className={styles.form}>
-          <Card
-            title={t("gameProject.projectSetupTitle", { defaultValue: "Project setup" })}
-            className={styles.section}
-          >
-            <div className={styles.projectIntro}>
-              <Text strong>{t("gameProject.projectSetupLead", { defaultValue: "Use this page for project access, local configuration, storage inspection, validation, and save flows." })}</Text>
-              <div className={styles.projectIntroHint}>
-                {t("gameProject.projectSetupHint", {
-                  defaultValue:
-                    "Project keeps onboarding and configuration ownership. Daily knowledge runtime and formal map editing now live on their dedicated workspace pages.",
-                })}
+          <div className={styles.workspaceShell}>
+            <div className={styles.statusBanner} data-tone={projectSetupViewState.level}>
+              <div className={styles.statusBannerIcon}>{renderProjectStatusIcon()}</div>
+              <div className={styles.statusBannerBody}>
+                <Text strong className={styles.statusBannerTitle}>{t(projectSetupViewState.titleKey)}</Text>
+                <div className={styles.statusBannerMeta}>
+                  <span>{t(projectSetupViewState.reasonKey || "gameWorkspaceUi.project.status.defaultReason", { defaultValue: "当前状态" })}</span>
+                  <strong>{projectSetupViewState.reasonText || effectiveReadiness.blocking_reason || effectiveReadiness.next_action || "-"}</strong>
+                </div>
+                <div className={styles.statusBannerMeta}>
+                  <span>{t("gameWorkspaceUi.project.labels.suggestion", { defaultValue: "建议操作" })}</span>
+                  <strong>{t(projectSetupViewState.suggestionKey)}</strong>
+                </div>
+              </div>
+              <div className={styles.statusBannerActions}>
+                <Button onClick={handleDiscoverSources} loading={discoveringSources}>
+                  {t("gameWorkspaceUi.project.actions.discover", { defaultValue: "检查数据源" })}
+                </Button>
+                <Button
+                  type="primary"
+                  onClick={handleStartColdStartJob}
+                  disabled={!canStartColdStartBuild || coldStartProgress.isRunning}
+                  loading={creatingColdStartJob}
+                >
+                  {t("gameWorkspaceUi.project.actions.startColdStart", { defaultValue: "进入冷启动构建" })}
+                </Button>
+                {coldStartProgress.canCancel ? (
+                  <Button onClick={handleCancelColdStartJob} loading={cancellingColdStartJob}>
+                    {t("common.cancel")}
+                  </Button>
+                ) : null}
+                {coldStartProgress.canRetry ? (
+                  <Button onClick={handleRetryColdStartJob}>{t("common.retry", { defaultValue: "重试" })}</Button>
+                ) : null}
               </div>
             </div>
 
-            <div className={styles.workspaceEntryHeader}>
+            <div className={styles.workspaceGrid}>
+              <div className={styles.workspaceCard}>
+                <div className={styles.workspaceCardHeader}>
+                  <div className={styles.workspaceCardTitleRow}>
+                    <span className={styles.workspaceCardTitleIcon}><FolderOpenOutlined /></span>
+                    <Text strong>{t("gameWorkspaceUi.project.access.title", { defaultValue: "项目接入" })}</Text>
+                  </div>
+                </div>
+                <Form.Item label={t("gameWorkspaceUi.project.labels.localProjectRoot", { defaultValue: "本地项目目录" })}>
+                  <div className={styles.inlineActionField}>
+                    <Input
+                      value={projectRootInput}
+                      onChange={(event) => setProjectRootInput(event.target.value)}
+                      placeholder={t("gameProject.svnWorkingCopyPathPlaceholder", { defaultValue: LOCAL_PROJECT_DIRECTORY_LABEL })}
+                    />
+                    <Tooltip title={t("gameWorkspaceUi.project.actions.manualInputOnly", { defaultValue: "请手动输入目录路径" })}>
+                      <span>
+                        <Button disabled>{t("gameWorkspaceUi.project.actions.browse", { defaultValue: "浏览" })}</Button>
+                      </span>
+                    </Tooltip>
+                  </div>
+                </Form.Item>
+                <Form.Item label={t("gameWorkspaceUi.project.labels.tablesRoot", { defaultValue: "数据表目录" })}>
+                  <div className={styles.inlineActionField}>
+                    <TextArea rows={2} value={tablesRootsInput} onChange={(event) => setTablesRootsInput(event.target.value)} />
+                    <Tooltip title={t("gameWorkspaceUi.project.actions.manualInputOnly", { defaultValue: "请手动输入目录路径" })}>
+                      <span>
+                        <Button disabled>{t("gameWorkspaceUi.project.actions.browse", { defaultValue: "浏览" })}</Button>
+                      </span>
+                    </Tooltip>
+                  </div>
+                </Form.Item>
+                {projectRootDirty || tablesConfigDirty ? (
+                  <Alert type="warning" showIcon message={t("gameWorkspaceUi.project.access.unsaved", { defaultValue: "当前输入与已保存配置不一致，保存后才会生效。" })} className={styles.workspaceAlert} />
+                ) : null}
+                <div className={styles.workspaceCardActions}>
+                  <Button type="primary" onClick={() => void handleSaveAndContinue()} loading={savingProjectSetupRoot || savingProjectSetupTables} disabled={!projectRootDirty && !tablesConfigDirty}>
+                    {t("gameWorkspaceUi.project.actions.saveConfig", { defaultValue: "保存配置" })}
+                  </Button>
+                  <Button onClick={() => setAdvancedDrawerOpen(true)}>{t("gameWorkspaceUi.project.actions.openAdvanced", { defaultValue: "高级配置" })}</Button>
+                </div>
+              </div>
+
+              <div className={styles.workspaceCard}>
+                <div className={styles.workspaceCardHeader}>
+                  <div className={styles.workspaceCardTitleRow}>
+                    <span className={styles.workspaceCardTitleIcon}><DatabaseOutlined /></span>
+                    <Text strong>{t("gameWorkspaceUi.project.sourceStatus.title", { defaultValue: "数据源状态" })}</Text>
+                  </div>
+                </div>
+                <div className={styles.metricGrid}>
+                  <div className={styles.metricItem}><span>{t("gameWorkspaceUi.project.labels.discovered", { defaultValue: "已发现" })}</span><strong>{discoverySummary.discovered_table_count}</strong></div>
+                  <div className={styles.metricItem}><span>{t("gameWorkspaceUi.project.labels.available", { defaultValue: "可用" })}</span><strong>{discoverySummary.available_table_count ?? 0}</strong></div>
+                  <div className={styles.metricItem}><span>{t("gameWorkspaceUi.project.labels.issues", { defaultValue: "异常" })}</span><strong>{sourceIssueCount}</strong></div>
+                  <div className={styles.metricItem}><span>{t("gameWorkspaceUi.project.labels.lastChecked", { defaultValue: "最近检查" })}</span><strong>{latestDiscoveryLabel}</strong></div>
+                </div>
+                {discoveryNotScanned ? <Alert type="info" showIcon message={t("gameWorkspaceUi.project.sourceStatus.notChecked", { defaultValue: "尚未检查数据源。" })} className={styles.workspaceAlert} /> : null}
+                {!discoveryNotScanned && (discoverySummary.available_table_count ?? 0) <= 0 ? <Alert type="warning" showIcon message={t("gameWorkspaceUi.project.sourceStatus.noAvailable", { defaultValue: "当前没有可用于冷启动的可用数据表。" })} className={styles.workspaceAlert} /> : null}
+                <div className={styles.workspaceCardActions}>
+                  <Button onClick={handleDiscoverSources} loading={discoveringSources}>{t("gameWorkspaceUi.project.actions.discover", { defaultValue: "检查数据源" })}</Button>
+                  <Button onClick={() => setSourceDrawerOpen(true)} disabled={sourceIssueCount <= 0 && !discoveryResult}>{t("gameWorkspaceUi.project.actions.viewIssues", { defaultValue: "查看异常" })}</Button>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.nextStepCard}>
               <div>
-                <Text strong>{t("gameProject.workspaceEntriesTitle", { defaultValue: "Workspace entries" })}</Text>
-                <div className={styles.workspaceEntryHint}>
-                  {t("gameProject.knowledgeWorkspaceProjectHint", {
-                    defaultValue:
-                      "Knowledge runtime now lives on its own page. Use the entry cards below to jump into the right workspace without changing Project-owned config and save semantics.",
-                  })}
+                <div className={styles.workspaceCardTitleRow}>
+                  <span className={styles.workspaceCardTitleIcon}><SettingOutlined /></span>
+                  <Text strong>{t("gameWorkspaceUi.project.nextStep.title", { defaultValue: "下一步操作" })}</Text>
                 </div>
+                <div className={styles.workspaceCardHint}>{t("gameWorkspaceUi.project.nextStep.hint", { defaultValue: "请按以下建议步骤完成项目准备，以便顺利进入冷启动构建流程。" })}</div>
+              </div>
+              <div className={styles.nextStepActions}>
+                <Button
+                  type="primary"
+                  onClick={() => void handleSaveAndContinue()}
+                  loading={savingProjectSetupRoot || savingProjectSetupTables}
+                  disabled={!projectRootDirty && !tablesConfigDirty}
+                >
+                  {t("gameWorkspaceUi.project.actions.saveAndContinue", { defaultValue: "保存并继续" })}
+                </Button>
+                <Button onClick={handleDiscoverSources} loading={discoveringSources}>{t("gameWorkspaceUi.project.actions.discover", { defaultValue: "检查数据源" })}</Button>
+                <Button onClick={handleStartColdStartJob} disabled={!canStartColdStartBuild || coldStartProgress.isRunning} loading={creatingColdStartJob}>{t("gameWorkspaceUi.project.actions.startColdStart", { defaultValue: "进入冷启动构建" })}</Button>
               </div>
             </div>
+          </div>
+        </Form>
+      </div>
 
-            <div className={styles.workspaceEntryGrid}>
-              {workspaceEntries.map((entry) => (
-                <div key={entry.key} className={styles.workspaceEntryCard}>
-                  <div className={styles.workspaceEntryCardHeader}>
-                    <Text strong className={styles.workspaceEntryCardTitle}>{entry.title}</Text>
-                    <Tag className={styles.workspaceEntryCardTone}>{entry.tone}</Tag>
-                  </div>
-                  <div className={styles.workspaceEntryCardBody}>{entry.description}</div>
-                  <Button size="small" type="primary" onClick={() => navigate(entry.path)}>
-                    {entry.actionLabel}
-                  </Button>
-                </div>
+      <Drawer
+        title={t("gameWorkspaceUi.project.advanced.title", { defaultValue: "高级配置" })}
+        open={advancedDrawerOpen}
+        onClose={() => setAdvancedDrawerOpen(false)}
+        width={920}
+        destroyOnHidden={false}
+      >
+        <div className={styles.drawerLayout}>
+          <div className={styles.drawerSection}>
+            <div className={styles.drawerSectionHeader}>
+              <Text strong>{t("gameWorkspaceUi.project.advanced.baseInfo", { defaultValue: "项目基础信息" })}</Text>
+              <Space>
+                <Button onClick={handleReset} disabled={saving}>{t("common.reset")}</Button>
+                <Button onClick={handleValidate} disabled={saving}>{t("gameProject.validate")}</Button>
+                <Button type="primary" onClick={handleSave} loading={saving}>{t("common.save")}</Button>
+              </Space>
+            </div>
+            <Form.Item label={t("gameProject.projectName")} name="name" rules={[{ required: true, message: t("gameProject.projectNameRequired") }]}>
+              <Input placeholder={t("gameProject.projectNamePlaceholder")} />
+            </Form.Item>
+            <Form.Item label={t("gameProject.projectDescription")} name="description">
+              <TextArea rows={3} placeholder={t("gameProject.projectDescriptionPlaceholder")} />
+            </Form.Item>
+            <Form.Item label={t("gameProject.maintainerModeLabel", { defaultValue: "Maintainer mode" })} name="is_maintainer" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            <Form.Item label={t("gameProject.svnUrl")} name="svn_url">
+              <Input placeholder={t("gameProject.svnUrl", { defaultValue: "SVN 地址" })} />
+            </Form.Item>
+            <div className={styles.drawerTwoColumn}>
+              <Form.Item label={t("gameProject.svnUsername")} name="svn_username">
+                <Input placeholder={t("gameProject.svnUsernamePlaceholder")} />
+              </Form.Item>
+              <Form.Item label={t("gameProject.svnPassword")} name="svn_password">
+                <Input placeholder={t("gameProject.svnPasswordPlaceholder")} />
+              </Form.Item>
+            </div>
+            <Form.Item label={t("gameProject.svnTrustCert")} name="svn_trust_cert" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+          </div>
+
+          <div className={styles.drawerSection}>
+            <div className={styles.drawerSectionHeader}>
+              <Text strong>{t("gameWorkspaceUi.project.advanced.tablesRules", { defaultValue: "数据源规则" })}</Text>
+              <Button type="primary" onClick={handleSaveTablesSource} loading={savingProjectSetupTables}>{t("common.save")}</Button>
+            </div>
+            <Form.Item label={t("gameProject.projectSetupTablesRoots", { defaultValue: "Roots" })}>
+              <TextArea rows={3} value={tablesRootsInput} onChange={(event) => setTablesRootsInput(event.target.value)} />
+            </Form.Item>
+            <div className={styles.drawerTwoColumn}>
+              <Form.Item label={t("gameProject.projectSetupTablesInclude", { defaultValue: "Include Patterns" })}>
+                <TextArea rows={4} value={tablesIncludeInput} onChange={(event) => setTablesIncludeInput(event.target.value)} />
+              </Form.Item>
+              <Form.Item label={t("gameProject.projectSetupTablesExclude", { defaultValue: "Exclude Patterns" })}>
+                <TextArea rows={4} value={tablesExcludeInput} onChange={(event) => setTablesExcludeInput(event.target.value)} />
+              </Form.Item>
+            </div>
+            <div className={styles.drawerTwoColumn}>
+              <Form.Item label={t("gameProject.projectSetupHeaderRow", { defaultValue: "Header Row" })}>
+                <InputNumber min={1} value={tablesHeaderRow} onChange={(value) => setTablesHeaderRow(Number(value || 1))} />
+              </Form.Item>
+              <Form.Item label={t("gameProject.projectSetupPrimaryKeys", { defaultValue: "Primary Key Candidates" })}>
+                <TextArea rows={3} value={tablesPrimaryKeysInput} onChange={(event) => setTablesPrimaryKeysInput(event.target.value)} />
+              </Form.Item>
+            </div>
+          </div>
+
+          <div className={styles.drawerSection}>
+            <div className={styles.drawerSectionHeader}>
+              <Text strong>{t("gameWorkspaceUi.project.advanced.pathsAndDiagnostics", { defaultValue: "项目路径与诊断" })}</Text>
+              <Space>
+                <Button icon={<CopyOutlined />} onClick={handleCopyDiagnostics}>{t("gameWorkspaceUi.project.actions.copyDiagnostics", { defaultValue: "复制诊断" })}</Button>
+                <Button onClick={() => setSourceDrawerOpen(true)}>{t("gameWorkspaceUi.project.actions.viewIssues", { defaultValue: "查看异常" })}</Button>
+              </Space>
+            </div>
+            <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+              {advancedStorageItems.map(([label, value]) => (
+                <Descriptions.Item key={String(label)} label={label}>{value}</Descriptions.Item>
               ))}
+              <Descriptions.Item label={t("gameWorkspaceUi.project.labels.frontendBuild", { defaultValue: "Frontend Build" })}>{import.meta.env.VITE_FRONTEND_BUILD_ID || "dev"}</Descriptions.Item>
+              <Descriptions.Item label={t("gameWorkspaceUi.project.labels.frontendBuildTime", { defaultValue: "Frontend Build Time" })}>{import.meta.env.VITE_FRONTEND_BUILD_TIME || "dev"}</Descriptions.Item>
+              <Descriptions.Item label={t("gameWorkspaceUi.project.labels.apiBase", { defaultValue: "API Base" })}>{frontendRuntimeInfo?.api_base || "/api"}</Descriptions.Item>
+              <Descriptions.Item label={t("gameWorkspaceUi.project.labels.capabilityRole", { defaultValue: "Role" })}>{projectCapabilityStatus?.role || "-"}</Descriptions.Item>
+              <Descriptions.Item label={t("gameWorkspaceUi.project.labels.capabilitySource", { defaultValue: "Capability Source" })}>{projectCapabilityStatus?.capability_source || "-"}</Descriptions.Item>
+            </Descriptions>
+          </div>
+
+          <div className={styles.drawerSection}>
+            <div className={styles.drawerSectionHeader}>
+              <Text strong>{t("gameWorkspaceUi.project.advanced.automation", { defaultValue: "自动化与兼容设置" })}</Text>
             </div>
-
-            <div className={styles.projectSetupBlocks}>
-              <div className={styles.projectSetupBlock}>
-                <div className={styles.projectSetupBlockHeader}>
-                  <Text strong>{t("gameProject.projectSetupLocalRootTitle", { defaultValue: "Local Project Root" })}</Text>
-                  <Button size="small" type="primary" onClick={handleSaveProjectRoot} loading={savingProjectSetupRoot}>
-                    {t("common.save")}
-                  </Button>
-                </div>
-                <div className={styles.projectSetupHint}>
-                  {t("gameProject.projectSetupLocalRootHint", {
-                    defaultValue: "Project Setup 以本地项目目录为主入口，不把 SVN Root 作为主要配置入口。",
-                  })}
-                </div>
-                <Input
-                  value={projectRootInput}
-                  onChange={(event) => setProjectRootInput(event.target.value)}
-                  placeholder={t("gameProject.svnWorkingCopyPathPlaceholder", {
-                    defaultValue: LOCAL_PROJECT_DIRECTORY_LABEL,
-                  })}
-                />
-                {projectRootDirty ? (
-                  <Alert
-                    type="warning"
-                    showIcon
-                    message={t("gameProject.projectSetupProjectRootDirty", {
-                      defaultValue: "当前输入值与后端实际生效的 Project Root 不一致，保存后才会生效。",
-                    })}
-                    className={styles.mapReviewAlert}
-                  />
-                ) : null}
-                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
-                  <Descriptions.Item label={t("gameProject.projectSetupEffectiveProjectRoot", { defaultValue: "Effective Project Root" })}>
-                    {setupStatus?.project_root || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupProjectRootSource", { defaultValue: "Project Root Source" })}>
-                    {setupStatus?.project_root_source || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectKey", { defaultValue: "Project Key" })}>
-                    {setupStatus?.project_key || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectBundleRoot", { defaultValue: "Project Bundle Root" })}>
-                    {setupStatus?.project_bundle_root || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupUserConfigRoot", { defaultValue: "user_config.svn_local_root" })}>
-                    {setupStatus?.user_config_svn_local_root || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupProjectConfigRoot", { defaultValue: "project_config.svn.root" })}>
-                    {setupStatus?.project_config_svn_root || "-"}
-                  </Descriptions.Item>
-                </Descriptions>
-              </div>
-
-              <div className={styles.projectSetupBlock}>
-                <div className={styles.projectSetupBlockHeader}>
-                  <Text strong>{t("gameProject.projectSetupFrontendRuntimeTitle", { defaultValue: "Frontend Runtime Info" })}</Text>
-                </div>
-                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
-                  <Descriptions.Item label={t("gameProject.projectSetupFrontendBuildId", { defaultValue: "Frontend Build" })}>
-                    {import.meta.env.VITE_FRONTEND_BUILD_ID || "dev"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupFrontendBuildTime", { defaultValue: "Frontend Build Time" })}>
-                    {import.meta.env.VITE_FRONTEND_BUILD_TIME || "dev"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupFrontendApiBase", { defaultValue: "API Base" })}>
-                    {frontendRuntimeInfo?.api_base || "/api"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupFrontendStaticSource", { defaultValue: "Backend Static Source" })}>
-                    {frontendRuntimeInfo?.console_static_source || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupFrontendStaticDir", { defaultValue: "Backend Static Dir" })}>
-                    {frontendRuntimeInfo?.console_static_dir || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupFrontendIndexMtime", { defaultValue: "Index MTime" })}>
-                    {frontendRuntimeInfo?.console_index_mtime || "-"}
-                  </Descriptions.Item>
-                </Descriptions>
-              </div>
-
-              <div className={styles.projectSetupBlock}>
-                <div className={styles.projectSetupBlockHeader}>
-                  <Text strong>{t("gameProject.projectSetupCapabilityStatusTitle", { defaultValue: "Capability Status" })}</Text>
-                </div>
-                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
-                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityRole", { defaultValue: "Role" })}>
-                    {projectCapabilityStatus?.role || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupCapabilitySource", { defaultValue: "Capability Source" })}>
-                    {projectCapabilityStatus?.capability_source || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityColdStart", { defaultValue: "Cold-start" })}>
-                    {projectCapabilityStatus
-                      ? `${String(projectCapabilityStatus.required_for_cold_start["knowledge.candidate.read"])} / ${String(projectCapabilityStatus.required_for_cold_start["knowledge.candidate.write"])}`
-                      : "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityFormalMap", { defaultValue: "Formal Map" })}>
-                    {projectCapabilityStatus
-                      ? `${String(projectCapabilityStatus.required_for_formal_map["knowledge.map.read"])} / ${String(projectCapabilityStatus.required_for_formal_map["knowledge.map.edit"])}`
-                      : "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityRelease", { defaultValue: "Release" })}>
-                    {projectCapabilityStatus
-                      ? `${String(projectCapabilityStatus.required_for_release["knowledge.read"])} / ${String(projectCapabilityStatus.required_for_release["knowledge.build"])} / ${String(projectCapabilityStatus.required_for_release["knowledge.publish"])}`
-                      : "-"}
-                  </Descriptions.Item>
-                </Descriptions>
-                {projectCapabilityStatus && !projectCapabilityStatus.required_for_cold_start["knowledge.candidate.write"] ? (
-                  <Alert
-                    type="warning"
-                    showIcon
-                    message={t("gameProject.projectSetupCapabilityColdStartMissing", {
-                      defaultValue: "当前缺少 knowledge.candidate.write，Rule-only 冷启动写入请求会被拦截。",
-                    })}
-                    className={styles.mapReviewAlert}
-                  />
-                ) : null}
-              </div>
-
-              <div className={styles.projectSetupBlock}>
-                <div className={styles.projectSetupBlockHeader}>
-                  <Text strong>{t("gameProject.projectSetupTablesTitle", { defaultValue: "Tables Source" })}</Text>
-                  <Button size="small" type="primary" onClick={handleSaveTablesSource} loading={savingProjectSetupTables}>
-                    {t("common.save")}
-                  </Button>
-                </div>
-                <Form.Item label={t("gameProject.projectSetupTablesRoots", { defaultValue: "Roots" })}>
-                  <TextArea rows={2} value={tablesRootsInput} onChange={(event) => setTablesRootsInput(event.target.value)} />
-                </Form.Item>
-                <Form.Item label={t("gameProject.projectSetupTablesInclude", { defaultValue: "Include" })}>
-                  <TextArea rows={3} value={tablesIncludeInput} onChange={(event) => setTablesIncludeInput(event.target.value)} />
-                </Form.Item>
-                <Form.Item label={t("gameProject.projectSetupTablesExclude", { defaultValue: "Exclude" })}>
-                  <TextArea rows={3} value={tablesExcludeInput} onChange={(event) => setTablesExcludeInput(event.target.value)} />
-                </Form.Item>
-                <Form.Item label={t("gameProject.projectSetupHeaderRow", { defaultValue: "Header Row" })}>
-                  <InputNumber min={1} value={tablesHeaderRow} onChange={(value) => setTablesHeaderRow(Number(value || 1))} />
-                </Form.Item>
-                <Form.Item label={t("gameProject.projectSetupPrimaryKeys", { defaultValue: "Primary Key Candidates" })}>
-                  <TextArea rows={2} value={tablesPrimaryKeysInput} onChange={(event) => setTablesPrimaryKeysInput(event.target.value)} />
-                </Form.Item>
-              </div>
-
-              <div className={styles.projectSetupBlock}>
-                <div className={styles.projectSetupBlockHeader}>
-                  <Text strong>{t("gameProject.projectSetupDiscoveryTitle", { defaultValue: "Source Discovery" })}</Text>
-                  <Button size="small" onClick={handleDiscoverSources} loading={discoveringSources}>
-                    {t("gameProject.projectSetupDiscoverButton", { defaultValue: "检查数据源" })}
-                  </Button>
-                </div>
-                <div className={styles.projectSetupSummaryGrid}>
-                  <div className={styles.projectSetupSummaryItem}><span>discovered</span><strong>{discoverySummary.discovered_table_count}</strong></div>
-                  <div className={styles.projectSetupSummaryItem}><span>available</span><strong>{discoverySummary.available_table_count ?? 0}</strong></div>
-                  <div className={styles.projectSetupSummaryItem}><span>excluded</span><strong>{discoverySummary.excluded_table_count}</strong></div>
-                  <div className={styles.projectSetupSummaryItem}><span>unsupported</span><strong>{discoverySummary.unsupported_table_count}</strong></div>
-                  <div className={styles.projectSetupSummaryItem}><span>errors</span><strong>{discoverySummary.error_count}</strong></div>
-                </div>
-                {discoveryNotScanned ? (
-                  <Alert
-                    type="info"
-                    showIcon
-                    message={t("gameProject.projectSetupDiscoveryNotScanned", {
-                      defaultValue: "尚未检查数据源",
-                    })}
-                  />
-                ) : null}
-                {!discoveryNotScanned && (discoverySummary.available_table_count ?? 0) <= 0 ? (
-                  <Alert
-                    type="info"
-                    showIcon
-                    message={t("gameProject.projectSetupNoTablesMessage", {
-                      defaultValue: "当前没有可用于 Rule-only 冷启动的 CSV 表文件，后续构建阶段不可继续。",
-                    })}
-                  />
-                ) : null}
-                <div className={styles.projectSetupListGroup}>
-                  <div className={styles.projectSetupListSection}>
-                    <Text strong>{t("gameProject.projectSetupAvailableList", { defaultValue: "Rule-only Available (CSV)" })}</Text>
-                    {availableTableFiles.length > 0 ? (
-                      availableTableFiles.map((item) => (
-                        <div key={`available-${item.source_path}`} className={styles.projectSetupListItem}>
-                          <span>{item.source_path}</span>
-                          <Tag color="green">{item.cold_start_reason}</Tag>
-                        </div>
-                      ))
-                    ) : discoveryNotScanned ? (
-                      <div className={styles.projectSetupListEmpty}>-</div>
-                    ) : (
-                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("gameProject.projectSetupNoAvailableTables", { defaultValue: "没有发现可用于 Rule-only 冷启动的 CSV 表文件" })} />
-                    )}
-                  </div>
-                  <div className={styles.projectSetupListSection}>
-                    <Text strong>{t("gameProject.projectSetupRecognizedList", { defaultValue: "Recognized But Not Rule-only" })}</Text>
-                    {recognizedButNotSupportedFiles.length > 0 ? (
-                      recognizedButNotSupportedFiles.map((item) => (
-                        <div key={`recognized-${item.source_path}`} className={styles.projectSetupListItem}>
-                          <span>{item.source_path}</span>
-                          <Tag color="gold">{item.cold_start_reason}</Tag>
-                        </div>
-                      ))
-                    ) : (
-                      <div className={styles.projectSetupListEmpty}>-</div>
-                    )}
-                  </div>
-                  <div className={styles.projectSetupListSection}>
-                    <Text strong>{t("gameProject.projectSetupExcludedList", { defaultValue: "Excluded" })}</Text>
-                    {excludedFiles.length > 0 ? (
-                      excludedFiles.map((item) => (
-                        <div key={`excluded-${item.source_path}`} className={styles.projectSetupListItem}>
-                          <span>{item.source_path}</span>
-                          <Tag>{item.reason}</Tag>
-                        </div>
-                      ))
-                    ) : (
-                      <div className={styles.projectSetupListEmpty}>-</div>
-                    )}
-                  </div>
-                  <div className={styles.projectSetupListSection}>
-                    <Text strong>{t("gameProject.projectSetupUnsupportedList", { defaultValue: "Unsupported" })}</Text>
-                    {unsupportedFiles.length > 0 ? (
-                      unsupportedFiles.map((item) => (
-                        <div key={`unsupported-${item.source_path}`} className={styles.projectSetupListItem}>
-                          <span>{item.source_path}</span>
-                          <Tag color="orange">{item.reason}</Tag>
-                        </div>
-                      ))
-                    ) : (
-                      <div className={styles.projectSetupListEmpty}>-</div>
-                    )}
-                  </div>
-                  <div className={styles.projectSetupListSection}>
-                    <Text strong>{t("gameProject.projectSetupErrorsList", { defaultValue: "Errors" })}</Text>
-                    {discoveryErrors.length > 0 ? (
-                      discoveryErrors.map((item, index) => (
-                        <div key={`error-${item.source_path || index}`} className={styles.projectSetupListItem}>
-                          <span>{item.source_path || "-"}</span>
-                          <Tag color="red">{item.reason}</Tag>
-                        </div>
-                      ))
-                    ) : (
-                      <div className={styles.projectSetupListEmpty}>-</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.projectSetupBlock}>
-                <div className={styles.projectSetupBlockHeader}>
-                  <Text strong>{t("gameProject.projectSetupBuildPipelineTitle", { defaultValue: "Build Pipeline Status" })}</Text>
-                  <Space wrap>
-                    <Button
-                      size="small"
-                      type="primary"
-                      onClick={handleStartColdStartJob}
-                      disabled={!canStartColdStartBuild || coldStartProgress.isRunning}
-                      loading={creatingColdStartJob}
-                    >
-                      {t("gameProject.projectSetupRuleOnlyBuildButton", { defaultValue: "Rule-only 冷启动构建" })}
-                    </Button>
-                    <Button size="small" icon={<CopyOutlined />} onClick={handleCopyDiagnostics}>
-                      {t("gameProject.projectSetupCopyDiagnostics", { defaultValue: "复制诊断信息" })}
-                    </Button>
-                  </Space>
-                </div>
-                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
-                  <Descriptions.Item label={t("gameProject.projectSetupBlockingReason", { defaultValue: "Blocking Reason" })}>
-                    {effectiveReadiness.blocking_reason || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupNextAction", { defaultValue: "Next Action" })}>
-                    {effectiveReadiness.next_action || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupReadinessSource", { defaultValue: "Readiness Source" })}>
-                    {effectiveReadiness.source}
-                  </Descriptions.Item>
-                </Descriptions>
-                {buildBlocked ? (
-                  <Alert
-                    type="warning"
-                    showIcon
-                    message={t("gameProject.projectSetupBlockedMessage", {
-                      defaultValue: "尚未发现可用于 Rule-only 冷启动的 CSV 表文件，后续构建入口保持不可继续状态。",
-                    })}
-                  />
-                ) : (
-                  <Alert
-                    type="success"
-                    showIcon
-                    message={t("gameProject.projectSetupReadyMessage", {
-                      defaultValue: "Source Discovery 已发现可用于 Rule-only 冷启动的 CSV 表文件，可以继续后续构建链路。",
-                    })}
-                  />
-                )}
-                {!canStartColdStartBuild ? (
-                  <div className={styles.projectSetupHint}>
-                    {t("gameProject.projectSetupRuleOnlyBuildBlocked", {
-                      defaultValue: "未配置有效 Project Root / Tables Source，或当前 Source Discovery 没有可用于 Rule-only 冷启动的 CSV 表，因此构建按钮不可用。",
-                    })}
-                  </div>
-                ) : null}
-                {restoringColdStartJob ? (
-                  <Alert
-                    type="info"
-                    showIcon
-                    message={t("gameProject.projectSetupRestoringJob", { defaultValue: "正在恢复上次冷启动任务状态。" })}
-                  />
-                ) : null}
-                {coldStartJob ? (
-                  <div className={styles.projectSetupJobPanel}>
-                    <Progress percent={coldStartProgress.percent} status={coldStartProgress.statusTone} />
-                    <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
-                      <Descriptions.Item label={t("gameProject.projectSetupJobId", { defaultValue: "Job ID" })}>
-                        {coldStartJob.job_id}
-                      </Descriptions.Item>
-                      <Descriptions.Item label={t("gameProject.projectSetupJobStatus", { defaultValue: "Status" })}>
-                        {coldStartJob.status}
-                      </Descriptions.Item>
-                      <Descriptions.Item label={t("gameProject.projectSetupJobStage", { defaultValue: "Stage" })}>
-                        {coldStartJob.stage}
-                      </Descriptions.Item>
-                      <Descriptions.Item label={t("gameProject.projectSetupJobMessage", { defaultValue: "Message" })}>
-                        {coldStartJob.message}
-                      </Descriptions.Item>
-                      <Descriptions.Item label={t("gameProject.projectSetupJobCurrentFile", { defaultValue: "Current File" })}>
-                        {coldStartJob.current_file || "-"}
-                      </Descriptions.Item>
-                      <Descriptions.Item label={t("gameProject.projectSetupJobNextAction", { defaultValue: "Next Action" })}>
-                        {coldStartJob.next_action || "-"}
-                      </Descriptions.Item>
-                    </Descriptions>
-                    <div className={styles.projectSetupSummaryGrid}>
-                      <div className={styles.projectSetupSummaryItem}><span>discovered</span><strong>{coldStartJob.counts.discovered_table_count}</strong></div>
-                      <div className={styles.projectSetupSummaryItem}><span>raw</span><strong>{coldStartJob.counts.raw_table_index_count}</strong></div>
-                      <div className={styles.projectSetupSummaryItem}><span>canonical</span><strong>{coldStartJob.counts.canonical_table_count}</strong></div>
-                      <div className={styles.projectSetupSummaryItem}><span>candidate</span><strong>{coldStartJob.counts.candidate_table_count}</strong></div>
-                      <div className={styles.projectSetupSummaryItem}><span>timeout</span><strong>{coldStartJob.timeout_seconds}s</strong></div>
-                    </div>
-                    <div className={styles.projectSetupJobActions}>
-                      <Button
-                        size="small"
-                        onClick={handleCancelColdStartJob}
-                        disabled={!coldStartProgress.canCancel}
-                        loading={cancellingColdStartJob}
-                      >
-                        {t("common.cancel")}
-                      </Button>
-                      <Button size="small" onClick={handleRetryColdStartJob} disabled={!coldStartProgress.canRetry}>
-                        {t("common.retry")}
-                      </Button>
-                      <Button size="small" onClick={() => navigate("/game/map")} disabled={coldStartJob.status !== "succeeded"}>
-                        {t("gameProject.projectSetupOpenCandidateMap", { defaultValue: "查看 Candidate Map" })}
-                      </Button>
-                      <Button size="small" onClick={() => navigate("/game/map")} disabled={coldStartJob.status !== "succeeded"}>
-                        {t("gameProject.projectSetupOpenDiffReview", { defaultValue: "查看 Diff Review" })}
-                      </Button>
-                      <Button size="small" onClick={() => navigate("/game/map")} disabled={coldStartJob.status !== "succeeded"}>
-                        {t("gameProject.projectSetupSaveFormalMapEntry", { defaultValue: "保存 Formal Map" })}
-                      </Button>
-                    </div>
-                    {coldStartJob.warnings.length > 0 ? (
-                      <div className={styles.projectSetupListSection}>
-                        <Text strong>{t("gameProject.projectSetupWarningsList", { defaultValue: "Warnings" })}</Text>
-                        {coldStartJob.warnings.map((item) => (
-                          <div key={item} className={styles.projectSetupListItem}>
-                            <span>{item}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {coldStartJob.errors.length > 0 ? (
-                      <div className={styles.projectSetupListSection}>
-                        <Text strong>{t("gameProject.projectSetupJobErrors", { defaultValue: "Job Errors" })}</Text>
-                        {coldStartJob.errors.map((item, index) => (
-                          <div key={`${item.error}-${index}`} className={styles.projectSetupListItem}>
-                            <span>{[item.stage, item.error, item.source_path].filter(Boolean).join(" / ")}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {coldStartJob.status === "succeeded" ? (
-                      <Alert
-                        type="success"
-                        showIcon
-                        message={t("gameProject.projectSetupColdStartSuccess", {
-                          defaultValue: "Rule-only 冷启动构建完成。可以查看 Candidate Map / Diff Review，并在 Map Editor 中显式执行 Save Formal Map。",
-                        })}
-                        description={
-                          <div className={styles.projectSetupSuccessMeta}>
-                            <div>{`candidate_table_count: ${coldStartProgress.candidateTableCount}`}</div>
-                            <div>{`candidate_refs: ${coldStartJob.candidate_refs.join(", ") || "-"}`}</div>
-                          </div>
-                        }
-                      />
-                    ) : null}
-                  </div>
-                ) : (
-                  <Button disabled={buildBlocked} className={styles.projectSetupDisabledBuildButton}>
-                    {t("gameProject.projectSetupSubsequentBuildEntry", { defaultValue: "后续构建入口状态" })}
-                  </Button>
-                )}
-              </div>
+            <div className={styles.drawerTwoColumn}>
+              <Form.Item name="auto_sync" valuePropName="checked"><Switch disabled /> {t("gameProject.autoSyncFrozen", { defaultValue: "SVN 自动同步（已冻结）" })}</Form.Item>
+              <Form.Item name="auto_index" valuePropName="checked"><Switch /> {t("gameProject.autoIndex")}</Form.Item>
             </div>
-          </Card>
+            <Form.Item name="auto_resolve_dependencies" valuePropName="checked"><Switch /> {t("gameProject.autoResolveDependencies")}</Form.Item>
+            <Form.Item label={t("gameProject.indexCommitMessageTemplate")} name="index_commit_message_template">
+              <Input disabled placeholder={t("gameProject.indexCommitMessageTemplateFrozen")} />
+            </Form.Item>
+            <Form.Item label={t("gameProject.sourcePaths", { defaultValue: "Project source paths" })} name="watch_paths">
+              <TextArea rows={4} placeholder={t("gameProject.sourcePathsPlaceholder")} />
+            </Form.Item>
+            <div className={styles.drawerTwoColumn}>
+              <Form.Item label={t("gameProject.sourceIncludePatterns", { defaultValue: "Included file patterns" })} name="watch_patterns">
+                <TextArea rows={4} placeholder={t("gameProject.sourceIncludePatternsPlaceholder")} />
+              </Form.Item>
+              <Form.Item label={t("gameProject.sourceExcludePatterns", { defaultValue: "Excluded file patterns" })} name="watch_exclude_patterns">
+                <TextArea rows={4} placeholder={t("gameProject.sourceExcludePatternsPlaceholder")} />
+              </Form.Item>
+            </div>
+          </div>
 
-          <Card
-            title={t("gameProject.storageTitle", { defaultValue: "当前实际数据落盘目录" })}
-            className={styles.section}
-          >
-            <div className={styles.storageHint}>
-              {t("gameProject.storageHint", {
-                defaultValue:
-                  "这里显示后端当前实际使用的目录，不是推测值。项目级、Agent 级、对话级以及缓存/数据库都会按这个结果落盘。",
-              })}
+          <div className={styles.drawerSection}>
+            <div className={styles.drawerSectionHeader}>
+              <Text strong>{t("gameWorkspaceUi.project.advanced.storage", { defaultValue: "存储路径" })}</Text>
+              <Button
+                onClick={() => {
+                  const cur = form.getFieldValue("name") || "";
+                  wizardForm.setFieldsValue({ name: cur || t("gameWorkspaceUi.project.actions.newProjectName", { defaultValue: "新项目" }), id: "" });
+                  setWizardOpen(true);
+                }}
+              >
+                {t("gameProject.createAsAgent", { defaultValue: "另存为新项目 Agent" })}
+              </Button>
             </div>
             {storageGroups.map((group) => (
               <div key={group.title} className={styles.storageGroup}>
@@ -1097,163 +1057,56 @@ export default function GameProject() {
                 ))}
               </div>
             ))}
-          </Card>
+            {coldStartJob ? (
+              <div className={styles.jobSummaryPanel}>
+                <div className={styles.drawerSectionHeader}>
+                  <Text strong>{t("gameWorkspaceUi.project.advanced.coldStartJob", { defaultValue: "冷启动任务状态" })}</Text>
+                  <Space>
+                    <Button onClick={() => navigate("/game/map")} disabled={coldStartJob.status !== "succeeded"}>{t("gameWorkspaceUi.project.actions.openMap", { defaultValue: "进入 Map 编辑器" })}</Button>
+                    {coldStartProgress.canRetry ? <Button onClick={handleRetryColdStartJob}>{t("common.retry", { defaultValue: "重试" })}</Button> : null}
+                  </Space>
+                </div>
+                <Progress percent={coldStartProgress.percent} status={coldStartProgress.statusTone} />
+                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+                  <Descriptions.Item label={t("gameProject.projectSetupJobId", { defaultValue: "Job ID" })}>{coldStartJob.job_id}</Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupJobStatus", { defaultValue: "Status" })}>{coldStartJob.status}</Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupJobStage", { defaultValue: "Stage" })}>{coldStartJob.stage}</Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupJobMessage", { defaultValue: "Message" })}>{coldStartJob.message}</Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupJobCurrentFile", { defaultValue: "Current File" })}>{coldStartJob.current_file || "-"}</Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupJobNextAction", { defaultValue: "Next Action" })}>{coldStartJob.next_action || "-"}</Descriptions.Item>
+                </Descriptions>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </Drawer>
 
-          {/* Basic Info Section */}
-          <Card title={t("gameProject.basicInfo")} className={styles.section}>
-            <Form.Item
-              label={t("gameProject.projectName")}
-              name="name"
-              rules={[{ required: true, message: t("gameProject.projectNameRequired") }]}
-            >
-              <Input placeholder={t("gameProject.projectNamePlaceholder")} />
-            </Form.Item>
-
-            <Form.Item
-              label={t("gameProject.projectDescription")}
-              name="description"
-            >
-              <TextArea
-                rows={3}
-                placeholder={t("gameProject.projectDescriptionPlaceholder")}
-              />
-            </Form.Item>
-          </Card>
-
-          <Card
-            title={t("gameProject.projectAccessConfig", { defaultValue: "Project access" })}
-            className={styles.section}
-          >
-            <Form.Item
-              label={t("gameProject.maintainerModeLabel", { defaultValue: "Maintainer mode" })}
-              name="is_maintainer"
-              valuePropName="checked"
-              tooltip={t(
-                "gameProject.maintainerModeTooltip",
-                "This legacy role toggle is still kept for compatibility. It no longer enables built-in SVN runtime operations.",
-              )}
-            >
-              <Switch />
-            </Form.Item>
-            <Form.Item
-              label={t("gameProject.svnWorkingCopyPath", { defaultValue: "Local project root" })}
-              name="svn_working_copy_path"
-              rules={[{ required: true, message: t("gameProject.svnWorkingCopyPathRequired") }]}
-            >
-              <Input
-                placeholder={t("gameProject.svnWorkingCopyPathPlaceholder", {
-                  defaultValue: LOCAL_PROJECT_DIRECTORY_LABEL,
-                })}
-              />
-            </Form.Item>
-
-            <div className={styles.projectIntroHint}>
-              {t(
-                "gameProject.projectRootHint",
-                "LTClaw currently uses this path only as the local project root. SVN URL, credentials, trust cert, update, commit, watcher, and polling are frozen and must stay in your external SVN workflow.",
-              )}
-            </div>
-
-            <div className={styles.storageHint}>
-              {t(
-                "gameProject.legacySvnConfigHint",
-                "Legacy config fields such as svn_local_root and svn.root are still read for compatibility, but they now only mean the local project path.",
-              )}
-            </div>
-          </Card>
-
-          <Card title={t("gameProject.sourceScopeConfig", { defaultValue: "Source scope and filters" })} className={styles.section}>
-            <div className={styles.storageHint}>
-              {t(
-                "gameProject.sourceScopeHint",
-                "These fields now describe which local project paths and file patterns LTClaw reads for indexing and analysis. They are not an active SVN watcher or polling runtime.",
-              )}
-            </div>
-            <Form.Item label={t("gameProject.sourcePaths", { defaultValue: "Project source paths" })} name="watch_paths">
-              <TextArea
-                rows={4}
-                placeholder={t("gameProject.sourcePathsPlaceholder", { defaultValue: "One relative path per line, for example:\nTables\nConfigs" })}
-              />
-            </Form.Item>
-
-            <Form.Item label={t("gameProject.sourceIncludePatterns", { defaultValue: "Included file patterns" })} name="watch_patterns">
-              <TextArea
-                rows={4}
-                placeholder={t("gameProject.sourceIncludePatternsPlaceholder", { defaultValue: "One pattern per line, for example:\n.xlsx\n.csv\n.md" })}
-              />
-            </Form.Item>
-
-            <Form.Item label={t("gameProject.sourceExcludePatterns", { defaultValue: "Excluded file patterns" })} name="watch_exclude_patterns">
-              <TextArea
-                rows={4}
-                placeholder={t("gameProject.sourceExcludePatternsPlaceholder", { defaultValue: "One exclude pattern per line, for example:\n**/temp/**\n**/.svn/**\n**/~$*" })}
-              />
-            </Form.Item>
-          </Card>
-
-          <Card title={t("gameProject.legacyFrozenRuntimeConfig", { defaultValue: "Legacy frozen runtime settings" })} className={styles.section}>
-            <div className={styles.storageHint}>
-              {t(
-                "gameProject.legacyFrozenRuntimeHint",
-                "These legacy fields are shown only to explain current compatibility boundaries. LTClaw no longer starts an SVN watcher, polling loop, or config commit flow from this page.",
-              )}
-            </div>
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              <Form.Item name="auto_sync" valuePropName="checked">
-                <Switch disabled /> {t("gameProject.autoSyncFrozen", { defaultValue: "SVN auto sync (frozen)" })}
-              </Form.Item>
-
-              <Form.Item name="auto_index" valuePropName="checked">
-                <Switch /> {t("gameProject.autoIndex")}
-              </Form.Item>
-
-              <Form.Item name="auto_resolve_dependencies" valuePropName="checked">
-                <Switch /> {t("gameProject.autoResolveDependencies")}
-              </Form.Item>
-
-              <Form.Item
-                label={t("gameProject.indexCommitMessageTemplate")}
-                name="index_commit_message_template"
-              >
-                <Input
-                  disabled
-                  placeholder={t("gameProject.indexCommitMessageTemplateFrozen", {
-                    defaultValue: "Frozen with SVN runtime. Index commits are not part of the current LTClaw main flow.",
-                  })}
-                />
-              </Form.Item>
-            </Space>
-          </Card>
-
-          <Card title={t("gameProject.formalMapWorkspaceTitle", { defaultValue: "Formal map workspace" })} className={styles.section}>
-            <FormalMapWorkspace mode="summary" />
-          </Card>
-
-        </Form>
-      </div>
-
-      <div className={styles.footerActions}>
-        <Button onClick={handleReset} disabled={saving} style={{ marginRight: 8 }}>
-          {t("common.reset")}
-        </Button>
-        <Button onClick={handleValidate} disabled={saving} style={{ marginRight: 8 }}>
-          {t("gameProject.validate")}
-        </Button>
-        <Button
-          onClick={() => {
-            const cur = form.getFieldValue("name") || "";
-            wizardForm.setFieldsValue({ name: cur || "新项目", id: "" });
-            setWizardOpen(true);
-          }}
-          disabled={saving}
-          style={{ marginRight: 8 }}
-        >
-          {t("gameProject.createAsAgent", { defaultValue: "另存为新项目 Agent" })}
-        </Button>
-        <Button type="primary" onClick={handleSave} loading={saving}>
-          {t("common.save")}
-        </Button>
-      </div>
+      <Drawer
+        title={t("gameWorkspaceUi.project.sourceDrawer.title", { defaultValue: "数据源详情" })}
+        open={sourceDrawerOpen}
+        onClose={() => setSourceDrawerOpen(false)}
+        width={860}
+        destroyOnHidden={false}
+      >
+        <Tabs
+          items={sourceDrawerTabs.map((tab) => ({
+            key: tab.key,
+            label: tab.label,
+            children: tab.items.length > 0 ? (
+              <div className={styles.drawerList}>
+                {tab.items.map((item) => (
+                  <div key={item.key} className={styles.drawerListItem}>
+                    <Text strong>{item.title}</Text>
+                    <div className={styles.drawerListDetail}>{item.detail}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("gameWorkspaceUi.project.sourceDrawer.empty", { defaultValue: "当前没有可显示的项目。" })} />
+            ),
+          }))}
+        />
+      </Drawer>
 
       <Modal
         title={t("gameProject.createAgentTitle", { defaultValue: "为该项目创建独立 Agent" })}
