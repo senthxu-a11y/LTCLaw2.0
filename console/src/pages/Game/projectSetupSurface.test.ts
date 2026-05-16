@@ -13,6 +13,12 @@ const apiSource = readFileSync(resolve(consoleRoot, "api", "modules", "game.ts")
 describe("project setup UI surface", () => {
   it("keeps project setup on the existing game project entry page", () => {
     assert.equal(pageSource.includes('title={t("gameProject.projectSetupTitle", { defaultValue: "Project setup" })}'), true);
+    assert.equal(pageSource.includes('defaultValue: "工作区 / Workspace"') || pageSource.includes('defaultValue: "Workspace"'), true);
+    assert.equal(pageSource.includes('defaultValue: "当前工作区"'), true);
+    assert.equal(pageSource.includes('defaultValue: "打开/切换工作区"'), true);
+    assert.equal(pageSource.includes('defaultValue: "新建工作区"'), true);
+    assert.equal(pageSource.includes('Project Data / Agent Profiles / Sessions / Cache'), true);
+    assert.equal(pageSource.includes('切换 agent 只切换权限和 session'), true);
     assert.equal(pageSource.includes('defaultValue: "Workspace Switch"'), true);
     assert.equal(pageSource.includes('defaultValue: "Local Project Root"'), true);
     assert.equal(pageSource.includes('defaultValue: "Tables Source"'), true);

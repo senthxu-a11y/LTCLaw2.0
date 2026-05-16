@@ -161,3 +161,31 @@
 	- viewer 写入口没有统一前置 disabled，导致 cold-start / index rebuild 在请求期才 403
 	- agent 切换会丢失 project_root / project_bundle_root，破坏 workspace/project 数据保持
 	- 当前没有 maintainer agent，也没有可见的 role/capability 配置入口，无法完成显式 Save Formal Map / Build Release / Publish Current 验证
+
+## Workspace Switch UI Follow-up
+
+执行信息:
+- 执行日期: 2026-05-16
+- commit: 78a5f8409603112523f3377f369cae7540aa3cd8
+- 前端地址: http://127.0.0.1:5175/game/project
+- 后端地址: http://127.0.0.1:18082
+- Workspace A: /Users/Admin/LTCLaw2.0-foundation/.tmp_manual_workspace_smoke/workspace-a
+- Workspace B: /Users/Admin/LTCLaw2.0-foundation/.tmp_manual_workspace_smoke/workspace-b
+- 使用 agent:
+	- LTCLAW-GY.X_QA_Agent_0.2
+	- default
+
+| # | 检查项 | 状态 | 备注 |
+|---|---|---|---|
+| F1 | Project 页面显示 Workspace Switcher 卡片 | passed | 页面顶部出现“工作区 / Workspace”“当前工作区”“切换工作区”“打开/切换工作区”“新建工作区”等文案，且 guardrail 明确写出“切换工作区会切换 Project Data / Agent Profiles / Sessions / Cache；切 agent 只切换权限和 session”。 |
+| F2 | 从空状态新建 Workspace A | passed | 点击“新建工作区”后，当前工作区卡片立刻刷新为 workspace-a，并显示 workspace.yaml 路径。toast 显示“已切换工作区：.../workspace-a”。 |
+| F3 | Workspace A 切换后状态刷新闭环 | passed | Current Environment 的 Workspace Root 同步变为 workspace-a；“当前实际数据落盘目录”中的 Agent 目录、Session 目录、Cache 目录全部切到 workspace-a。 |
+| F4 | 从 Workspace A 再切到 Workspace B | passed | 点击“新建工作区”后，当前工作区卡片立刻刷新为 workspace-b；Agent 目录和 Session 目录一起切到 workspace-b。 |
+| F5 | 切换后浏览器刷新仍保持 Workspace B | passed | 手动 reload /game/project 后，Current Workspace Root 仍为 workspace-b，workspace.yaml 路径仍为 workspace-b/workspace.yaml。 |
+| F6 | 切 agent 不切 Project Data | passed | 从 QA 切到 default 后，当前 agent 从 LTCLAW-GY.X_QA_Agent_0.2 变为 default，role 从 viewer 变为 admin，Agent 目录变为 workspace-b/agents/default；但 Current Workspace Root 保持 workspace-b，不回退也不丢失。 |
+| F7 | 切 agent 后 capability / storage 一起刷新 | passed | 当前 role、capability_source、Current Agent、Agent 目录都已刷新到 default；Workspace Root 和 workspace.yaml 不变，符合“只切权限和 session”的预期。 |
+
+结论:
+- 本 follow-up 只验证 Workspace Switch UI 和切换后的状态刷新闭环。
+- 结果: 7 passed, 0 failed, 0 blocked。
+- 结论: 该页面现在已经具备清晰的 Workspace Switcher 表达，并且完成了“切换工作区 -> 重新加载 setup/capability/workspace-root/storage/cold-start 状态 -> 页面呈现同步更新”的闭环。

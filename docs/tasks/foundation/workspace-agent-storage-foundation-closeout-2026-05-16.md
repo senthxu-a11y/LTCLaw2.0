@@ -231,3 +231,33 @@
   - viewer 权限 gating 不完整，写入口仍可点击后 403
   - agent 切换破坏 project-scoped 数据保持
   - maintainer 写链路没有可执行的产品化入口，无法完成地图/发布链路验收
+
+## 20. Workspace Switch UI Follow-up
+- 执行日期: 2026-05-16
+- 基线 commit: 78a5f8409603112523f3377f369cae7540aa3cd8
+- 范围约束:
+  - 只修复 Workspace Switch UI 和切换后的状态刷新闭环
+  - 不扩 M2
+  - 不接 txtai
+  - 不恢复 SVN 主线
+  - 不自动 Save Formal Map / Build Release / Publish Current
+- 本轮代码收口:
+  - Project 页面新增显式 Workspace Switcher 卡片，拆分“当前工作区”和“切换工作区”两个面板。
+  - 引入统一的 loadProjectData()，把 project config、user config、storage summary、setup status、capability status、workspace agent profile、workspace root status、frontend runtime info、cold-start 当前任务恢复到一个刷新入口。
+  - workspace-root 保存成功后统一走 loadProjectData()，不再只做局部 state patch。
+  - error 状态补回 retry 按钮。
+  - 为 Workspace Switcher 新增样式，并补了 surface test 文案断言。
+  - 顺手修复了一个运行时缺陷: coldStartJob.warnings / errors / candidate_refs 缺省时不再因为读取 length 崩溃。
+- 自动化验证:
+  - 前端: `pnpm exec tsc --noEmit` 通过
+  - 前端: `node --test src/pages/Game/projectSetupSurface.test.ts` 通过
+  - 前端: `pnpm exec eslint --quiet ...` 通过
+  - 后端: `pytest -q tests/unit/game/test_paths.py tests/unit/app/test_agent_context.py tests/unit/routers/test_game_project_router.py` 通过，45 passed
+  - M1 smoke: `scripts/run_map_cold_start_smoke.py --project examples/minimal_project --rule-only` 通过
+- 人工 smoke 结果:
+  - Workspace A / B 切换成功，Current Workspace Root、workspace.yaml 路径、Current Environment、Agent 目录、Session 目录、Cache 目录均同步刷新。
+  - 刷新浏览器后仍保持当前 Workspace Root，不回退到旧值。
+  - 切 agent 后，Current Agent / Role / Capability Source / Agent 目录刷新，但 Workspace Root 保持不变，符合“切 agent 只切权限和 session”的语义。
+- 当前结论:
+  - 就本轮限定范围而言，Workspace Switch UI 和切换后的状态刷新闭环已经完成。
+  - 这轮 follow-up 不改变第 19 节对更大范围 foundation 替换 main 的结论；它只证明 workspace switch 这一条 UX / state loop 已经收口。

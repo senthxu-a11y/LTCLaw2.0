@@ -92,6 +92,62 @@
           line-height: 1.7;
         }
 
+        .workspaceSwitcherCard {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          margin-bottom: 20px;
+          padding: 18px;
+          border: 1px solid var(--ant-color-border);
+          border-radius: 12px;
+          background: linear-gradient(
+            135deg,
+            color-mix(in srgb, var(--ant-color-fill-quaternary) 70%, var(--ant-color-bg-container)) 0%,
+            var(--ant-color-bg-container) 100%
+          );
+        }
+
+        .workspaceSwitcherHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+        }
+
+        .workspaceSwitcherTitle {
+          display: block;
+          font-size: 16px;
+        }
+
+        .workspaceSwitcherSubtitle {
+          margin-top: 6px;
+          color: var(--ant-color-text-secondary);
+          font-size: 13px;
+          line-height: 1.7;
+        }
+
+        .workspaceSwitcherGrid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 14px;
+        }
+
+        .workspaceSwitcherPanel {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          padding: 14px;
+          border: 1px solid var(--ant-color-border-secondary);
+          border-radius: 10px;
+          background: var(--ant-color-bg-container);
+        }
+
+        .workspaceSwitcherUnsupportedHint {
+          color: var(--ant-color-text-description);
+          font-size: 12px;
+          line-height: 1.5;
+        }
+
         .workspaceEntryHeader {
           margin-bottom: 12px;
         }
@@ -151,6 +207,15 @@
           color: var(--ant-color-text-secondary);
           font-size: 13px;
           line-height: 1.7;
+        }
+
+        @media (max-width: 900px) {
+          .workspaceSwitcherGrid,
+          .workspaceEntryGrid,
+          .projectSetupListGroup,
+          .projectSetupSummaryGrid {
+            grid-template-columns: 1fr;
+          }
         }
 
         .projectSetupBlocks {

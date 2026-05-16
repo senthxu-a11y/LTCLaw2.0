@@ -19,6 +19,7 @@ import type {
   UserGameConfig,
   LocalAgentProfile,
   ValidationIssue,
+  WorkspaceRootStatus,
 } from "../../api/types/game";
 import { useAgentStore } from "../../stores/agentStore";
 import { copyText } from "../Chat/utils";
@@ -89,6 +90,7 @@ export default function GameProject() {
   const [storageSummary, setStorageSummary] = useState<GameStorageSummary | null>(null);
   const [frontendRuntimeInfo, setFrontendRuntimeInfo] = useState<FrontendRuntimeInfo | null>(null);
   const [projectCapabilityStatus, setProjectCapabilityStatus] = useState<ProjectCapabilityStatus | null>(null);
+  const [workspaceRootStatus, setWorkspaceRootStatus] = useState<WorkspaceRootStatus | null>(null);
   const [workspaceAgentProfile, setWorkspaceAgentProfile] = useState<LocalAgentProfile | null>(null);
   const [savingWorkspaceAgentProfile, setSavingWorkspaceAgentProfile] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -134,29 +136,38 @@ export default function GameProject() {
     setTablesPrimaryKeysInput(joinProjectSetupLines(status.tables_config.primary_key_candidates));
   }, []);
 
-  const fetchConfig = useCallback(async () => {
+  const loadProjectData = useCallback(async () => {
     if (!selectedAgent) {
       applySetupStatus(null);
+      setWorkspaceRootStatus(null);
       setDiscoveryResult(null);
+      setStorageSummary(null);
+      setFrontendRuntimeInfo(null);
+      setProjectCapabilityStatus(null);
+      setWorkspaceAgentProfile(null);
+      setColdStartJob(null);
+      setActiveColdStartJobId("");
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const [projectConfig, userConfig, storage, projectSetupStatus, capabilityStatus, workspaceProfile] = await Promise.all([
+      const [projectConfig, userConfig, storage, projectSetupStatus, capabilityStatus, workspaceProfile, workspaceStatus] = await Promise.all([
         gameApi.getProjectConfig(selectedAgent),
         gameApi.getUserConfig(selectedAgent).catch(() => null),
         gameApi.getStorageSummary(selectedAgent).catch(() => null),
         gameApi.getProjectSetupStatus(selectedAgent).catch(() => null),
         gameApi.getProjectCapabilityStatus(selectedAgent).catch(() => null),
         gameApi.getWorkspaceAgentProfile(selectedAgent).catch(() => null),
+        gameApi.getWorkspaceRootStatus(selectedAgent).catch(() => null),
       ]);
       const runtimeInfo = await gameApi.getFrontendRuntimeInfo().catch(() => null);
       setStorageSummary(storage);
       setFrontendRuntimeInfo(runtimeInfo);
       setProjectCapabilityStatus(capabilityStatus);
       setWorkspaceAgentProfile(workspaceProfile);
+      setWorkspaceRootStatus(workspaceStatus);
       if (capabilityStatus) {
         updateAgent(selectedAgent, {
           role: capabilityStatus.role as LocalAgentProfile["role"],
@@ -172,6 +183,22 @@ export default function GameProject() {
       }
       applySetupStatus(projectSetupStatus);
       setDiscoveryResult(null);
+      const savedJobId = loadColdStartActiveJobId(selectedAgent);
+      if (!savedJobId) {
+        setColdStartJob(null);
+        setActiveColdStartJobId("");
+      } else {
+        try {
+          const job = await gameApi.getColdStartJob(selectedAgent, savedJobId);
+          setColdStartJob(job);
+          setActiveColdStartJobId(job.job_id);
+          saveColdStartActiveJobId(selectedAgent, job.job_id);
+        } catch {
+          clearColdStartActiveJobId(selectedAgent);
+          setColdStartJob(null);
+          setActiveColdStartJobId("");
+        }
+      }
       if (projectConfig) {
         const uc: UserGameConfig = userConfig ?? { my_role: "consumer" };
         form.setFieldsValue({
@@ -220,6 +247,7 @@ export default function GameProject() {
   }, [applySetupStatus, form, selectedAgent, t, updateAgent]);
 
   const canWriteColdStart = projectCapabilityStatus?.required_for_cold_start["knowledge.candidate.write"] ?? true;
+  const hasActiveProjectRoot = Boolean(setupStatus?.active_workspace_project_root || setupStatus?.project_root);
 
   const handleSaveWorkspaceAgentProfile = async () => {
     if (!selectedAgent || !workspaceAgentProfile) {
@@ -261,7 +289,7 @@ export default function GameProject() {
       setActiveColdStartJobId("");
       clearColdStartActiveJobId(selectedAgent);
       message.success(t("gameProject.projectRootSaved", { defaultValue: "Local Project Root 已保存。" }));
-      await fetchConfig();
+      await loadProjectData();
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : t("gameProject.saveFailed");
       message.error(errMsg);
@@ -274,18 +302,22 @@ export default function GameProject() {
     if (!selectedAgent) {
       return;
     }
+    const targetPath = workspaceRootInput.trim();
+    if (!targetPath) {
+      message.error(t("gameProject.workspaceRootRequired", { defaultValue: "Workspace Root 不能为空。" }));
+      return;
+    }
     try {
       setSavingWorkspaceRoot(true);
-      const response = await gameApi.saveWorkspaceRoot(selectedAgent, {
-        workspace_root: workspaceRootInput.trim(),
+      await gameApi.saveWorkspaceRoot(selectedAgent, {
+        workspace_root: targetPath,
         workspace_name: setupStatus?.workspace_name || "LTClaw Workspace",
         create_if_missing: createIfMissing,
       });
-      applySetupStatus(response.setup_status);
-      await fetchConfig();
+      await loadProjectData();
       message.success(
         t("gameProject.workspaceRootSaved", {
-          defaultValue: createIfMissing ? "Workspace Root 已创建并设置。" : "Workspace Root 已设置。",
+          defaultValue: `已切换工作区：${targetPath}`,
         }),
       );
     } catch (err) {
@@ -652,12 +684,12 @@ export default function GameProject() {
   };
 
   const handleReset = () => {
-    fetchConfig();
+    loadProjectData();
   };
 
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    loadProjectData();
+  }, [loadProjectData]);
 
   useEffect(() => {
     if (!selectedAgent) {
@@ -712,13 +744,22 @@ export default function GameProject() {
       <div className={styles.gamePage}>
         <div className={styles.centerState}>
           <span className={styles.stateTextError}>{error}</span>
-          <Button size="small" onClick={fetchConfig} style={{ marginTop: 12 }}>
+          <Button size="small" onClick={loadProjectData} style={{ marginTop: 12 }}>
             {t("common.retry")}
           </Button>
         </div>
       </div>
     );
   }
+
+  const currentWorkspaceRoot = workspaceRootStatus?.active_workspace_root || setupStatus?.active_workspace_root || "-";
+  const currentWorkspaceConfigPath = workspaceRootStatus?.workspace_config_path || setupStatus?.workspace_config_path || "-";
+  const currentActiveProjectKey = workspaceRootStatus?.active_project_key || setupStatus?.active_workspace_project_key || setupStatus?.project_key || "-";
+  const currentActiveProjectRoot = workspaceRootStatus?.active_workspace_project_root || setupStatus?.active_workspace_project_root || setupStatus?.project_root || "-";
+  const currentProjectBundleRoot = setupStatus?.project_bundle_root || "-";
+  const coldStartWarnings = coldStartJob?.warnings || [];
+  const coldStartErrors = coldStartJob?.errors || [];
+  const coldStartCandidateRefs = coldStartJob?.candidate_refs || [];
 
   return (
     <div className={styles.gamePage}>
@@ -737,6 +778,98 @@ export default function GameProject() {
                   defaultValue:
                     "Project keeps onboarding and configuration ownership. Daily knowledge runtime and formal map editing now live on their dedicated workspace pages.",
                 })}
+              </div>
+            </div>
+
+            <div className={styles.workspaceSwitcherCard}>
+              <div className={styles.workspaceSwitcherHeader}>
+                <div>
+                  <Text strong className={styles.workspaceSwitcherTitle}>
+                    {t("gameProject.workspaceCardTitle", { defaultValue: "工作区 / Workspace" })}
+                  </Text>
+                  <div className={styles.workspaceSwitcherSubtitle}>
+                    {t("gameProject.workspaceCardSubtitle", {
+                      defaultValue: "当前工作区决定 Project Data、Agent Profiles、Sessions、Audit、Cache 的存储位置。",
+                    })}
+                  </div>
+                </div>
+              </div>
+              <Alert
+                type="info"
+                showIcon
+                message={t("gameProject.workspaceSwitchGuardrailTitle", { defaultValue: "Workspace Switch" })}
+                description={t("gameProject.workspaceSwitchGuardrailBody", {
+                  defaultValue: "切换工作区会切换 Project Data / Agent Profiles / Sessions / Cache，但不会删除旧工作区数据。切换 agent 只切换权限和 session，不切换 Project Data。",
+                })}
+                className={styles.mapReviewAlert}
+              />
+              <div className={styles.workspaceSwitcherGrid}>
+                <div className={styles.workspaceSwitcherPanel}>
+                  <Text strong>{t("gameProject.workspaceCurrentPanelTitle", { defaultValue: "当前工作区" })}</Text>
+                  <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+                    <Descriptions.Item label={t("gameProject.projectSetupWorkspaceRoot", { defaultValue: "Current Workspace Root" })}>
+                      {currentWorkspaceRoot}
+                    </Descriptions.Item>
+                    <Descriptions.Item label={t("gameProject.projectSetupWorkspaceConfigPath", { defaultValue: "workspace.yaml 路径" })}>
+                      {currentWorkspaceConfigPath}
+                    </Descriptions.Item>
+                    <Descriptions.Item label={t("gameProject.workspaceActiveProjectKey", { defaultValue: "active_project_key" })}>
+                      {currentActiveProjectKey}
+                    </Descriptions.Item>
+                    <Descriptions.Item label={t("gameProject.workspaceActiveProjectRoot", { defaultValue: "active_project_root" })}>
+                      {currentActiveProjectRoot}
+                    </Descriptions.Item>
+                    <Descriptions.Item label={t("gameProject.projectBundleRoot", { defaultValue: "Project Bundle Root" })}>
+                      {currentProjectBundleRoot}
+                    </Descriptions.Item>
+                    <Descriptions.Item label={t("gameProject.projectSetupCurrentAgent", { defaultValue: "当前 agent" })}>
+                      {selectedAgent || storageSummary?.current_agent_id || "-"}
+                    </Descriptions.Item>
+                    <Descriptions.Item label={t("gameProject.projectSetupCapabilityRole", { defaultValue: "当前 role" })}>
+                      {projectCapabilityStatus?.role || "-"}
+                    </Descriptions.Item>
+                    <Descriptions.Item label={t("gameProject.projectSetupCapabilitySource", { defaultValue: "capability_source" })}>
+                      {projectCapabilityStatus?.capability_source || "-"}
+                    </Descriptions.Item>
+                  </Descriptions>
+                  {!hasActiveProjectRoot ? (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message={t("gameProject.workspaceMissingProjectRoot", { defaultValue: "请设置 Project Root" })}
+                    />
+                  ) : null}
+                </div>
+                <div className={styles.workspaceSwitcherPanel}>
+                  <Text strong>{t("gameProject.workspaceSwitchPanelTitle", { defaultValue: "切换工作区" })}</Text>
+                  <div className={styles.projectSetupHint}>
+                    {t("gameProject.workspaceSwitchPrimaryHint", {
+                      defaultValue: "打开/切换工作区是主流程；目录不存在时请使用新建工作区。",
+                    })}
+                  </div>
+                  <Input
+                    value={workspaceRootInput}
+                    onChange={(event) => setWorkspaceRootInput(event.target.value)}
+                    placeholder={t("gameProject.projectSetupWorkspaceRootPlaceholder", { defaultValue: "/Users/Admin/LTClawWorkspace" })}
+                  />
+                  <Space wrap>
+                    <Button size="small" type="primary" onClick={() => void handleSaveWorkspaceRoot(false)} loading={savingWorkspaceRoot}>
+                      {t("gameProject.projectSetupOpenWorkspaceRoot", { defaultValue: "打开/切换工作区" })}
+                    </Button>
+                    <Button size="small" onClick={() => void handleSaveWorkspaceRoot(true)} loading={savingWorkspaceRoot}>
+                      {t("gameProject.projectSetupCreateWorkspaceRoot", { defaultValue: "新建工作区" })}
+                    </Button>
+                    <Button size="small" icon={<CopyOutlined />} onClick={() => copyText(workspaceRootStatus?.active_workspace_root || setupStatus?.active_workspace_root || workspaceRootInput || "") }>
+                      {t("gameProject.projectSetupCopyWorkspaceRoot", { defaultValue: "复制当前工作区路径" })}
+                    </Button>
+                    <Button size="small" disabled title={t("gameProject.projectSetupOpenWorkspaceFolderUnsupported", { defaultValue: "当前客户端暂不支持打开文件夹" })}>
+                      {t("gameProject.projectSetupOpenWorkspaceFolder", { defaultValue: "打开工作区文件夹" })}
+                    </Button>
+                  </Space>
+                  <div className={styles.workspaceSwitcherUnsupportedHint}>
+                    {t("gameProject.projectSetupOpenWorkspaceFolderUnsupported", { defaultValue: "当前客户端暂不支持打开文件夹" })}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -793,74 +926,6 @@ export default function GameProject() {
                   </Descriptions.Item>
                   <Descriptions.Item label={t("gameProject.projectSetupCapabilitySource", { defaultValue: "Capability Source" })}>
                     {projectCapabilityStatus?.capability_source || "-"}
-                  </Descriptions.Item>
-                </Descriptions>
-              </div>
-
-              <div className={styles.projectSetupBlock}>
-                <div className={styles.projectSetupBlockHeader}>
-                  <Text strong>{t("gameProject.projectSetupWorkspaceRootTitle", { defaultValue: "Workspace Root" })}</Text>
-                  <Space wrap>
-                    <Button size="small" type="primary" onClick={() => void handleSaveWorkspaceRoot(false)} loading={savingWorkspaceRoot}>
-                      {t("gameProject.projectSetupSetWorkspaceRoot", { defaultValue: "设置 Workspace Root" })}
-                    </Button>
-                    <Button size="small" onClick={() => void handleSaveWorkspaceRoot(true)} loading={savingWorkspaceRoot}>
-                      {t("gameProject.projectSetupCreateWorkspaceRoot", { defaultValue: "新建 Workspace Root" })}
-                    </Button>
-                    <Button size="small" icon={<CopyOutlined />} onClick={() => copyText(setupStatus?.active_workspace_root || workspaceRootInput || "") }>
-                      {t("gameProject.projectSetupCopyWorkspaceRoot", { defaultValue: "复制路径" })}
-                    </Button>
-                    <Button size="small" disabled>
-                      {t("gameProject.projectSetupOpenWorkspaceFolder", { defaultValue: "打开工作区文件夹" })}
-                    </Button>
-                  </Space>
-                </div>
-                <div className={styles.projectSetupHint}>
-                  {t("gameProject.projectSetupWorkspaceRootHint", {
-                    defaultValue: "切 Workspace 才切换完整数据环境；切 Agent 只切权限、session 和草稿，不切项目数据。",
-                  })}
-                </div>
-                <Alert
-                  type="info"
-                  showIcon
-                  message={t("gameProject.projectSetupWorkspaceSwitchTitle", { defaultValue: "Workspace Switch" })}
-                  description={t("gameProject.projectSetupWorkspaceSwitchDescription", {
-                    defaultValue: "当前卡片展示完整 workspace 切换上下文：workspace.yaml、active project、project bundle、当前 agent 与当前 role。打开文件夹入口暂未接入客户端能力，因此保持禁用。",
-                  })}
-                  className={styles.mapReviewAlert}
-                />
-                <Input
-                  value={workspaceRootInput}
-                  onChange={(event) => setWorkspaceRootInput(event.target.value)}
-                  placeholder={t("gameProject.projectSetupWorkspaceRootPlaceholder", { defaultValue: "/Users/Admin/LTClawWorkspace" })}
-                />
-                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
-                  <Descriptions.Item label={t("gameProject.projectSetupWorkspaceRootActive", { defaultValue: "Active Workspace Root" })}>
-                    {setupStatus?.active_workspace_root || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupWorkspaceProjectRoot", { defaultValue: "Active Project Root" })}>
-                    {setupStatus?.active_workspace_project_root || setupStatus?.project_root || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectBundleRoot", { defaultValue: "Project Bundle Root" })}>
-                    {setupStatus?.project_bundle_root || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectKey", { defaultValue: "Current Project" })}>
-                    {setupStatus?.project_key || setupStatus?.active_workspace_project_key || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupCurrentAgent", { defaultValue: "Current Agent" })}>
-                    {selectedAgent || storageSummary?.current_agent_id || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupCapabilityRole", { defaultValue: "Role" })}>
-                    {projectCapabilityStatus?.role || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupCapabilitySource", { defaultValue: "Capability Source" })}>
-                    {projectCapabilityStatus?.capability_source || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupWorkspacePointerPath", { defaultValue: "Workspace Pointer" })}>
-                    {setupStatus?.workspace_pointer_path || "-"}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t("gameProject.projectSetupWorkspaceConfigPath", { defaultValue: "workspace.yaml" })}>
-                    {setupStatus?.workspace_config_path || "-"}
                   </Descriptions.Item>
                 </Descriptions>
               </div>
@@ -1304,8 +1369,8 @@ export default function GameProject() {
                       <div className={styles.projectSetupSummaryItem}><span>raw</span><strong>{coldStartJob.counts.raw_table_index_count}</strong></div>
                       <div className={styles.projectSetupSummaryItem}><span>canonical</span><strong>{coldStartJob.counts.canonical_table_count}</strong></div>
                       <div className={styles.projectSetupSummaryItem}><span>candidate</span><strong>{coldStartJob.counts.candidate_table_count}</strong></div>
-                      <div className={styles.projectSetupSummaryItem}><span>warnings</span><strong>{coldStartJob.warnings.length}</strong></div>
-                      <div className={styles.projectSetupSummaryItem}><span>errors</span><strong>{coldStartJob.errors.length}</strong></div>
+                      <div className={styles.projectSetupSummaryItem}><span>warnings</span><strong>{coldStartWarnings.length}</strong></div>
+                      <div className={styles.projectSetupSummaryItem}><span>errors</span><strong>{coldStartErrors.length}</strong></div>
                       <div className={styles.projectSetupSummaryItem}><span>timeout</span><strong>{coldStartJob.timeout_seconds}s</strong></div>
                     </div>
                     <div className={styles.projectSetupJobActions}>
@@ -1330,20 +1395,20 @@ export default function GameProject() {
                         {t("gameProject.projectSetupSaveFormalMapEntry", { defaultValue: "保存 Formal Map" })}
                       </Button>
                     </div>
-                    {coldStartJob.warnings.length > 0 ? (
+                    {coldStartWarnings.length > 0 ? (
                       <div className={styles.projectSetupListSection}>
                         <Text strong>{t("gameProject.projectSetupWarningsList", { defaultValue: "Warnings" })}</Text>
-                        {coldStartJob.warnings.map((item) => (
+                        {coldStartWarnings.map((item) => (
                           <div key={item} className={styles.projectSetupListItem}>
                             <span>{item}</span>
                           </div>
                         ))}
                       </div>
                     ) : null}
-                    {coldStartJob.errors.length > 0 ? (
+                    {coldStartErrors.length > 0 ? (
                       <div className={styles.projectSetupListSection}>
                         <Text strong>{t("gameProject.projectSetupJobErrors", { defaultValue: "Job Errors" })}</Text>
-                        {coldStartJob.errors.map((item, index) => (
+                        {coldStartErrors.map((item, index) => (
                           <div key={`${item.error}-${index}`} className={styles.projectSetupListItem}>
                             <span>{[item.stage, item.error, item.source_path].filter(Boolean).join(" / ")}</span>
                           </div>
@@ -1360,7 +1425,7 @@ export default function GameProject() {
                         description={
                           <div className={styles.projectSetupSuccessMeta}>
                             <div>{`candidate_table_count: ${coldStartProgress.candidateTableCount}`}</div>
-                            <div>{`candidate_refs: ${coldStartJob.candidate_refs.join(", ") || "-"}`}</div>
+                            <div>{`candidate_refs: ${coldStartCandidateRefs.join(", ") || "-"}`}</div>
                           </div>
                         }
                       />
