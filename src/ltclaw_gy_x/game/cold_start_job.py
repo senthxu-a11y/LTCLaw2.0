@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from fnmatch import fnmatch
 import json
 import threading
 import time
@@ -14,7 +15,11 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from .canonical_facts_committer import CanonicalFactsCommitter
-from .config import load_project_tables_source_config
+from .config import (
+    load_project_docs_source_config,
+    load_project_scripts_source_config,
+    load_project_tables_source_config,
+)
 from .knowledge_formal_map_store import load_formal_knowledge_map
 from .knowledge_source_candidate_store import save_latest_source_candidate
 from .knowledge_map_candidate import (
@@ -24,11 +29,13 @@ from .knowledge_map_candidate import (
 )
 from .models import KnowledgeMap
 from .paths import (
+    get_project_docs_source_path,
     get_project_canonical_tables_dir,
     get_project_key,
     get_project_raw_table_indexes_path,
     get_project_runtime_build_job_path,
     get_project_runtime_build_jobs_dir,
+    get_project_scripts_source_path,
     get_project_tables_source_path,
 )
 from .raw_index_rebuild import rebuild_raw_table_indexes
@@ -295,6 +302,95 @@ def _append_error(state: ColdStartJobState, *, stage: str, error: str, source_pa
     return state
 
 
+def _normalize_match_path(path: str) -> str:
+    return path.replace("\\", "/").strip("/")
+
+
+def _matches_any(path: str, patterns: list[str]) -> bool:
+    normalized_path = _normalize_match_path(path).lower()
+    return any(fnmatch(normalized_path, _normalize_match_path(pattern).lower()) for pattern in patterns)
+
+
+def _scan_optional_sources(
+    project_root: Path,
+    *,
+    label: str,
+    config_path: Path,
+    config: Any,
+) -> dict[str, Any]:
+    if not config_path.exists():
+        return {
+            "configured": False,
+            "available_count": 0,
+            "warnings": [],
+            "errors": [],
+            "roots": [],
+        }
+    if config is None:
+        return {
+            "configured": True,
+            "available_count": 0,
+            "warnings": [f"{label}_skipped_invalid_config"],
+            "errors": [f"{label}_config_invalid"],
+            "roots": [],
+        }
+
+    include_patterns = [str(pattern or "").strip() for pattern in getattr(config, "include", []) if str(pattern or "").strip()]
+    exclude_patterns = [str(pattern or "").strip() for pattern in getattr(config, "exclude", []) if str(pattern or "").strip()]
+    warnings: list[str] = []
+    errors: list[str] = []
+    resolved_roots: list[dict[str, Any]] = []
+    available_paths: list[str] = []
+
+    for root in getattr(config, "roots", []) or []:
+        configured_root = str(root or "").strip()
+        if not configured_root:
+            continue
+        root_path = Path(configured_root.replace("\\", "/")).expanduser()
+        if not root_path.is_absolute():
+            root_path = project_root / configured_root
+        root_entry = {
+            "configured_root": configured_root,
+            "resolved_root": root_path.as_posix(),
+            "exists": root_path.exists(),
+            "is_directory": root_path.is_dir(),
+        }
+        resolved_roots.append(root_entry)
+        if not root_path.exists():
+            warnings.append(f"{label}_skipped_missing_root:{configured_root}")
+            continue
+        if not root_path.is_dir():
+            warnings.append(f"{label}_skipped_root_not_directory:{configured_root}")
+            continue
+        try:
+            for file_path in root_path.rglob("*"):
+                if not file_path.is_file():
+                    continue
+                try:
+                    relative_path = file_path.relative_to(project_root).as_posix()
+                except ValueError:
+                    relative_path = file_path.as_posix()
+                if exclude_patterns and _matches_any(relative_path, exclude_patterns):
+                    continue
+                if include_patterns and not _matches_any(relative_path, include_patterns):
+                    continue
+                available_paths.append(relative_path)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{label}_scan_error:{configured_root}:{exc}")
+
+    if resolved_roots and not available_paths:
+        warnings.append(f"{label}_skipped_no_available_sources")
+
+    return {
+        "configured": True,
+        "available_count": len(available_paths),
+        "warnings": warnings,
+        "errors": errors,
+        "roots": resolved_roots,
+        "available_paths": sorted(set(available_paths)),
+    }
+
+
 def _run_cold_start_job(project_root: Path, job_id: str, cancel_requested: threading.Event) -> None:
     started_at = time.monotonic()
     current_stage = "checking_project_root"
@@ -328,6 +424,34 @@ def _run_cold_start_job(project_root: Path, job_id: str, cancel_requested: threa
             state.finished_at = _now()
             save_cold_start_job(project_root, state)
             return
+
+        docs_scan = _scan_optional_sources(
+            project_root,
+            label="docs",
+            config_path=get_project_docs_source_path(project_root),
+            config=load_project_docs_source_config(project_root),
+        )
+        scripts_scan = _scan_optional_sources(
+            project_root,
+            label="scripts",
+            config_path=get_project_scripts_source_path(project_root),
+            config=load_project_scripts_source_config(project_root),
+        )
+        state.counts.discovered_doc_count = int(docs_scan.get("available_count") or 0)
+        state.counts.discovered_script_count = int(scripts_scan.get("available_count") or 0)
+        state.partial_outputs["optional_sources"] = {
+            "docs": docs_scan,
+            "scripts": scripts_scan,
+        }
+        for warning in docs_scan.get("warnings", []):
+            _append_warning(state, warning)
+        for warning in scripts_scan.get("warnings", []):
+            _append_warning(state, warning)
+        for error in docs_scan.get("errors", []):
+            _append_error(state, stage="discovering_sources", error=error, source_path=str(get_project_docs_source_path(project_root)))
+        for error in scripts_scan.get("errors", []):
+            _append_error(state, stage="discovering_sources", error=error, source_path=str(get_project_scripts_source_path(project_root)))
+        save_cold_start_job(project_root, state)
 
         current_stage = "discovering_sources"
         state = _update_job_state(

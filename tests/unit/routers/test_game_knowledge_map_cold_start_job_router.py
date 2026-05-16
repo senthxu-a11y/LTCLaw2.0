@@ -95,6 +95,8 @@ def test_cold_start_job_succeeds_and_get_restores_persisted_state(monkeypatch, t
     assert result['stage'] == 'done'
     assert result['counts'] == {
         'discovered_table_count': 1,
+        'discovered_doc_count': 0,
+        'discovered_script_count': 0,
         'raw_table_index_count': 1,
         'canonical_table_count': 1,
         'candidate_table_count': 1,

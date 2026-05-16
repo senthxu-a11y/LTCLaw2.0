@@ -1,7 +1,9 @@
 # Workspace / Agent / Storage Foundation Closeout 2026-05-16
 
 ## 1. 开发基线
-- 当前开发基线 commit: 5b49d02bf7628cff16040a1afc9f8909d93ce077
+- 当前分支: foundation/workspace-agent-storage-from-m1
+- baseline commit sha: f696c1f5774e538db10b5cbdc1509779f58bab10
+- 当前开发基线来源 commit: 5b49d02bf7628cff16040a1afc9f8909d93ce077
 - foundation 分支: foundation/workspace-agent-storage-from-m1
 - 是否从 milestone-1-csv-cold-start-e2e-ready 创建: 是
 - 备份分支: backup/m2-ui-experimental-main
@@ -68,6 +70,12 @@
 - TXT table 仅在显式 include 时被识别，不会默认进入 M1 rule-only cold-start。
 - M1 CSV cold-start smoke 持续通过。
 
+### docs/scripts optional 安全闭环
+- docs.yaml / scripts.yaml 已接入 cold-start warning-only 扫描。
+- roots 缺失、无可用文件、配置无效、扫描异常只写 warning / error payload，不阻塞 table-only cold-start 成功。
+- docs/scripts warning 不影响 discovered_table_count / raw_table_index_count / canonical_table_count / candidate_table_count。
+- 当前没有恢复下午 M2 的 markdown / docx / script evidence 全链路重建。
+
 ### Data Workspace Root
 - 新增 workspace pointer: working/game_data/user/workspace_pointer.yaml
 - 新增 workspace.yaml 读写与目录布局初始化。
@@ -104,6 +112,10 @@
 ### Workspace / Agent / Storage 回归
 - 命令: PYTHONPATH=$PWD/src /Users/Admin/LTCLaw2.0/.venv/bin/python -m pytest -q tests/unit/game/test_paths.py tests/unit/app/test_agent_context.py tests/unit/routers/test_game_project_router.py -k 'workspace or capability_status or setup_status or project_root or storage_summary or agent_profile'
 - 结果: 22 passed, 20 deselected
+
+### docs/scripts optional 回归
+- 命令: PYTHONPATH=$PWD/src /Users/Admin/LTCLaw2.0/.venv/bin/python -m pytest -q tests/unit/game/test_cold_start_job_pipeline.py tests/unit/routers/test_game_knowledge_map_cold_start_job_router.py
+- 结果: 9 passed
 
 ### M1 保护回归
 - 命令:
@@ -160,17 +172,36 @@
 - docs / scripts 多源重建链路
 - markdown / docx / script evidence 全链路 smoke
 - multi_source_project 的完整 UI / build / publish 收口
-- docs/scripts optional warnings 贯通到 cold-start job 的完整后端流水线
+- docs/scripts canonical rebuild / release / rag 的正式解析与索引流水线
 
 ## 14. 是否建议用 foundation 替换 main
 - 当前结论: 暂不建议直接替换 main
 - 原因:
   - 后端 foundation 已稳定保护 M1 并完成 workspace/agent/storage 核心边界收口
   - 但尚未完成人工 smoke
-  - 尚未完成 docs/scripts optional 的完整多源恢复闭环
+  - docs/scripts optional 只完成了安全 warning-only 闭环，尚未恢复完整多源索引链路
 
 ## 15. 未覆盖风险
-- docs/scripts optional 目前仍未形成完整重建流水线与 UI warning/error 展示闭环。
+- docs/scripts optional 当前只做到 warning-only 安全闭环，尚未恢复真正的 docs/scripts rebuild 能力。
 - 未执行浏览器级人工 smoke，Workspace 切换、Agent 切换、Map Editor 提示、NumericWorkbench 可见性仍缺少真实交互验证。
 - 未执行多源 smoke，因此 foundation 当前明确优先保护 M1，而不是恢复 M2。
-- 当前 closeout 基于未提交工作树状态，尚未形成 foundation 分支上的新提交。
+- manual smoke 模板已创建，但尚未执行任何手工验收项。
+
+## 16. 已完成项
+- foundation baseline 已提交并推送到远端 foundation/workspace-agent-storage-from-m1。
+- Data Workspace Root / workspace pointer / workspace.yaml 已落地。
+- Project-scoped / Agent-scoped / Session-scoped / Cache-scoped 路径边界已落地并有自动化覆盖。
+- capability_source / is_legacy_role_fallback / missing_required_capabilities 已接入。
+- /game/workbench -> /numeric-workbench redirect 已接入。
+- docs/scripts optional warning-only 闭环已落地并有自动化覆盖。
+
+## 17. 未完成项
+- 人工 smoke 尚未执行。
+- workspace 切换 E2E 尚未执行。
+- agent 切换 E2E 尚未执行。
+- 多源 M2 smoke 尚未恢复。
+
+## 18. 下一步建议
+- 先按 manual smoke 模板执行人工验收，确认 Workspace 切换 / Agent 切换 / NumericWorkbench / Release 读写权限。
+- 在不扩新 source type 的前提下，再决定是否补 docs/scripts 的正式 raw/canonical rebuild。
+- 在人工 smoke 和必要 E2E 补齐前，暂不建议替换 main。
