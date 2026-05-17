@@ -28,6 +28,13 @@ describe("project setup UI surface", () => {
     assert.equal(pageSource.includes('defaultValue: "Rule-only 冷启动"'), true);
     assert.equal(pageSource.includes('defaultValue: "Local Project Root"'), true);
     assert.equal(pageSource.includes('defaultValue: "Tables Source"'), true);
+    assert.equal(pageSource.includes('defaultValue: "MapRAG 资料包目录"'), true);
+    assert.equal(pageSource.includes('defaultValue: "当前 Agent"') || pageSource.includes('defaultValue: "Current Agent"'), true);
+    assert.equal(pageSource.includes('defaultValue: "绑定 Agent"'), true);
+    assert.equal(pageSource.includes('当前 Agent 与项目绑定不一致，可能造成记忆污染'), true);
+    assert.equal(pageSource.includes('defaultValue: "保存 MapRAG 目录"'), true);
+    assert.equal(pageSource.includes('defaultValue: "绑定当前 Agent"'), true);
+    assert.equal(pageSource.includes('defaultValue: "切换到绑定 Agent"'), true);
     assert.equal(pageSource.includes('defaultValue: "Source Discovery"'), true);
     assert.equal(pageSource.includes('defaultValue: "Build Pipeline Status"'), true);
     assert.equal(pageSource.includes('defaultValue: "Rule-only 冷启动构建"'), true);
@@ -37,6 +44,9 @@ describe("project setup UI surface", () => {
     assert.equal(apiSource.includes('/agents/${agentId}/game/project/setup-status'), true);
     assert.equal(apiSource.includes('/agents/${agentId}/game/project/root'), true);
     assert.equal(apiSource.includes('/agents/${agentId}/game/project/sources/tables'), true);
+    assert.equal(apiSource.includes('/agents/${agentId}/game/project/maprag-bundle'), true);
+    assert.equal(apiSource.includes('/agents/${agentId}/game/project/agent-binding'), true);
+    assert.equal(apiSource.includes('/agents/${agentId}/game/project/agent-binding/apply'), true);
     assert.equal(apiSource.includes('/agents/${agentId}/game/project/sources/discover'), true);
     assert.equal(apiSource.includes('/agents/${agentId}/game/knowledge/map/cold-start-jobs'), true);
     assert.equal(apiSource.includes('/agents/${agentId}/game/knowledge/map/cold-start-jobs/${encodeURIComponent(jobId)}'), true);
@@ -53,7 +63,10 @@ describe("project setup UI surface", () => {
     assert.equal(pageSource.includes('handleCopyDiagnostics'), true);
     assert.equal(pageSource.includes('defaultValue: "Status"'), true);
     assert.equal(pageSource.includes('defaultValue: "Stage"'), true);
+    assert.equal(pageSource.includes('progress'), true);
     assert.equal(pageSource.includes('defaultValue: "Current File"'), true);
+    assert.equal(pageSource.includes('counts') || pageSource.includes('raw_table_index_count'), true);
+    assert.equal(pageSource.includes('defaultValue: "Next Action"'), true);
     assert.equal(pageSource.includes('candidate_refs'), true);
   });
 

@@ -333,6 +333,26 @@ def get_project_bundle_project_dir(project_root: Path) -> Path:
     return get_project_bundle_root(project_root) / "project"
 
 
+def _get_configured_maprag_bundle_root() -> Path | None:
+    try:
+        from .config import load_user_config
+
+        cfg = load_user_config()
+        raw = getattr(cfg, "maprag_bundle_root", None)
+        if raw and str(raw).strip():
+            return Path(str(raw).strip()).expanduser()
+    except Exception:
+        return None
+    return None
+
+
+def get_project_maprag_root(project_root: Path) -> Path:
+    configured = _get_configured_maprag_bundle_root()
+    if configured is not None:
+        return configured
+    return get_project_bundle_project_dir(project_root)
+
+
 def get_project_store_dir(svn_root: Path) -> Path:
     """??????: <game-data>/projects/<project-key>"""
     return get_project_bundle_root(svn_root)
@@ -424,7 +444,7 @@ def get_project_canonical_script_facts_path(project_root: Path, script_id: str) 
 
 
 def get_project_maps_dir(project_root: Path) -> Path:
-    return get_project_bundle_project_dir(project_root) / "maps"
+    return get_project_maprag_root(project_root) / "maps"
 
 
 def get_project_candidate_maps_dir(project_root: Path) -> Path:
@@ -460,7 +480,7 @@ def get_project_latest_map_diff_path(project_root: Path) -> Path:
 
 
 def get_project_releases_dir(project_root: Path) -> Path:
-    return get_project_bundle_project_dir(project_root) / "releases"
+    return get_project_maprag_root(project_root) / "releases"
 
 
 def get_project_current_release_path(project_root: Path) -> Path:
@@ -473,7 +493,7 @@ def get_project_release_dir(project_root: Path, release_id: str) -> Path:
 
 
 def get_project_rag_dir(project_root: Path) -> Path:
-    return get_project_bundle_project_dir(project_root) / "rag"
+    return get_project_maprag_root(project_root) / "rag"
 
 
 def get_project_current_rag_dir(project_root: Path) -> Path:
@@ -751,7 +771,7 @@ def get_knowledge_base_dir(
 
 
 def get_knowledge_working_dir(project_root: Path) -> Path:
-    return get_project_data_dir(Path(project_root)) / "working"
+    return get_project_maprag_root(Path(project_root)) / "working"
 
 
 def get_knowledge_releases_dir(project_root: Path) -> Path:

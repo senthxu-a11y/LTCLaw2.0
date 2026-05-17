@@ -115,9 +115,13 @@ export default function GameProject() {
   const [tablesExcludeInput, setTablesExcludeInput] = useState(joinProjectSetupLines(cachedProjectRuntime?.setupStatus?.tables_config.exclude));
   const [tablesHeaderRow, setTablesHeaderRow] = useState(cachedProjectRuntime?.setupStatus?.tables_config.header_row || 1);
   const [tablesPrimaryKeysInput, setTablesPrimaryKeysInput] = useState(joinProjectSetupLines(cachedProjectRuntime?.setupStatus?.tables_config.primary_key_candidates));
+  const [mapragBundleRootInput, setMapragBundleRootInput] = useState(cachedProjectRuntime?.setupStatus?.maprag_bundle_root ?? "");
   const [savingProjectSetupRoot, setSavingProjectSetupRoot] = useState(false);
   const [savingWorkspaceRoot, setSavingWorkspaceRoot] = useState(false);
   const [savingProjectSetupTables, setSavingProjectSetupTables] = useState(false);
+  const [savingMapragBundle, setSavingMapragBundle] = useState(false);
+  const [savingAgentBinding, setSavingAgentBinding] = useState(false);
+  const [applyingAgentBinding, setApplyingAgentBinding] = useState(false);
   const [discoveringSources, setDiscoveringSources] = useState(false);
   const [activeColdStartJobId, setActiveColdStartJobId] = useState(cachedProjectRuntime?.activeColdStartJobId ?? "");
   const [coldStartJob, setColdStartJob] = useState<ColdStartJobState | null>(cachedProjectRuntime?.coldStartJob ?? null);
@@ -135,6 +139,7 @@ export default function GameProject() {
       setTablesExcludeInput("");
       setTablesHeaderRow(1);
       setTablesPrimaryKeysInput("");
+      setMapragBundleRootInput("");
       return;
     }
     setWorkspaceRootInput(status.active_workspace_root ?? "");
@@ -144,6 +149,7 @@ export default function GameProject() {
     setTablesExcludeInput(joinProjectSetupLines(status.tables_config.exclude));
     setTablesHeaderRow(status.tables_config.header_row || 1);
     setTablesPrimaryKeysInput(joinProjectSetupLines(status.tables_config.primary_key_candidates));
+    setMapragBundleRootInput(status.maprag_bundle_root ?? "");
   }, []);
 
   useEffect(() => {
@@ -241,7 +247,7 @@ export default function GameProject() {
       }
       applySetupStatus(projectSetupStatus);
       setDiscoveryResult(loadProjectSetupCachedDiscovery(projectSetupStatus));
-      const savedJobId = loadColdStartActiveJobId(selectedAgent);
+      const savedJobId = loadColdStartActiveJobId(projectSetupStatus);
       if (!savedJobId) {
         setColdStartJob(null);
         setActiveColdStartJobId("");
@@ -250,9 +256,9 @@ export default function GameProject() {
           const job = await gameApi.getColdStartJob(selectedAgent, savedJobId);
           setColdStartJob(job);
           setActiveColdStartJobId(job.job_id);
-          saveColdStartActiveJobId(selectedAgent, job.job_id);
+          saveColdStartActiveJobId(projectSetupStatus, job.job_id);
         } catch {
-          clearColdStartActiveJobId(selectedAgent);
+          clearColdStartActiveJobId(projectSetupStatus);
           setColdStartJob(null);
           setActiveColdStartJobId("");
         }
@@ -344,7 +350,7 @@ export default function GameProject() {
       setDiscoveryResult(null);
       setColdStartJob(null);
       setActiveColdStartJobId("");
-      clearColdStartActiveJobId(selectedAgent);
+      clearColdStartActiveJobId(response.setup_status);
       message.success(t("gameProject.projectRootSaved", { defaultValue: "Local Project Root 已保存。" }));
       await loadProjectData();
     } catch (err) {
@@ -404,13 +410,65 @@ export default function GameProject() {
       setDiscoveryResult(null);
       setColdStartJob(null);
       setActiveColdStartJobId("");
-      clearColdStartActiveJobId(selectedAgent);
+      clearColdStartActiveJobId(response.setup_status);
       message.success(t("gameProject.tablesSourceSaved", { defaultValue: "Tables Source 已保存。" }));
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : t("gameProject.saveFailed");
       message.error(errMsg);
     } finally {
       setSavingProjectSetupTables(false);
+    }
+  };
+
+  const handleSaveMapragBundle = async () => {
+    if (!selectedAgent) {
+      return;
+    }
+    try {
+      setSavingMapragBundle(true);
+      const response = await gameApi.saveProjectMapRagBundle(selectedAgent, mapragBundleRootInput.trim() || null);
+      applySetupStatus(response);
+      message.success(t("gameProject.projectSetupMapragBundleSaved", { defaultValue: "MapRAG 资料包目录已保存。" }));
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : t("gameProject.saveFailed");
+      message.error(errMsg);
+    } finally {
+      setSavingMapragBundle(false);
+    }
+  };
+
+  const handleBindCurrentAgent = async () => {
+    if (!selectedAgent) {
+      return;
+    }
+    try {
+      setSavingAgentBinding(true);
+      const response = await gameApi.bindProjectAgent(selectedAgent, selectedAgent);
+      applySetupStatus(response);
+      message.success(t("gameProject.projectSetupAgentBound", { defaultValue: "已绑定当前 Agent。" }));
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : t("gameProject.saveFailed");
+      message.error(errMsg);
+    } finally {
+      setSavingAgentBinding(false);
+    }
+  };
+
+  const handleApplyBoundAgent = async () => {
+    if (!selectedAgent) {
+      return;
+    }
+    try {
+      setApplyingAgentBinding(true);
+      const response = await gameApi.applyProjectAgentBinding(selectedAgent);
+      applySetupStatus(response.setup_status);
+      setSelectedAgent(response.applied_agent_id);
+      message.success(t("gameProject.projectSetupAgentBindingApplied", { defaultValue: "已切换到绑定 Agent，请刷新页面确保请求头同步。" }));
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : t("gameProject.saveFailed");
+      message.error(errMsg);
+    } finally {
+      setApplyingAgentBinding(false);
     }
   };
 
@@ -449,9 +507,9 @@ export default function GameProject() {
     const job = await gameApi.getColdStartJob(selectedAgent, jobId);
     setColdStartJob(job);
     setActiveColdStartJobId(job.job_id);
-    saveColdStartActiveJobId(selectedAgent, job.job_id);
+    saveColdStartActiveJobId(setupStatus, job.job_id, job.project_key || job.project_root);
     return job;
-  }, [selectedAgent]);
+  }, [selectedAgent, setupStatus]);
 
   const handleStartColdStartJob = async () => {
     if (!selectedAgent) {
@@ -462,7 +520,7 @@ export default function GameProject() {
       const response = await gameApi.createColdStartJob(selectedAgent, { timeout_seconds: 300 });
       setColdStartJob(response.job);
       setActiveColdStartJobId(response.job.job_id);
-      saveColdStartActiveJobId(selectedAgent, response.job.job_id);
+      saveColdStartActiveJobId(setupStatus, response.job.job_id, response.job.project_key || response.job.project_root);
       message.success(
         response.reused_existing
           ? t("gameProject.projectSetupColdStartReused", { defaultValue: "检测到同项目已有运行中的冷启动任务，已恢复该任务状态。" })
@@ -633,6 +691,8 @@ export default function GameProject() {
 
     const userPayload = {
       my_role: (values.is_maintainer ? "maintainer" : "consumer") as "maintainer" | "consumer",
+      maprag_bundle_root: setupStatus?.maprag_bundle_root ?? null,
+      bound_agent_id: setupStatus?.bound_agent_id ?? null,
       svn_local_root: workingCopyPath,
       svn_url: values.svn_url || null,
       svn_username: values.svn_username || null,
@@ -762,7 +822,7 @@ export default function GameProject() {
       setColdStartJob(null);
       return;
     }
-    const savedJobId = loadColdStartActiveJobId(selectedAgent);
+    const savedJobId = loadColdStartActiveJobId(setupStatus);
     if (!savedJobId) {
       setActiveColdStartJobId("");
       setColdStartJob(null);
@@ -772,12 +832,12 @@ export default function GameProject() {
     setRestoringColdStartJob(true);
     fetchColdStartJob(savedJobId)
       .catch(() => {
-        clearColdStartActiveJobId(selectedAgent);
+        clearColdStartActiveJobId(setupStatus);
         setActiveColdStartJobId("");
         setColdStartJob(null);
       })
       .finally(() => setRestoringColdStartJob(false));
-  }, [fetchColdStartJob, selectedAgent]);
+  }, [fetchColdStartJob, selectedAgent, setupStatus]);
 
   useEffect(() => {
     if (!selectedAgent || !activeColdStartJobId) {
@@ -831,6 +891,9 @@ export default function GameProject() {
   const currentWorkspaceRoot = workspaceRootStatus?.active_workspace_root || setupStatus?.active_workspace_root || "-";
   const currentActiveProjectRoot = workspaceRootStatus?.active_workspace_project_root || setupStatus?.active_workspace_project_root || setupStatus?.project_root || "-";
   const currentProjectBundleRoot = setupStatus?.project_bundle_root || "-";
+  const currentAgentId = setupStatus?.current_agent_id || selectedAgent || storageSummary?.current_agent_id || "-";
+  const boundAgentId = setupStatus?.bound_agent_id || setupStatus?.agent_binding?.bound_agent_id || "-";
+  const agentBindingWarning = setupStatus?.agent_binding?.warning || null;
   const coldStartWarnings = coldStartJob?.warnings || [];
   const coldStartErrors = coldStartJob?.errors || [];
   const coldStartCandidateRefs = coldStartJob?.candidate_refs || [];
@@ -850,6 +913,9 @@ export default function GameProject() {
   const workspaceBarEyebrow = t("gameProject.workspaceBarEyebrow", { defaultValue: "工作区 / Workspace" });
   const workspaceBarGuardrail = t("gameProject.workspaceBarGuardrail", {
     defaultValue: "切换工作区会切换 Project Data / Agent Profiles / Sessions / Cache，不会删除旧数据；切换 agent 只切换权限和 session，不切 Project Data。",
+  });
+  const agentBindingMismatchMessage = t("gameProject.projectSetupAgentBindingMismatchWarning", {
+    defaultValue: "当前 Agent 与项目绑定不一致，可能造成记忆污染",
   });
 
   return (
@@ -893,9 +959,13 @@ export default function GameProject() {
               <div className={styles.topBarStatCard}><span>{t("gameProject.projectSetupWorkspaceRoot", { defaultValue: "Current Workspace Root" })}</span><strong>{currentWorkspaceRoot}</strong></div>
               <div className={styles.topBarStatCard}><span>{t("gameProject.projectSetupProjectRootShort", { defaultValue: "Current Project Root" })}</span><strong>{currentActiveProjectRoot}</strong></div>
               <div className={styles.topBarStatCard}><span>{t("gameProject.projectBundleRoot", { defaultValue: "Current Project Bundle Root" })}</span><strong>{currentProjectBundleRoot}</strong></div>
-              <div className={styles.topBarStatCard}><span>{t("gameProject.projectSetupCurrentAgent", { defaultValue: "Current Agent" })}</span><strong>{selectedAgent || storageSummary?.current_agent_id || "-"}</strong></div>
+              <div className={styles.topBarStatCard}><span>{t("gameProject.projectSetupCurrentAgent", { defaultValue: "Current Agent" })}</span><strong>{currentAgentId}</strong></div>
+              <div className={styles.topBarStatCard}><span>{t("gameProject.projectSetupBoundAgent", { defaultValue: "绑定 Agent" })}</span><strong>{boundAgentId}</strong></div>
               <div className={styles.topBarStatCard}><span>{t("gameProject.projectSetupCapabilityRole", { defaultValue: "Current Role" })}</span><strong>{projectCapabilityStatus?.role || "-"}</strong></div>
             </div>
+            {agentBindingWarning ? (
+              <Alert type="error" showIcon message={agentBindingWarning || agentBindingMismatchMessage} className={styles.topBarAlert} />
+            ) : null}
             <Descriptions column={2} size="small" className={styles.topBarMeta}>
               <Descriptions.Item label={t("gameProject.projectSetupFrontendBuildId", { defaultValue: "Frontend Build ID" })}>
                 {import.meta.env.VITE_FRONTEND_BUILD_ID || "dev"}
@@ -1133,7 +1203,13 @@ export default function GameProject() {
                     {setupStatus?.project_key || setupStatus?.active_workspace_project_key || "-"}
                   </Descriptions.Item>
                   <Descriptions.Item label={t("gameProject.projectSetupCurrentAgent", { defaultValue: "Current Agent" })}>
-                    {selectedAgent || storageSummary?.current_agent_id || "-"}
+                    {currentAgentId}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupBoundAgent", { defaultValue: "绑定 Agent" })}>
+                    {boundAgentId}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupAgentBindingMatches", { defaultValue: "Agent Binding Matches" })}>
+                    {setupStatus?.agent_binding ? String(setupStatus.agent_binding.matches) : "-"}
                   </Descriptions.Item>
                   <Descriptions.Item label={t("gameProject.projectSetupCapabilityRole", { defaultValue: "Role" })}>
                     {projectCapabilityStatus?.role || "-"}
@@ -1142,6 +1218,63 @@ export default function GameProject() {
                     {projectCapabilityStatus?.capability_source || "-"}
                   </Descriptions.Item>
                 </Descriptions>
+                {agentBindingWarning ? (
+                  <Alert type="error" showIcon message={agentBindingWarning || agentBindingMismatchMessage} className={styles.mapReviewAlert} />
+                ) : null}
+              </div>
+
+              <div className={styles.projectSetupBlock}>
+                <div className={styles.projectSetupBlockHeader}>
+                  <Text strong>{t("gameProject.projectSetupMapragBundleTitle", { defaultValue: "MapRAG 资料包目录" })}</Text>
+                  <Button size="small" type="primary" onClick={handleSaveMapragBundle} loading={savingMapragBundle}>
+                    {t("gameProject.projectSetupSaveMapragBundle", { defaultValue: "保存 MapRAG 目录" })}
+                  </Button>
+                </div>
+                <Input
+                  value={mapragBundleRootInput}
+                  onChange={(event) => setMapragBundleRootInput(event.target.value)}
+                  placeholder={t("gameProject.projectSetupMapragBundlePlaceholder", { defaultValue: "/path/to/maprag_bundle" })}
+                />
+                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+                  <Descriptions.Item label={t("gameProject.projectSetupCurrentMapragBundle", { defaultValue: "Current MapRAG Bundle Root" })}>
+                    {setupStatus?.maprag_bundle_root || "-"}
+                  </Descriptions.Item>
+                </Descriptions>
+                {mapragBundleRootInput.trim() && mapragBundleRootInput.trim() !== (setupStatus?.maprag_bundle_root || "") ? (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message={t("gameProject.projectSetupMapragBundleUnsaved", {
+                      defaultValue: "MapRAG 资料包目录输入值尚未保存；如果目录不存在，保存时会明确报错。",
+                    })}
+                    className={styles.mapReviewAlert}
+                  />
+                ) : null}
+              </div>
+
+              <div className={styles.projectSetupBlock}>
+                <div className={styles.projectSetupBlockHeader}>
+                  <Text strong>{t("gameProject.projectSetupAgentBindingTitle", { defaultValue: "Agent 绑定" })}</Text>
+                  <Space wrap>
+                    <Button size="small" onClick={handleBindCurrentAgent} loading={savingAgentBinding}>
+                      {t("gameProject.projectSetupBindCurrentAgent", { defaultValue: "绑定当前 Agent" })}
+                    </Button>
+                    <Button size="small" type="primary" onClick={handleApplyBoundAgent} loading={applyingAgentBinding} disabled={!setupStatus?.bound_agent_id}>
+                      {t("gameProject.projectSetupApplyBoundAgent", { defaultValue: "切换到绑定 Agent" })}
+                    </Button>
+                  </Space>
+                </div>
+                <Descriptions column={1} size="small" className={styles.projectSetupMeta}>
+                  <Descriptions.Item label={t("gameProject.projectSetupCurrentAgent", { defaultValue: "当前 Agent" })}>
+                    {currentAgentId}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t("gameProject.projectSetupBoundAgent", { defaultValue: "绑定 Agent" })}>
+                    {boundAgentId}
+                  </Descriptions.Item>
+                </Descriptions>
+                {agentBindingWarning ? (
+                  <Alert type="error" showIcon message={agentBindingWarning || agentBindingMismatchMessage} className={styles.mapReviewAlert} />
+                ) : null}
               </div>
 
               <div className={styles.projectSetupBlock}>

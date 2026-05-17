@@ -1,5 +1,6 @@
 ﻿import { request } from '../request';
 import type { 
+  ApplyAgentBindingResponse,
   ColdStartJobCreateResponse,
   ColdStartJobState,
   LocalAgentProfile,
@@ -118,6 +119,26 @@ export const gameApi = {
     return request<SaveProjectTablesSourceResponse>(`/agents/${agentId}/game/project/sources/tables`, {
       method: "PUT",
       body: JSON.stringify(config),
+    });
+  },
+
+  async saveProjectMapRagBundle(agentId: string, mapragBundleRoot: string | null): Promise<ProjectSetupStatusResponse> {
+    return request<ProjectSetupStatusResponse>(`/agents/${agentId}/game/project/maprag-bundle`, {
+      method: "PUT",
+      body: JSON.stringify({ maprag_bundle_root: mapragBundleRoot }),
+    });
+  },
+
+  async bindProjectAgent(agentId: string, boundAgentId?: string | null): Promise<ProjectSetupStatusResponse> {
+    return request<ProjectSetupStatusResponse>(`/agents/${agentId}/game/project/agent-binding`, {
+      method: "PUT",
+      body: JSON.stringify({ agent_id: boundAgentId ?? null }),
+    });
+  },
+
+  async applyProjectAgentBinding(agentId: string): Promise<ApplyAgentBindingResponse> {
+    return request<ApplyAgentBindingResponse>(`/agents/${agentId}/game/project/agent-binding/apply`, {
+      method: "POST",
     });
   },
 

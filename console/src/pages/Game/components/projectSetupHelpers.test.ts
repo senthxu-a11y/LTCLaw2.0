@@ -5,15 +5,19 @@ import type { ProjectSetupStatusResponse, ProjectTableSourceDiscoveryResponse } 
 import {
   buildProjectSetupDiagnosticsText,
   clearProjectSetupCachedDiscovery,
+  clearColdStartActiveJobId,
   getEffectiveProjectSetupBuildReadiness,
   getAvailableColdStartTables,
+  getColdStartActiveJobStorageKey,
   getProjectSetupDiscoveryCacheKey,
   getProjectSetupDiscoverySummary,
   isProjectSetupProjectRootDirty,
   isProjectSetupBuildBlocked,
   joinProjectSetupLines,
   loadProjectSetupCachedDiscovery,
+  loadColdStartActiveJobId,
   saveProjectSetupCachedDiscovery,
+  saveColdStartActiveJobId,
   splitProjectSetupLines,
 } from "./projectSetupHelpers.ts";
 
@@ -124,6 +128,32 @@ describe("projectSetupHelpers", () => {
     saveProjectSetupCachedDiscovery(setupStatus, discovery);
 
     assert.deepEqual(loadProjectSetupCachedDiscovery(setupStatus), discovery);
+  });
+
+  it("persists active cold-start job id by project identity", () => {
+    localStorage.clear();
+    const setupStatus = createSetupStatus();
+
+    saveColdStartActiveJobId(setupStatus, "job-001");
+
+    assert.equal(getColdStartActiveJobStorageKey(setupStatus), "ltclaw.game.projectSetup.activeJob.demo-project");
+    assert.equal(loadColdStartActiveJobId(setupStatus), "job-001");
+  });
+
+  it("isolates active cold-start job id across project keys and clears it", () => {
+    localStorage.clear();
+    const setupStatus = createSetupStatus();
+    const otherProject = { ...createSetupStatus(), project_key: "other-project" };
+
+    saveColdStartActiveJobId(setupStatus, "job-001");
+    saveColdStartActiveJobId(otherProject, "job-002");
+
+    assert.equal(loadColdStartActiveJobId(setupStatus), "job-001");
+    assert.equal(loadColdStartActiveJobId(otherProject), "job-002");
+
+    clearColdStartActiveJobId(setupStatus);
+    assert.equal(loadColdStartActiveJobId(setupStatus), "");
+    assert.equal(loadColdStartActiveJobId(otherProject), "job-002");
   });
 
   it("does not leak cached discovery across workspaces and can clear it", () => {

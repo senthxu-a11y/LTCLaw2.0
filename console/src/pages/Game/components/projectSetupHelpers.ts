@@ -7,7 +7,7 @@ import type {
 } from "../../../api/types/game";
 
 
-const ACTIVE_COLD_START_JOB_PREFIX = "ltclaw_cold_start_active_job:";
+const ACTIVE_COLD_START_JOB_PREFIX = "ltclaw.game.projectSetup.activeJob.";
 const PROJECT_SETUP_DISCOVERY_CACHE_PREFIX = "ltclaw_project_setup_discovery:";
 
 export function splitProjectSetupLines(value: string): string[] {
@@ -121,8 +121,20 @@ export function canStartRuleOnlyColdStartBuild(
   return readiness.blocking_reason === null;
 }
 
-export function getColdStartActiveJobStorageKey(agentId: string): string {
-  return `${ACTIVE_COLD_START_JOB_PREFIX}${agentId}`;
+export function getProjectSetupProjectIdentity(setupStatus: ProjectSetupStatusResponse | null): string {
+  return (
+    (setupStatus?.project_key ?? "").trim() ||
+    (setupStatus?.project_root ?? "").trim() ||
+    (setupStatus?.active_workspace_project_root ?? "").trim()
+  );
+}
+
+export function getColdStartActiveJobStorageKey(
+  setupStatus: ProjectSetupStatusResponse | null,
+  fallbackProjectIdentity = "",
+): string {
+  const projectIdentity = getProjectSetupProjectIdentity(setupStatus) || fallbackProjectIdentity.trim();
+  return projectIdentity ? `${ACTIVE_COLD_START_JOB_PREFIX}${projectIdentity}` : "";
 }
 
 export function getProjectSetupDiscoveryCacheKey(
@@ -190,26 +202,41 @@ export function clearProjectSetupCachedDiscovery(
   localStorage.removeItem(cacheKey);
 }
 
-export function loadColdStartActiveJobId(agentId: string): string {
+export function loadColdStartActiveJobId(
+  setupStatus: ProjectSetupStatusResponse | null,
+  fallbackProjectIdentity = "",
+): string {
   if (typeof localStorage === "undefined") {
     return "";
   }
-  return localStorage.getItem(getColdStartActiveJobStorageKey(agentId)) || "";
+  const key = getColdStartActiveJobStorageKey(setupStatus, fallbackProjectIdentity);
+  return key ? localStorage.getItem(key) || "" : "";
 }
 
-export function saveColdStartActiveJobId(agentId: string, jobId: string): void {
+export function saveColdStartActiveJobId(
+  setupStatus: ProjectSetupStatusResponse | null,
+  jobId: string,
+  fallbackProjectIdentity = "",
+): void {
   if (typeof localStorage === "undefined") {
     return;
   }
-  if (jobId) {
-    localStorage.setItem(getColdStartActiveJobStorageKey(agentId), jobId);
+  const key = getColdStartActiveJobStorageKey(setupStatus, fallbackProjectIdentity);
+  if (!key) {
     return;
   }
-  localStorage.removeItem(getColdStartActiveJobStorageKey(agentId));
+  if (jobId) {
+    localStorage.setItem(key, jobId);
+    return;
+  }
+  localStorage.removeItem(key);
 }
 
-export function clearColdStartActiveJobId(agentId: string): void {
-  saveColdStartActiveJobId(agentId, "");
+export function clearColdStartActiveJobId(
+  setupStatus: ProjectSetupStatusResponse | null,
+  fallbackProjectIdentity = "",
+): void {
+  saveColdStartActiveJobId(setupStatus, "", fallbackProjectIdentity);
 }
 
 export function toColdStartProgressView(job: ColdStartJobState | null) {

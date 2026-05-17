@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from ltclaw_gy_x.app.agent_context import get_agent_for_request
 from ltclaw_gy_x.app.capabilities import build_agent_capability_profile
 from ltclaw_gy_x.app.multi_agent_manager import get_active_manager
+from ltclaw_gy_x.config import load_config, save_config
 from ltclaw_gy_x.game.config import (
     DEFAULT_TABLES_EXCLUDE_PATTERNS,
     DEFAULT_TABLES_INCLUDE_PATTERNS,
@@ -72,6 +73,14 @@ class ProjectTablesSourceConfigRequest(BaseModel):
     exclude: list[str] | None = None
     header_row: int = 1
     primary_key_candidates: list[str] | None = None
+
+
+class MapRagBundleUpdateRequest(BaseModel):
+    maprag_bundle_root: str | None = None
+
+
+class AgentBindingUpdateRequest(BaseModel):
+    agent_id: str | None = None
 
 
 class WorkspaceAgentProfileRequest(BaseModel):
@@ -171,7 +180,19 @@ def _serialize_tables_config(tables_config: ProjectTablesSourceConfig) -> dict:
     }
 
 
-def _build_setup_status(game_service) -> dict:
+def _agent_binding_payload(bound_agent_id: str | None, current_agent_id: str | None) -> dict:
+    bound = str(bound_agent_id or '').strip() or None
+    current = str(current_agent_id or '').strip() or None
+    matches = bound is None or bound == current
+    return {
+        "bound_agent_id": bound,
+        "current_agent_id": current,
+        "matches": matches,
+        "warning": None if matches else "当前 Agent 与项目绑定不一致，可能造成记忆污染",
+    }
+
+
+def _build_setup_status(game_service, current_agent_id: str | None = None) -> dict:
     project_root, project_root_source = _configured_project_root_with_source(game_service)
     project_root_path = _project_root_path(project_root)
     project_root_exists = bool(project_root_path and project_root_path.exists())
@@ -191,6 +212,9 @@ def _build_setup_status(game_service) -> dict:
     if project_config is not None:
         configured_root = str(project_config.svn.root or "").strip()
         project_config_svn_root = configured_root or None
+    maprag_bundle_root = str(getattr(game_service.user_config, "maprag_bundle_root", "") or "").strip() or None
+    bound_agent_id = str(getattr(game_service.user_config, "bound_agent_id", "") or "").strip() or None
+    agent_binding = _agent_binding_payload(bound_agent_id, current_agent_id)
     return {
         "active_workspace_root": str(active_workspace_root) if active_workspace_root is not None else None,
         "active_workspace_project_root": active_workspace_project_root,
@@ -205,6 +229,10 @@ def _build_setup_status(game_service) -> dict:
         "project_root_exists": project_root_exists,
         "project_bundle_root": str(get_project_bundle_root(project_root_path)) if project_root_path is not None else None,
         "project_key": get_project_key(project_root_path) if project_root_path is not None else None,
+        "maprag_bundle_root": maprag_bundle_root,
+        "bound_agent_id": bound_agent_id,
+        "current_agent_id": current_agent_id,
+        "agent_binding": agent_binding,
         "tables_config": _serialize_tables_config(tables_config),
         "discovery": {
             "status": "not_scanned",
@@ -356,9 +384,71 @@ async def get_project_config(workspace=Depends(get_agent_for_request)):
 
 
 @router.get("/setup-status")
-async def get_project_setup_status(workspace=Depends(get_agent_for_request)):
+async def get_project_setup_status(request: Request, workspace=Depends(get_agent_for_request)):
     game_service = _game_service_or_404(workspace)
-    return _build_setup_status(game_service)
+    return _build_setup_status(game_service, _current_agent_id(request, workspace))
+
+
+@router.put("/maprag-bundle")
+async def save_project_maprag_bundle(
+    body: MapRagBundleUpdateRequest,
+    request: Request,
+    workspace=Depends(get_agent_for_request),
+):
+    game_service = _game_service_or_404(workspace)
+    raw = str(body.maprag_bundle_root or "").strip()
+    user_config = game_service.user_config
+    if not raw:
+        user_config.maprag_bundle_root = None
+    else:
+        candidate = Path(raw.replace("\\", "/")).expanduser()
+        if not candidate.exists() or not candidate.is_dir():
+            raise HTTPException(status_code=400, detail=f"maprag_bundle_root must be an existing directory: {candidate}")
+        user_config.maprag_bundle_root = str(candidate)
+    save_user_config(user_config)
+    await _reload_loaded_game_services(workspace, game_service)
+    return _build_setup_status(game_service, _current_agent_id(request, workspace))
+
+
+def _assert_agent_exists(agent_id: str) -> None:
+    config = load_config()
+    if agent_id not in config.agents.profiles:
+        raise HTTPException(status_code=400, detail=f"agent_id does not exist: {agent_id}")
+
+
+@router.put("/agent-binding")
+async def save_project_agent_binding(
+    body: AgentBindingUpdateRequest,
+    request: Request,
+    workspace=Depends(get_agent_for_request),
+):
+    game_service = _game_service_or_404(workspace)
+    agent_id = str(body.agent_id or "").strip() or _current_agent_id(request, workspace)
+    _assert_agent_exists(agent_id)
+    game_service.user_config.bound_agent_id = agent_id
+    save_user_config(game_service.user_config)
+    await _reload_loaded_game_services(workspace, game_service)
+    return _build_setup_status(game_service, _current_agent_id(request, workspace))
+
+
+@router.post("/agent-binding/apply")
+async def apply_project_agent_binding(request: Request, workspace=Depends(get_agent_for_request)):
+    game_service = _game_service_or_404(workspace)
+    bound_agent_id = str(getattr(game_service.user_config, "bound_agent_id", "") or "").strip()
+    if not bound_agent_id:
+        raise HTTPException(status_code=400, detail="bound_agent_id is not configured")
+    _assert_agent_exists(bound_agent_id)
+    config = load_config()
+    config.agents.active_agent = bound_agent_id
+    save_config(config)
+    manager = get_active_manager()
+    if manager is not None:
+        await manager.get_agent(bound_agent_id)
+    return {
+        "applied_agent_id": bound_agent_id,
+        "reload_required": True,
+        "setup_status": _build_setup_status(game_service, _current_agent_id(request, workspace)),
+    }
 
 
 @router.get('/capability-status')
@@ -420,6 +510,7 @@ async def get_workspace_root_status(workspace=Depends(get_agent_for_request)):
 @router.put('/workspace-root')
 async def save_workspace_root(
     request: WorkspaceRootUpdateRequest,
+    http_request: Request,
     workspace=Depends(get_agent_for_request),
 ):
     game_service = _game_service_or_404(workspace)
@@ -454,13 +545,14 @@ async def save_workspace_root(
         'workspace_config_path': str(get_workspace_config_path(active_workspace_root)),
         'workspace_name': workspace_config.get('workspace_name'),
         'active_project_key': workspace_config.get('active_project_key'),
-        'setup_status': _build_setup_status(game_service),
+        'setup_status': _build_setup_status(game_service, _current_agent_id(http_request, workspace)),
     }
 
 
 @router.put("/root")
 async def save_project_root(
     request: ProjectRootUpdateRequest,
+    http_request: Request,
     workspace=Depends(get_agent_for_request),
 ):
     game_service = _game_service_or_404(workspace)
@@ -480,13 +572,14 @@ async def save_project_root(
     return {
         "project_key": get_project_key(project_root),
         "project_bundle_root": str(get_project_bundle_root(project_root)),
-        "setup_status": _build_setup_status(game_service),
+        "setup_status": _build_setup_status(game_service, _current_agent_id(http_request, workspace)),
     }
 
 
 @router.put("/sources/tables")
 async def save_project_tables_source(
     request: ProjectTablesSourceConfigRequest,
+    http_request: Request,
     workspace=Depends(get_agent_for_request),
 ):
     game_service = _game_service_or_404(workspace)
@@ -514,7 +607,7 @@ async def save_project_tables_source(
     await _reload_loaded_game_services(workspace, game_service)
     return {
         "effective_config": _serialize_tables_config(tables_config),
-        "setup_status": _build_setup_status(game_service),
+        "setup_status": _build_setup_status(game_service, _current_agent_id(http_request, workspace)),
         "config_path": str(get_project_tables_source_path(project_root)),
     }
 

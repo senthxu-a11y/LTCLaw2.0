@@ -62,6 +62,8 @@ export interface ProjectConfig {
 export interface UserGameConfig {
   my_role: "maintainer" | "planner" | "consumer";
   agent_profiles?: Record<string, LocalAgentProfile>;
+  maprag_bundle_root?: string | null;
+  bound_agent_id?: string | null;
   svn_local_root?: string | null;
   svn_url?: string | null;
   svn_username?: string | null;
@@ -109,6 +111,15 @@ export interface ProjectSetupStatusResponse {
   project_root_exists: boolean;
   project_bundle_root: string | null;
   project_key: string | null;
+  maprag_bundle_root?: string | null;
+  bound_agent_id?: string | null;
+  current_agent_id?: string | null;
+  agent_binding?: {
+    bound_agent_id: string | null;
+    current_agent_id: string | null;
+    matches: boolean;
+    warning: string | null;
+  };
   tables_config: ProjectTablesSourceConfig;
   discovery: ProjectSetupDiscoverySummary;
   build_readiness: ProjectSetupReadiness;
@@ -151,6 +162,12 @@ export interface SaveProjectTablesSourceResponse {
   effective_config: ProjectTablesSourceConfig;
   setup_status: ProjectSetupStatusResponse;
   config_path: string;
+}
+
+export interface ApplyAgentBindingResponse {
+  applied_agent_id: string;
+  reload_required: boolean;
+  setup_status: ProjectSetupStatusResponse;
 }
 
 export interface ProjectTableSourceEntry {

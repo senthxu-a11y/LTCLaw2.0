@@ -245,6 +245,8 @@ class UserGameConfig(BaseModel):
         default_factory=dict,
         description="Local agent capability boundary profiles. This is a local safety boundary, not a server auth system.",
     )
+    maprag_bundle_root: Union[str, None] = Field(default=None, description="Optional MapRAG bundle root override")
+    bound_agent_id: Union[str, None] = Field(default=None, description="Agent id bound to the current project")
     svn_local_root: Union[str, None] = Field(default=None, description="??SVN???????")
     svn_url: Union[str, None] = Field(default=None, description="SVN??URL")
     svn_username: Union[str, None] = Field(default=None, description="SVN???")

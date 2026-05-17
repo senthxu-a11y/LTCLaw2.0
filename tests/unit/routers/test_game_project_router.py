@@ -66,6 +66,11 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+@pytest.fixture(autouse=True)
+def _isolated_working_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+
+
 @pytest.fixture
 def app():
     app = FastAPI()
@@ -942,3 +947,104 @@ async def test_project_config_commit_returns_frozen_without_touching_svn(app, cl
     body = response.json()
     assert body['detail']['disabled'] is True
     assert body['detail']['config_exists'] is True
+
+
+@pytest.mark.asyncio
+async def test_setup_status_returns_maprag_and_agent_binding(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    service = _Service(project_root)
+    service.user_config.maprag_bundle_root = str(tmp_path / 'bundle')
+    service.user_config.bound_agent_id = 'bound-agent'
+    app.dependency_overrides[get_agent_for_request] = lambda: SimpleNamespace(
+        service_manager=SimpleNamespace(services={'game_service': service}),
+        workspace_dir=str(tmp_path / 'current-workspace'),
+        agent_id='current-agent',
+    )
+
+    async with client:
+        response = await client.get('/api/game/project/setup-status')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['maprag_bundle_root'] == str(tmp_path / 'bundle')
+    assert payload['bound_agent_id'] == 'bound-agent'
+    assert payload['current_agent_id'] == 'current-agent'
+    assert payload['agent_binding']['matches'] is False
+    assert payload['agent_binding']['warning'] == '当前 Agent 与项目绑定不一致，可能造成记忆污染'
+
+
+@pytest.mark.asyncio
+async def test_put_maprag_bundle_saves_existing_directory(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / 'minimal-project'
+    bundle_root = tmp_path / 'maprag-bundle'
+    project_root.mkdir()
+    bundle_root.mkdir()
+    service = _Service(project_root)
+    app.dependency_overrides[get_agent_for_request] = lambda: _workspace(service)
+
+    async with client:
+        response = await client.put('/api/game/project/maprag-bundle', json={'maprag_bundle_root': str(bundle_root)})
+
+    assert response.status_code == 200
+    assert service.user_config.maprag_bundle_root == str(bundle_root)
+    assert response.json()['maprag_bundle_root'] == str(bundle_root)
+    assert service.reload_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_put_agent_binding_defaults_to_current_agent(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    service = _Service(project_root)
+    app.dependency_overrides[get_agent_for_request] = lambda: SimpleNamespace(
+        service_manager=SimpleNamespace(services={'game_service': service}),
+        workspace_dir=str(tmp_path / 'qa-workspace'),
+        agent_id='qa-agent',
+    )
+    config = SimpleNamespace(agents=SimpleNamespace(profiles={'qa-agent': object()}, active_agent='default'))
+    monkeypatch.setattr('ltclaw_gy_x.app.routers.game_project.load_config', lambda: config)
+
+    async with client:
+        response = await client.put('/api/game/project/agent-binding', json={'agent_id': ''})
+
+    assert response.status_code == 200
+    assert service.user_config.bound_agent_id == 'qa-agent'
+    assert response.json()['agent_binding']['matches'] is True
+
+
+@pytest.mark.asyncio
+async def test_apply_agent_binding_sets_active_agent(app, client, monkeypatch, tmp_path):
+    monkeypatch.setenv('LTCLAW_WORKING_DIR', str(tmp_path / 'ltclaw-data'))
+    project_root = tmp_path / 'minimal-project'
+    project_root.mkdir()
+    service = _Service(project_root)
+    service.user_config.bound_agent_id = 'qa-agent'
+    app.dependency_overrides[get_agent_for_request] = lambda: SimpleNamespace(
+        service_manager=SimpleNamespace(services={'game_service': service}),
+        workspace_dir=str(tmp_path / 'default-workspace'),
+        agent_id='default',
+    )
+    config = SimpleNamespace(agents=SimpleNamespace(profiles={'default': object(), 'qa-agent': object()}, active_agent='default'))
+    saved = {}
+    manager = SimpleNamespace(get_agent=lambda agent_id: SimpleNamespace(agent_id=agent_id))
+
+    async def fake_get_agent(agent_id):
+        return SimpleNamespace(agent_id=agent_id)
+
+    manager.get_agent = fake_get_agent
+    monkeypatch.setattr('ltclaw_gy_x.app.routers.game_project.load_config', lambda: config)
+    monkeypatch.setattr('ltclaw_gy_x.app.routers.game_project.save_config', lambda cfg: saved.setdefault('active_agent', cfg.agents.active_agent))
+    monkeypatch.setattr('ltclaw_gy_x.app.routers.game_project.get_active_manager', lambda: manager)
+
+    async with client:
+        response = await client.post('/api/game/project/agent-binding/apply')
+
+    assert response.status_code == 200
+    assert config.agents.active_agent == 'qa-agent'
+    assert saved['active_agent'] == 'qa-agent'
+    assert response.json()['applied_agent_id'] == 'qa-agent'
+    assert response.json()['reload_required'] is True
